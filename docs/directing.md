@@ -61,8 +61,11 @@ voice without re-rendering parts already approved, add it under a new key
   whole render inside VoiceStudio. There is no emotion control.
 - `effect` (optional): VoiceStudio's voice processing for this line, overriding
   `--effect`. The options are `broadcast` (default), `raw`, `cinematic`, `warm`,
-  `bright`, `podcast`, and `echo` (from the local patch) for flashbacks; see
-  the echo gotcha below.
+  `bright`, `podcast`, and from the local patch `echo` for flashbacks and `pa`
+  for public-address announcements; see the gotchas below.
+- `take` (optional): a number that gives a line repeated word for word its own
+  take. VoiceStudio keys takes by the line's voice and text, so two identical
+  lines in one part would collide.
 
 With `concise` timing (the default), each line is spoken at its natural pace from
 the window start. It may run up to 0.3 s past the end (`--overflow`), but not
@@ -95,7 +98,10 @@ first draft:
 - speech already in English, found by Whisper's language detection and
   transcribed in English. Forced to Japanese, Whisper silently *translates*
   English speech, so without this a scene in English reads like Japanese
-  dialogue.
+  dialogue;
+- long hallucinations re-transcribed. A stock phrase ("ご視聴ありがとうございました")
+  stretched over many seconds usually hides real speech; re-transcribe each speech stretch in Japanese and English, then compare
+  confidence and review the result in context.
 
 Short or weak matches get a `?`, and any speech left uncovered is listed.
 
@@ -284,13 +290,16 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   window start, and it fails loudly on overflow. `strict_slot` (the VoiceStudio UI
   default) stretches every line to fill its window, which gives slowed or rushed
   speech.
-- **Pronunciation.** Rephrase persistent errors with clearer words.
-  Review names and specialist terms with the listener. Keep examples from
-  source material in `work/NOTES.md`.
+- **Words a cloned voice cannot say.** A fresh take can fix a random
+  glitch; persistent pronunciation problems need a clearer phrase, an
+  expanded abbreviation, or a different reference. Keep production-specific
+  examples in `work/NOTES.md`. A trailing ellipsis can swallow the last word.
 
-- **Short replies need care.** Widen windows into following silence
-  when possible. If a short acknowledgement cannot fit or render clearly,
-  retain the original audio and caption it.
+- **Repeated phrases collapse.** Give each repetition its own line at
+  the speaker's pauses, with `"take": n` so each gets a distinct take.
+- **Short replies need care.** Allow room after short lines where possible.
+  If a very short acknowledgement has no room and repeated takes fail,
+  retain the original audio and add a caption.
 - **No acting direction with OmniVoice.** VoiceStudio's `direction` field and
   free-text `instruct` values (such as "excited") crash the dub. Its only style
   tag is `whisper`. Delivery comes from the reference clip, so pick references

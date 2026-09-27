@@ -9,6 +9,12 @@ Done so far:
   so it's kept and captioned instead of read as Japanese;
 - flashback echo matched: `tails.py` measures each line's reverb tail, and a
   patched-in `echo` preset provides heavy reverberation;
+- PA announcements matched: a patched-in `pa` preset (reverb plus the PA's
+  tone), for reverberant announcements;
+- a second opinion on the transcript: ReazonSpeech and SenseVoice
+  (`second.py`) flag lines where both disagree with Whisper;
+- long Whisper hallucinations re-transcribed a stretch at a time, finding
+  accented English by Whisper's confidence in each language;
 - casting by speaker embeddings, voice clustering, and a show-wide casting
   registry built from lines already cast;
 - voices pooled from several parts, so a character's reference can use clean
@@ -48,5 +54,6 @@ Next, roughly by expected payoff:
    before choosing a separator for a new project.
 
 8. **Upstream to VoiceStudio:**
-   - the fixes in `voicestudio-local-fixes.patch`, and the `echo` preset;
+   - the fixes in `voicestudio-local-fixes.patch`, and the `echo` and `pa`
+     presets;
    - free-text `direction`/`instruct` aborting OmniVoice dubs.

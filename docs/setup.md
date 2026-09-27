@@ -47,9 +47,10 @@ adds the cuDNN 8 libraries that faster-whisper needs next to PyTorch's cuDNN 9.
 The patch fixes three bugs. The dubbing transcriber ignored the source-language
 hint. OmniVoice ran in float16 on CPU (about 7× slower). And a render that
 stopped at a timing overflow threw its takes away: the next attempt
-re-synthesized every line instead of only the changed ones. It also adds an
-`echo` voice preset, a heavy reverb starting point, and lets
-reverb ring out instead of stopping dead where the dry take ends. See
+re-synthesized every line instead of only the changed ones. It also adds two
+general-purpose voice presets, `echo` for flashbacks and `pa` for
+announcements over a public-address system, and lets reverb ring out instead of
+stopping dead where the dry take ends. See
 [directing.md](directing.md#gotchas).
 
 ## 4. Start the backend

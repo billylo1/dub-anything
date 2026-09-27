@@ -41,10 +41,10 @@ index 756283b4..6e2cfaaa 100644
          _save_job(job_id, job)
          _t_diskw = time.perf_counter() - _t_diskw_0
 diff --git a/backend/services/audio_dsp.py b/backend/services/audio_dsp.py
-index 08758823..3facf13f 100644
+index 08758823..039dbf0f 100644
 --- a/backend/services/audio_dsp.py
 +++ b/backend/services/audio_dsp.py
-@@ -70,6 +70,20 @@ EFFECT_PRESETS = {
+@@ -70,6 +70,36 @@ EFFECT_PRESETS = {
              {"type": "reverb", "room_size": 0.15, "wet_level": 0.06, "dry_level": 0.94},
          ],
      },
@@ -62,10 +62,26 @@ index 08758823..3facf13f 100644
 +            {"type": "limiter", "threshold_db": -1.0},
 +        ],
 +    },
++    "pa": {
++        "label": "PA",
++        "icon": "📢",
++        "description": "Public-address announcement heard in a big hall.",
++        "chain": [
++            {"type": "highpass", "cutoff_hz": 80},
++            {"type": "compressor", "threshold_db": -18, "ratio": 3.0, "attack_ms": 5, "release_ms": 80},
++            # Public-address preset with low-frequency emphasis, a midrange dip
++            # and a reverberant tail. Adjust to suit the source recording
++            # and review the result in the final mix.
++            {"type": "eq", "low_gain_db": 4.5, "mid_gain_db": -3.0, "high_gain_db": 2.0},
++            {"type": "reverb", "room_size": 0.8, "wet_level": 0.3, "dry_level": 0.75, "damping": 0.5,
++             "tail_ms": 500},
++            {"type": "limiter", "threshold_db": -1.0},
++        ],
++    },
      "bright": {
          "label": "Bright",
          "icon": "✨",
-@@ -216,7 +230,10 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
+@@ -216,7 +246,10 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
          highpass    — cutoff_hz (default 80)
          lowpass     — cutoff_hz (default 8000)
          compressor  — threshold_db, ratio, attack_ms, release_ms
@@ -77,7 +93,7 @@ index 08758823..3facf13f 100644
          noise_gate  — threshold_db, release_ms
          eq          — low_gain_db, mid_gain_db, high_gain_db
          limiter     — threshold_db
-@@ -243,6 +260,7 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
+@@ -243,6 +276,7 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
          return audio_tensor
  
      plugins = []
@@ -85,7 +101,7 @@ index 08758823..3facf13f 100644
      for fx in chain:
          t = fx.get("type", "").lower()
          try:
-@@ -262,7 +280,9 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
+@@ -262,7 +296,9 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
                      room_size=fx.get("room_size", 0.2),
                      wet_level=fx.get("wet_level", 0.1),
                      dry_level=fx.get("dry_level", 0.9),
@@ -95,7 +111,7 @@ index 08758823..3facf13f 100644
              elif t == "noise_gate":
                  plugins.append(NoiseGate(
                      threshold_db=fx.get("threshold_db", -40),
-@@ -292,8 +312,14 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
+@@ -292,8 +328,14 @@ def apply_effects_chain(audio_tensor, sample_rate: int, chain: list[dict]) -> to
      audio_np = audio_tensor.cpu().numpy()
      if audio_np.ndim == 1:
          audio_np = audio_np[None, :]

@@ -270,7 +270,7 @@ INSTRUCT_TAGS = {
     *(f"{a} accent" for a in ("american", "british", "australian", "chinese", "canadian",
                               "indian", "korean", "portuguese", "russian", "japanese")),
 }
-EFFECTS = ["broadcast", "cinematic", "podcast", "warm", "bright", "raw", "echo"]  # echo: local patch
+EFFECTS = ["broadcast", "cinematic", "podcast", "warm", "bright", "raw", "echo", "pa"]  # echo, pa: local patch
 
 
 def check_instruct(line):
@@ -368,8 +368,11 @@ def fit_rows(name, overflow=0.3, predict=False):
 
 def line_id(line):
     """Stable id from voice + text, so retiming a line reuses its cached speech;
-    changing the voice's clips in voices.json re-synthesizes its lines."""
+    changing the voice's clips in voices.json re-synthesizes its lines. A line
+    repeated word for word needs `"take": n` on the repeats to get ids of its own."""
     key = f"{line['voice']}|{voice_sig(line['voice'])}|{line['text']}"
+    if line.get("take"):
+        key += f"|take {line['take']}"
     return "L" + hashlib.sha1(key.encode()).hexdigest()[:10]
 
 

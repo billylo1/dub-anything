@@ -16,6 +16,9 @@ Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
 4. Speech already in English is found by Whisper's language detection and
    re-transcribed in English (forced Japanese, Whisper silently *translates*
    it). Such lines are tagged [English]: keep the original, caption it.
+5. A long phrase that is one of Whisper's stock hallucinations usually hides
+   real speech, so it's re-transcribed one stretch of speech at a time, in
+   Japanese or English, whichever Whisper is surer of.
 
 Prints the draft and writes work/<name>/draft.json ({"lines": [...]} with start,
 end, voice, ja, text="" plus score fields). The director still decides: fix
@@ -50,6 +53,25 @@ def vad_spans(audio):
     return [(s["start"] / SR, s["end"] / SR) for s in get_speech_timestamps(audio, opts)]
 
 
+def hallucination(text):
+    return any(h in text for h in HALLUCINATIONS)
+
+
+def stretches(spans, a, b, pause=1.5, longest=8.0):
+    """The VAD spans inside [a, b], joined across pauses shorter than `pause` s
+    into stretches of at most `longest` s."""
+    out = []
+    for s, e in spans:
+        s, e = max(s, a), min(e, b)
+        if e - s < 0.2:
+            continue
+        if out and s - out[-1][1] < pause and e - out[-1][0] <= longest:
+            out[-1][1] = e
+        else:
+            out.append([s, e])
+    return out
+
+
 def spoken_language(model, clip):
     """Whisper's language for a phrase, when it is sure (else None)."""
     lang, prob, _ = model.detect_language(clip)
@@ -64,8 +86,22 @@ def transcribe(model, audio, offset=0.0, language="ja"):
     for s in segs:
         words = [(w.start + offset, w.end + offset, w.word) for w in (s.words or []) if w.word.strip()]
         if words:
-            out.append(phrase(words))
+            out.append({**phrase(words), "logprob": s.avg_logprob})
     return out
+
+
+def surer(model, clip, offset):
+    """Transcribe in Japanese and in English and keep the language Whisper is
+    surer of, as (language, phrases). Its language detection calls heavily
+    accented English Korean or Breton; its confidence doesn't lie that way."""
+    best = None
+    for lang in ("ja", "en"):
+        found = transcribe(model, clip, offset, language=lang)
+        chars = sum(len(p["ja"]) for p in found)
+        score = sum(p["logprob"] * len(p["ja"]) for p in found) / chars if chars else -9.0
+        if best is None or score > best[0]:
+            best = (score, lang, found)
+    return best[1], best[2]
 
 
 def phrase(words):
@@ -190,10 +226,22 @@ def main():
             if words:
                 phrases.append({**snap(phrase(words), spans, duration), "recovered": True})
     phrases = settle(phrases)
+    # A hallucination over a long stretch hides real speech (a whole phone call
+    # in accented English became "ご視聴ありがとうございました"): redo it a
+    # stretch at a time, in whichever language Whisper is surer of.
+    for p in [p for p in phrases if hallucination(p["ja"]) and p["end"] - p["start"] > 3.0]:
+        phrases.remove(p)
+        for a, b in stretches(spans, p["start"], p["end"]):
+            lang, found = surer(model, audio[int(a * SR):int(b * SR)], a)
+            for q in found:
+                if not hallucination(q["ja"]):
+                    phrases.append({**snap(q, spans, duration), "recovered": True,
+                                    **({"lang": "en"} if lang == "en" else {})})
+    phrases = settle(phrases)
     # Speech already in English: forced Japanese, Whisper translates it.
     for p in phrases:
         clip = audio[int(p["start"] * SR):int(p["end"] * SR)]
-        if p["end"] - p["start"] >= 1.0 and spoken_language(model, clip) == "en":
+        if p.get("lang") != "en" and p["end"] - p["start"] >= 1.0 and spoken_language(model, clip) == "en":
             p["lang"] = "en"
             p["ja"] = " ".join(q["ja"] for q in transcribe(model, clip, language="en")) or p["ja"]
     del model
@@ -231,7 +279,7 @@ def main():
         tag = " [recovered]" if p.get("recovered") else ""
         if p.get("lang") == "en":
             tag += " [English: keep the original, caption it]"
-        if any(h in p["ja"] for h in HALLUCINATIONS):
+        if hallucination(p["ja"]):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
         print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  {who} {alt:18s} {p['ja']}{tag}")

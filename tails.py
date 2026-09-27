@@ -7,9 +7,9 @@ stops: the time from the last loud frame (within 10 dB of the line's peak) until
 the level falls 25 dB below the peak, on the separated vocals. Only the stretch
 before the next speech (VAD) or the next window counts, so a following speaker
 isn't mistaken for echo. Decay varies with the recording and the room.
-Lines at or above WET_MS are flagged for review: give
-them `"effect": "echo"` and extend their windows over the original's tail, or
-the original's Japanese echo plays on after the English. When a line is
+Lines at or above WET_MS are flagged for review: give them `"effect": "echo"`
+(or `"pa"`) and extend their windows over the original's tail, or the
+original's Japanese echo plays on after the English. When a line is
 rendered, the take's own tail is shown too, for comparison.
 """
 import argparse
