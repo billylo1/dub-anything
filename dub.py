@@ -303,7 +303,8 @@ def length_model():
     a + b * letters + c * punctuation, fitted on every line already rendered in
     the show's directed clips. Voices with few rendered lines lean on the
     all-voice fit, or for a character's extra reference (register.py) on the
-    character's other lines: a raised register can be slower. Estimates depend on the available renders and vary between takes."""
+    character's other lines: a raised register can be slower. Estimates depend
+    on the available renders and vary between takes."""
     data = {}
     who = {k: s.get("register_of", k) for k, s in load_json(WORK / "voices.json", {}).items()}
     for script in WORK.glob("*/script.json"):

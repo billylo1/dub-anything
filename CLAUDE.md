@@ -71,3 +71,7 @@ register → `assemble.py`.
   the rendered clips. Then tell the user what to listen for.
 - When you learn something general about dubbing, put it in
   `docs/directing.md`. Show-specific notes go in `work/NOTES.md`.
+- Keep production titles, real cast names, dialogue excerpts, scene descriptions
+  and source-specific measurements in ignored `work/` files. Documentation,
+  diagrams, examples and commit messages must use generic descriptions and
+  invented speaker labels and dialogue.

@@ -109,8 +109,7 @@ on your material before choosing a separator. Run separation before drafting
 and building voices. `--restore` restores htdemucs stems; changing stems under
 approved takes also changes their background and level measurements.
 
-`draft.py` is the real
-first draft:
+`draft.py` produces the first draft:
 
 - a careful Whisper pass over the separated vocals;
 - every phrase snapped to where Silero VAD hears speech;
@@ -122,16 +121,17 @@ first draft:
   English speech, so without this a scene in English reads like Japanese
   dialogue;
 - long hallucinations re-transcribed. A stock phrase ("ご視聴ありがとうございました")
-  stretched over many seconds usually hides real speech; re-transcribe each speech stretch in Japanese and English, then compare
-  confidence and review the result in context.
+  stretched over many seconds can hide real speech. Each speech stretch is
+  re-transcribed in Japanese and English; review the result in context.
 
 Short or weak matches get a `?`, and any speech left uncovered is listed.
 
 Whisper still mishears. Re-listen to stretches that look garbled with
 `asr_words.py episode-01 <t0> <t1>`. It transcribes that window of the clip's
 separated vocals with word times and prints where the VAD hears speech, and a
-focused pass often gets what the full pass missed. Then correct the remaining errors using surrounding dialogue, on-screen
-text and consistent terminology. Keep source excerpts in `work/NOTES.md`.
+focused pass often gets what the full pass missed. Correct remaining errors
+using surrounding dialogue, on-screen text and consistent terminology.
+Keep source excerpts in `work/NOTES.md`.
 
 `draft.py --model` and `asr_words.py --model` accept faster-whisper models.
 Compare recognisers on your own corrected samples; confidence alone does not
@@ -207,7 +207,8 @@ reference sits among them.
   `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
   video has burned-in Japanese subtitles there, use them for the captions' `ja`.
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
-  narration fragments into full sentences. Short sentence fragments can be harder to synthesize clearly.
+  narration fragments into full sentences. Short sentence fragments can be
+  harder to synthesize clearly.
 
 ### 4. Render
 
@@ -234,7 +235,8 @@ whispers stay quieter than shouts. Without it, dialogue comes out about 10 dB
 louder than the film mix.
 
 `--steps` defaults to 32, OmniVoice's quality preset; VoiceStudio's own default
-is 16. `--effect` picks the voice processing. The default is `broadcast`; compare alternatives on your source. `dub.py` records what each cached line was made
+is 16. `--effect` picks the voice processing. The default is `broadcast`;
+compare alternatives on your source. `dub.py` records what each line was made
 with (`work/<clip>/rendered.json`), so changing steps, effect or instruct
 re-synthesizes exactly the affected lines.
 
@@ -258,8 +260,8 @@ re-synthesizes exactly the affected lines.
   mangled first word) usually clears with a fresh take: `lineqa.py episode-01
   --reroll` queues the flagged lines, and the next `generate` re-rolls them.
   A word the voice can't say needs rewording. Every take is a new roll of the
-  dice, so re-check after each render. Judge each flag against the intended text and the audio. Names and
-  specialist vocabulary can confuse the QA recogniser even when the take is
+  dice, so re-check after each render. Judge each flag against the intended
+  text and the audio. Names and specialist vocabulary can confuse QA even when the take is
   correct; flag uncertain cases for the listener.
 - Listen. Machines can't judge acting.
 
@@ -280,7 +282,8 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 
 - **Voice-reference leakage (the big one).** If a clip in `voices.json` cuts a
   word off, or includes someone else's voice, OmniVoice "finishes" it at the
-  start of *every* line in that voice. Incomplete references can leak extra syllables into each take. Clips taken
+  start of *every* line in that voice. Incomplete references can leak extra
+  syllables into each take. Clips taken
   straight from Whisper timestamps are cut off because those run early. Snap
   clips to real speech boundaries, keep neighbours out, then check the joined
   reference with `asr_words.py work\voices\<key>.wav`. Every phrase must be
@@ -350,8 +353,9 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
-- **Speaker detection.** Automatic diarisation can merge similar voices or split one speaker.
-  Confirm casting with multiple signals. Sortformer can't handle clips over 120 s or more than 4 speakers, ignores
+- **Speaker detection.** Automatic diarisation can merge similar voices or
+  split one speaker. Confirm casting with multiple signals. Sortformer can't
+  handle clips over 120 s or more than 4 speakers, ignores
   count hints, and has CC-BY-NC weights.
 - **VoiceStudio bugs (fixed by `voicestudio-local-fixes.patch`).** Dubbing
   transcription ignored the source-language hint, so short Japanese clips were

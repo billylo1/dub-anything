@@ -1,6 +1,6 @@
 # dubrama
 
-Dub video into another language **in each actor's own voice**, keeping the
+Dub video into another language **in each speaker's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU.
 
 **dubrama is built to be run by an AI agent.** It is a set of scripts around the
@@ -21,6 +21,8 @@ listen.
 A person can run the same loop by hand.
 
 Built and tested for **Japanese → English** on Windows with an NVIDIA GPU.
+The workflow supports different kinds of video; source and target language
+selection is still a planned extension.
 
 ## How it works
 
@@ -117,7 +119,8 @@ What's next: [docs/roadmap.md](docs/roadmap.md).
 Only dub media you have the rights to, and only clone voices with the consent a
 use requires. Output made from someone else's film or voice is for private use
 unless you have permission. `videos/` and `work/` are git-ignored so source
-media, transcripts and cloned-voice references stay out of normal commits; do not force-add them.
+media, transcripts and cloned-voice references stay out of normal commits.
+Do not force-add them. Use invented examples in docs and commit messages.
 
 ## License
 

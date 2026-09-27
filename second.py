@@ -11,8 +11,7 @@ and compares them with the line's `ja` as kana, so spelling choices don't count.
 A line is flagged when the two agree with each other more than either agrees
 with Whisper, and differ from it by 30% or more. Treat agreement as a
 review signal: re-listen with asr_words.py and decide from context.
-The models (~850 MB) download to
-VoiceStudio's model cache on first use.
+The models (~850 MB) download to VoiceStudio's model cache on first use.
 """
 import argparse
 import json
