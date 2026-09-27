@@ -302,8 +302,10 @@ def length_model():
     """Predict a line's rendered length from its text, per voice: seconds =
     a + b * letters + c * punctuation, fitted on every line already rendered in
     the show's directed clips. Voices with few rendered lines lean on the
-    all-voice fit. Estimates depend on available renders and vary between takes."""
+    all-voice fit, or for a character's extra reference (register.py) on the
+    character's other lines: a raised register can be slower. Estimates depend on the available renders and vary between takes."""
     data = {}
+    who = {k: s.get("register_of", k) for k, s in load_json(WORK / "voices.json", {}).items()}
     for script in WORK.glob("*/script.json"):
         seg = load_json(script.parent / "segments.json")
         if not seg:
@@ -325,13 +327,19 @@ def length_model():
     coefs = {}
     for voice, rs in data.items():
         X, y = np.array([r[0] for r in rs]), np.array([r[1] for r in rs])
-        if len(rs) < 15:  # blend in the whole cast, worth 15 lines
-            X, y = np.r_[X, X_all], np.r_[y, y_all]
-            w = np.r_[np.full(len(rs), 3.0), np.full(len(rows), 15 / len(rows))]
+        if len(rs) < 15:  # blend in the character's other voices, else the whole cast, worth 15 lines
+            kin = [r for k, v in data.items() if k != voice and who.get(k, k) == who.get(voice, voice) for r in v]
+            pool = kin if len(kin) >= 15 else rows
+            X, y = np.r_[X, [r[0] for r in pool]], np.r_[y, [r[1] for r in pool]]
+            w = np.r_[np.full(len(rs), 3.0), np.full(len(pool), 15 / len(pool))]
         else:
             w = np.ones(len(rs))
         coefs[voice] = solve(X, y, w)
-    return lambda voice, text: float(np.array(_length_features(text)) @ coefs.get(voice, overall))
+
+    def estimate(voice, text):
+        coef = coefs.get(voice, coefs.get(who.get(voice, voice), overall))
+        return float(np.array(_length_features(text)) @ coef)
+    return estimate
 
 
 def fit_rows(name, overflow=0.3, predict=False):

@@ -97,6 +97,7 @@ directing workflow, file formats and hard-won gotchas are in
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
+| `register.py report\|build\|route\|check\|drop` | Match each character's voice reference to the register (calm, raised) of the lines it speaks: find mismatches, build a second reference from the character's own lines, route each line to the nearest, verify the takes follow |
 | `second.py <clip> [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both agree against Whisper (needs sherpa-onnx; see CLAUDE.md) |
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |

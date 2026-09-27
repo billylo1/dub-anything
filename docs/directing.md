@@ -43,6 +43,12 @@ every line that voice speaks, in every part. To give a character a better
 voice without re-rendering parts already approved, add it under a new key
 (`speaker_1_v2`) and use that from then on.
 
+A character can have a second reference in another register, built by
+`register.py build` (see "The reference sets the register" below). Its entry
+names the character: `"register_of": "speaker_1", "register": "calm"`. Casting,
+pace estimates and QA treat it as the same character; only the delivery
+differs.
+
 ### script.json
 
 ```json
@@ -66,6 +72,9 @@ voice without re-rendering parts already approved, add it under a new key
 - `take` (optional): a number that gives a line repeated word for word its own
   take. VoiceStudio keys takes by the line's voice and text, so two identical
   lines in one part would collide.
+- `keep_voice` (optional): `true` stops `register.py route` from moving the line
+  to another of the character's references, e.g. when one of them can't say a
+  word in it.
 
 With `concise` timing (the default), each line is spoken at its natural pace from
 the window start. It may run up to 0.3 s past the end (`--overflow`), but not
@@ -152,6 +161,11 @@ candidate: if one VAD speech span runs across the boundary into another
 speaker's line, skip that clip. For anyone with less than 3 s of clean speech
 (walk-ons, a single whisper), or for a line that's a name, keep the original
 audio and put the line in `captions`.
+
+Pick reference lines in the character's usual register: the clone copies the
+reference's delivery (see "The reference sets the register"). Once a character
+has eight or more directed lines, `register.py report` shows where their
+reference sits among them.
 
 ### 3. Translate and time
 
@@ -304,6 +318,22 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   free-text `instruct` values (such as "excited") crash the dub. Its only style
   tag is `whisper`. Delivery comes from the reference clip, so pick references
   in the character's usual register.
+- **The reference sets the register.** A clone copies delivery as well as
+  voice identity. Use `register.py` to compare references with the source:
+  1. `report` measures pitch, vocal effort and loudness relative to each
+     speaker's own lines and flags mismatches.
+  2. `build <voice> calm|raised` builds another reference from clean lines
+     with matching voice and transcript. It requires at least 5 s of speech
+     and a register difference of at least 0.8.
+  3. `route <clip> --apply` selects a reference only when it is nearer by
+     at least 0.5. Only moved lines need new takes.
+  4. Render and QA. `fit.py` learns each reference's pace. Use
+     `"keep_voice": true` for lines that should keep a particular reference.
+  5. `check` verifies that the takes deliver the intended register;
+     `drop <voice>` retires a reference that fails this check.
+
+  Loudness in the mix is not the same as vocal effort. Review both the
+  source and the takes; these tools do not provide emotion control.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.

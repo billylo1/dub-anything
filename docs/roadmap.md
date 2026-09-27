@@ -15,6 +15,9 @@ Done so far:
   (`second.py`) flag lines where both disagree with Whisper;
 - long Whisper hallucinations re-transcribed a stretch at a time, finding
   accented English by Whisper's confidence in each language;
+- register-matched references (`register.py`): a second reference per
+  character, calm or raised, built from their own lines and chosen per line
+  by the original's delivery, with a check that it delivers;
 - casting by speaker embeddings, voice clustering, and a show-wide casting
   registry built from lines already cast;
 - voices pooled from several parts, so a character's reference can use clean
@@ -45,7 +48,10 @@ Next, roughly by expected payoff:
    change synthesis cache keys, so review new takes after adjusting them.
 
 4. **Acting direction.** OmniVoice has no emotion control; its only style tag is
-   `whisper`. IndexTTS 2.5 (emotion control) is the engine to try.
+   `whisper`. Register is now matched by choosing the reference
+   (`register.py`), but that needs 5 s of clean speech in each register, which
+   short roles lack, and it can't do emotion beyond calm vs raised (anger vs
+   joy, tears). IndexTTS 2.5 (emotion control) is the engine to try.
 5. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
 6. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.

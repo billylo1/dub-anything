@@ -167,8 +167,10 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
     """Mean embedding per cast voice, from its reference clips plus every line
     already cast to it in other clips' script.json. The directed parts of a show
     act as a registry that grows with each part (longest lines first, up to
-    `per_voice`)."""
+    `per_voice`). A character's extra references (register.py) count as the
+    character."""
     voices, audio, samples = load_json(WORK / "voices.json", {}), {}, {}
+    base = {k: s.get("register_of", k) for k, s in voices.items()}
 
     def vocals(clip):
         if clip not in audio:
@@ -177,16 +179,17 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
             audio[clip] = decode_audio(str(wav), sampling_rate=SR) if wav and wav.exists() else None
         return audio[clip]
 
-    wanted = [k for k in voices if not keys or k in keys]
-    for key in wanted:
-        if voices[key].get("clips"):
-            samples[key] = voice_clips(voices[key])
+    wanted = [k for k in voices if base[k] == k and (not keys or k in keys)]
+    for key in voices:
+        if base[key] in wanted and voices[key].get("clips"):
+            samples.setdefault(base[key], []).extend(voice_clips(voices[key]))
     for script in sorted(WORK.glob("*/script.json")):
         if script.parent.name == exclude:
             continue
         for line in load_json(script).get("lines", []):
-            if line.get("voice") in wanted and line["end"] - line["start"] >= 1.0:
-                samples.setdefault(line["voice"], []).append((script.parent.name, line["start"], line["end"]))
+            who = base.get(line.get("voice"))
+            if who in wanted and line["end"] - line["start"] >= 1.0:
+                samples.setdefault(who, []).append((script.parent.name, line["start"], line["end"]))
     cents = {}
     for key, items in samples.items():
         vecs = [embed(vocals(clip)[int(a * SR):int(b * SR)])

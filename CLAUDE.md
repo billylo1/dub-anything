@@ -53,11 +53,13 @@ what may be cloned or shared are final.
 characters) → `second.py` for lines two other recognisers hear differently →
 `asr_words.py <clip> t0 t1` on garbled stretches → write `script.json` →
 `edges.py --apply` (check long `skip`s by hand) → `tails.py` for flashback echo
-(`"effect": "echo"`) and PA announcements (`"pa"`) → `fit.py`, fixing every
+(`"effect": "echo"`) and PA announcements (`"pa"`) → `register.py report`, then
+`build` where it says so and `route <clip> --apply` → `fit.py`, fixing every
 `OVER?` it predicts →
 `dub.py generate --match-level`, fixing every line it reports as not fitting →
 `lineqa.py --reroll`: reword what a voice can't say, re-roll glitches, repeat until
-clean → `assemble.py`.
+clean → `register.py check`, dropping any extra reference that doesn't deliver its
+register → `assemble.py`.
 
 ## Ground rules
 
