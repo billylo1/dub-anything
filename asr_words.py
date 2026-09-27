@@ -1,18 +1,43 @@
-"""Careful Japanese transcription of a wav excerpt with word timings (beam 5, no VAD).
+"""Careful Japanese transcription with word timings (beam 5, no VAD filter).
 
-Usage: asr_words.py <wav> [offset_seconds]   (offset is added to printed times)
+Usage: asr_words.py <wav> [offset_seconds]        a wav file (offset is added to printed times)
+       asr_words.py <clip> <t0> <t1>               a stretch of a prepped clip's separated vocals,
+                                                   plus where the VAD hears speech in it
+Options: --model <repo>  (default Systran/faster-whisper-large-v3)
 """
+import argparse
 import sys
 
-from dub import whisper_setup
+from dub import JOBS, WORK, load_json, whisper_setup
 
 whisper_setup()  # VoiceStudio's downloaded Whisper + cuDNN 8
 from faster_whisper import WhisperModel  # noqa: E402
+from faster_whisper.audio import decode_audio  # noqa: E402
+from faster_whisper.vad import VadOptions, get_speech_timestamps  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
-path, offset = sys.argv[1], float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
-model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
-segs, _ = model.transcribe(path, language="ja", beam_size=5, vad_filter=False,
+ap = argparse.ArgumentParser()
+ap.add_argument("source", help="a wav file, or a prepped clip name")
+ap.add_argument("times", nargs="*", type=float, help="offset for a wav; t0 t1 for a clip")
+ap.add_argument("--model", default="Systran/faster-whisper-large-v3")
+args = ap.parse_args()
+
+seg_doc = WORK / args.source / "segments.json"
+if seg_doc.exists():
+    if len(args.times) != 2:
+        raise SystemExit("usage: asr_words.py <clip> <t0> <t1>")
+    t0, t1 = args.times
+    audio = decode_audio(str(JOBS / load_json(seg_doc)["job_id"] / "vocals.wav"), sampling_rate=16000)
+    audio, offset = audio[int(t0 * 16000):int(t1 * 16000)], t0
+    spans = get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=120, speech_pad_ms=30))
+    print("speech: " + " ".join(f"{offset + s['start'] / 16000:.2f}-{offset + s['end'] / 16000:.2f}"
+                                for s in spans))
+    source = audio
+else:
+    source, offset = args.source, (args.times[0] if args.times else 0.0)
+
+model = WhisperModel(args.model, device="auto", compute_type="default")
+segs, _ = model.transcribe(source, language="ja", beam_size=5, vad_filter=False,
                            condition_on_previous_text=False, word_timestamps=True)
 for s in segs:
     words = " ".join(f"{w.word}[{w.start + offset:.2f}]" for w in s.words)

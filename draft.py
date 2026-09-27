@@ -8,8 +8,10 @@ Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
    phrase covers is re-transcribed on its own, which recovers lines the full
    pass skips.
 3. Each phrase is scored against every cast voice in work/voices.json (WeSpeaker
-   embeddings, the model that ships with pyannote). The best match and runner-up
-   are shown, and weak or short matches are flagged with '?'.
+   embeddings, the model that ships with pyannote). A voice is represented by
+   its reference clips plus every line already cast to it in the show's other
+   scripts, so casting gets surer with each directed part. The best match and
+   runner-up are shown, and weak or short matches are flagged with '?'.
 
 Prints the draft and writes work/<name>/draft.json ({"lines": [...]} with start,
 end, voice, ja, text="" plus score fields). The director still decides: fix
@@ -114,35 +116,58 @@ def embedder():
     return embed
 
 
-def cast_centroids(embed, keys):
-    """Mean embedding of each voice's reference clips (from their source jobs)."""
-    voices, cents = load_json(WORK / "voices.json", {}), {}
-    for key, spec in voices.items():
-        if keys and key not in keys:
+def cast_centroids(embed, keys, exclude=None, per_voice=30):
+    """Mean embedding per cast voice, from its reference clips plus every line
+    already cast to it in other clips' script.json. The directed parts of a show
+    act as a registry that grows with each part (longest lines first, up to
+    `per_voice`)."""
+    voices, audio, samples = load_json(WORK / "voices.json", {}), {}, {}
+
+    def vocals(clip):
+        if clip not in audio:
+            seg = load_json(WORK / clip / "segments.json")
+            wav = JOBS / seg["job_id"] / "vocals.wav" if seg else None
+            audio[clip] = decode_audio(str(wav), sampling_rate=SR) if wav and wav.exists() else None
+        return audio[clip]
+
+    wanted = [k for k in voices if not keys or k in keys]
+    for key in wanted:
+        if "from" in voices[key]:
+            samples[key] = [(voices[key]["from"], a, b) for a, b in voices[key]["clips"]]
+    for script in sorted(WORK.glob("*/script.json")):
+        if script.parent.name == exclude:
             continue
-        seg = load_json(WORK / spec.get("from", "") / "segments.json") if "from" in spec else None
-        wav = JOBS / seg["job_id"] / "vocals.wav" if seg else None
-        if not wav or not wav.exists():
-            continue
-        audio = decode_audio(str(wav), sampling_rate=SR)
-        vecs = [embed(audio[int(a * SR):int(b * SR)]) for a, b in spec["clips"] if b - a >= 0.5]
+        for line in load_json(script).get("lines", []):
+            if line.get("voice") in wanted and line["end"] - line["start"] >= 1.0:
+                samples.setdefault(line["voice"], []).append((script.parent.name, line["start"], line["end"]))
+    cents = {}
+    for key, items in samples.items():
+        vecs = [embed(vocals(clip)[int(a * SR):int(b * SR)])
+                for clip, a, b in sorted(items, key=lambda s: s[1] - s[2])[:per_voice]
+                if vocals(clip) is not None and b - a >= 0.5]
         if vecs:
             c = np.mean(vecs, axis=0)
             cents[key] = c / np.linalg.norm(c)
+            cast_centroids.counts[key] = len(vecs)
     return cents
+
+
+cast_centroids.counts = {}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("name")
     ap.add_argument("--cast", help="comma-separated voice keys to consider (default: all usable)")
+    ap.add_argument("--model", default="Systran/faster-whisper-large-v3",
+                    help="Whisper model (default: large-v3)")
     args = ap.parse_args()
     work = WORK / args.name
     job = load_json(work / "segments.json")["job_id"]
     audio = decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=SR)
     duration = len(audio) / SR
 
-    model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
+    model = WhisperModel(args.model, device="auto", compute_type="default")
     spans = vad_spans(audio)
     phrases = settle([snap(p, spans, duration) for p in transcribe(model, audio)])
     # Focused passes (with 1 s of context) over speech the full pass skipped;
@@ -157,7 +182,8 @@ def main():
     del model
 
     embed = embedder()
-    cents = cast_centroids(embed, set(args.cast.split(",")) if args.cast else None) if embed else {}
+    cents = cast_centroids(embed, set(args.cast.split(",")) if args.cast else None, exclude=args.name) \
+        if embed else {}
     for p in phrases:
         if not cents or p["end"] - p["start"] < 0.3:
             continue
@@ -167,7 +193,8 @@ def main():
         if len(ranked) > 1:
             p["alt"], p["alt_score"] = ranked[1][1], round(ranked[1][0], 2)
 
-    print(f"cast considered: {', '.join(cents) or '(none – no usable voices yet)'}")
+    print("cast considered: " + (", ".join(f"{k} ({cast_centroids.counts[k]})" for k in cents)
+                                 or "(none – no usable voices yet)"))
     for i, p in enumerate(phrases):
         sure = p.get("score", 0) >= 0.3 and p["end"] - p["start"] >= 0.6 and \
             p.get("score", 0) - p.get("alt_score", -1) >= 0.15

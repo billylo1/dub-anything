@@ -90,10 +90,19 @@ first draft:
 
 Short or weak matches get a `?`, and any speech left uncovered is listed.
 
-Whisper still mishears. Re-run `asr_words.py` on short cuts of the vocals
-(`$env:OMNIVOICE_DATA_DIR\dub_jobs\<job_id>\vocals.wav`, with `job_id` from
-`segments.json`; cut with `ffmpeg -ss A -t D -i vocals.wav cut.wav` and pass `A`
-as the offset) where lines look garbled. Correct remaining errors using surrounding dialogue and on-screen text.
+Whisper still mishears. Re-listen to stretches that look garbled with
+`asr_words.py episode-01 <t0> <t1>`. It transcribes that window of the clip's
+separated vocals with word times and prints where the VAD hears speech, and a
+focused pass often gets what the full pass missed. Then correct the remaining errors using surrounding dialogue, on-screen
+text and consistent terminology. Keep source excerpts in `work/NOTES.md`.
+
+`draft.py --model` and `asr_words.py --model` accept faster-whisper models.
+Compare recognisers on your own corrected samples; confidence alone does not
+prove that a transcription is right.
+
+`second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
+flags lines where both disagree with Whisper. Re-listen with `asr_words.py`
+and decide from context. It needs its own environment (see CLAUDE.md).
 
 ### 2. Cast
 
@@ -101,12 +110,16 @@ Automatic diarisation is only a hint. It merges similar voices and splits
 others. Decide each line's speaker from:
 
 1. **Speaker embeddings.** They're the most reliable signal. `draft.py` scores each
-   phrase against the cast in `voices.json` using WeSpeaker, which ships with
-   pyannote. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2
-   or more. Lines under ~0.6 s are unreliable. For a new show or many new
-   characters, run `cast.py part-01 part-02 ...` first: it clusters every line
-   across parts by voice, so each cluster is one person. Name the clusters once,
-   build their voices, then re-run `draft.py`.
+   phrase against the cast using WeSpeaker, which ships with pyannote. Each
+   character is represented by its voice clips plus up to 30 lines already cast
+   to it in the show's other scripts, so casting gets surer with every directed
+   part. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2 or
+   more. Lines under ~0.6 s are unreliable. For a new show or a batch of new
+   characters, run `cast.py part-05 part-06 ...` first: it clusters every line
+   across parts by voice, so each cluster is one person. The same person in a
+   different register (a quiet monologue, a campy aside) can form a separate
+   cluster, so check the nearest-cast hint. Name the clusters once, build their
+   voices, then re-run `draft.py`.
 2. **Video frames** at the line's time: who is in close-up with their mouth open.
    On-screen names and role captions can help identify a speaker.
    ```powershell
@@ -118,9 +131,12 @@ others. Decide each line's speaker from:
 4. The dialogue itself: who would say it, and who answers.
 
 For a new character, build a voice from 5–15 s of **clean, single-speaker**
-speech (see the reference-leakage gotcha below). 3–4 s works for a bit part. For
-anyone with less than that (walk-ons, a single whisper), or for a line that's a
-name, keep the original audio and put the line in `captions`.
+speech (see the reference-leakage gotcha below). 3–4 s works for a bit part.
+Pick only clips bounded by real pauses. Run `asr_words.py <clip> t0 t1` around a
+candidate: if one VAD speech span runs across the boundary into another
+speaker's line, skip that clip. For anyone with less than 3 s of clean speech
+(walk-ons, a single whisper), or for a line that's a name, keep the original
+audio and put the line in `captions`.
 
 ### 3. Translate and time
 
@@ -153,11 +169,19 @@ name, keep the original audio and put the line in `captions`.
 & $py dub.py generate episode-01 --match-level
 ```
 
-If a line overflows its window, the render stops with `dub_timing_overflow` and
-names the segment. Run `fit.py episode-01` to see every line's length against
-its room, then shorten the text or widen the window and render again. After one
-successful render only changed lines are re-synthesized. Timing and level
-changes are just a re-mix of about 5 s.
+If a line overflows, VoiceStudio stops at the first one. `dub.py` then prints
+every line that doesn't fit, using VoiceStudio's exact rule: the whole clip
+against the window, plus up to 0.25 s of the following gap, plus the 0.3 s
+overflow budget. Fix them all in one pass. `fit.py` prints the same table
+anytime. `generate` also warns about lines ending in "…", which tend to swallow
+their last word.
+
+**Until a part's first successful render, every attempt re-rolls every take.**
+VoiceStudio ignores partial re-renders on a job that has never completed. Each
+failed attempt therefore brings new takes, and lines near the limit can tip
+over. On a first render, trim anything within ~0.15 s of its room along with the
+lines that failed. After one success, only changed or re-rolled lines are
+synthesized, and timing or level changes are just a re-mix of about 5 s.
 
 `--match-level` sets each line's gain from the original actor's level. The
 clip-wide offset is matched fully and each line's deviation by half, so
@@ -165,9 +189,9 @@ whispers stay quieter than shouts. Without it, dialogue comes out about 10 dB
 louder than the film mix.
 
 `--steps` defaults to 32, OmniVoice's quality preset; VoiceStudio's own default
-is 16. `--effect` picks the voice processing. `dub.py` records what each cached
-line was made with (`work/<clip>/rendered.json`), so changing steps, effect or
-instruct re-synthesizes exactly the affected lines.
+is 16. `--effect` picks the voice processing. The default is `broadcast`; compare alternatives on your source. `dub.py` records what each cached line was made
+with (`work/<clip>/rendered.json`), so changing steps, effect or instruct
+re-synthesizes exactly the affected lines.
 
 ### 5. QA
 
@@ -180,12 +204,18 @@ instruct re-synthesizes exactly the affected lines.
   full-mix QA hid these problems:
   - junk at the start of lines (reference leakage, below)
   - dropped words in fast lists
-  - ambiguities like "can" heard as "can't"
+  - meaning flips like "can" heard as "can't" (any change in negation is flagged)
   - words a voice can't say
   - lines that came out silent
 
-  Digits and spelling ("3 billion", "Dr. X") also get flagged; skip those. Every
-  new take is a fresh roll of the dice, so re-check after each re-render.
+  Numbers, units, contractions and "Dr." are normalized, so formatting doesn't
+  count as a failure. Triage each flag. A random glitch (a dropped word, a
+  mangled first word) usually clears with a fresh take: `lineqa.py episode-01
+  --reroll` queues the flagged lines, and the next `generate` re-rolls them.
+  A word the voice can't say needs rewording. Every take is a new roll of the
+  dice, so re-check after each render. Judge each flag against the intended text and the audio. Names and
+  specialist vocabulary can confuse the QA recogniser even when the take is
+  correct; flag uncertain cases for the listener.
 - Listen. Machines can't judge acting.
 
 ### 6. Package

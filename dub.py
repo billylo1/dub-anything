@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 
@@ -271,6 +272,30 @@ def check_instruct(line):
     return ", ".join(tags)
 
 
+def fit_rows(name, overflow=0.3):
+    """Each rendered clip's length vs its window, and the room concise timing
+    allows: VoiceStudio's own rule (dub_generate.py) of the window, plus up to
+    0.25 s of the gap before the next line (less a 0.05 s buffer), plus the
+    overflow budget. The clip is measured whole, as VoiceStudio does."""
+    job = load_json(WORK / name / "segments.json")["job_id"]
+    lines = load_json(WORK / name / "script.json")["lines"]
+    rows = []
+    for i, line in enumerate(lines):
+        wav = JOBS / job / f"seg_en_{line_id(line)}.wav"
+        row = {"i": i, "start": line["start"], "text": line["text"], "window": line["end"] - line["start"]}
+        gap = lines[i + 1]["start"] - line["end"] if i + 1 < len(lines) else 0.0
+        borrow = min(gap - 0.05, 0.25) if gap > 0.05 else 0.0
+        row["room"] = row["window"] + borrow + overflow
+        if wav.exists():
+            row["speech"] = sf.info(wav).duration
+            row["flag"] = "OVER" if row["speech"] > row["room"] else (
+                "tight" if row["speech"] > row["window"] else "")
+        else:
+            row["speech"], row["flag"] = None, ""
+        rows.append(row)
+    return rows
+
+
 def line_id(line):
     """Stable id from voice + text, so retiming a line reuses its cached speech;
     changing the voice's clips in voices.json re-synthesizes its lines."""
@@ -308,10 +333,15 @@ def cmd_generate(args):
             ids.append(line_id(line))
             settings[ids[-1]] = {"steps": args.steps, "effect": seg["effect_preset"],
                                  "instruct": seg.get("instruct", "")}
+        for line in script["lines"]:
+            if re.search(r"(\.\.\.|…)\s*$", line["text"]):
+                print(f"  warning {line['start']}: ends in '…'; the last word tends to get swallowed")
+        # Takes lineqa.py --reroll flagged: synthesize them again for a fresh roll.
+        reroll = {r["id"] for r in load_json(work / "reroll.json", [])} & set(ids)
         if not args.full:
-            # Missing clips, or clips made with other settings; an empty list
-            # re-mixes cached speech without synthesizing anything.
-            regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists()
+            # Missing clips, clips made with other settings, or queued re-rolls;
+            # an empty list re-mixes cached speech without synthesizing anything.
+            regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists() or i in reroll
                      or rendered.get(i, {"steps": 16, "effect": "broadcast", "instruct": ""}) != settings[i]]
         if args.match_level:
             unleveled = set_gains()
@@ -345,6 +375,19 @@ def cmd_generate(args):
     t0 = time.time()
     try:
         done = run()
+    except RuntimeError as e:
+        if "dub_timing_overflow" not in str(e) or not script:
+            raise
+        # VoiceStudio stops at the first overflow; report them all so one
+        # pass of edits fixes every line.
+        stopped = re.search(r'"segment": (\d+)', str(e))
+        print(f"\nVoiceStudio stopped at L{int(stopped.group(1)):02d}" if stopped else "")
+        print("lines that don't fit (clip / window / room with borrowed gap and overflow budget):")
+        for row in fit_rows(args.name, args.overflow):
+            if row["flag"]:
+                print(f"  L{row['i']:02d} {row['start']:7.2f}  {row['speech']:4.2f}s / {row['window']:4.2f}s "
+                      f"/ {row['room']:4.2f}s  {row['flag']:5s} {row['text']}")
+        raise SystemExit("shorten the text or widen the window of each OVER line, then generate again")
     finally:
         # Record what each clip was made with, even when assembly fails after
         # synthesis (e.g. dub_timing_overflow), so a retry doesn't redo them.
@@ -362,6 +405,8 @@ def cmd_generate(args):
         body["regen_only"] = []
         done = run()
     (work / "generate-result.json").write_text(json.dumps(done, ensure_ascii=False, indent=2), encoding="utf-8")
+    if script and reroll:
+        (work / "reroll.json").unlink(missing_ok=True)
 
     out = out_dir(doc)
     out.mkdir(parents=True, exist_ok=True)

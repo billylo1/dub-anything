@@ -3,14 +3,22 @@
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU.
 
-dubrama is a small toolkit around the dubbing API of
-[VoiceStudio](https://github.com/debpalash/VoiceStudio) (a local,
-ElevenLabs-style app). The machine does the heavy lifting: separating voices from
-the soundtrack, transcribing, cloning voices and mixing. A **director** does the
-part machines still get wrong: fixing the transcript, deciding who says what,
-translating for meaning and timing each line to the actor's mouth. The director
-can be you, or an AI coding agent such as [Claude Code](https://claude.com/claude-code).
-This repo's [CLAUDE.md](CLAUDE.md) teaches it the job.
+**dubrama is built to be run by an AI agent.** It is a set of scripts around the
+dubbing API of [VoiceStudio](https://github.com/debpalash/VoiceStudio), a local,
+ElevenLabs-style app. The scripts are instruments: they separate, transcribe,
+measure, render and check, but none of them decides anything. The agent is the
+**director**. It reads the evidence the tools produce, makes the calls, and
+loops until the checks pass. A person does the one thing the agent can't:
+listen.
+
+| | Does | For example |
+|---|---|---|
+| **The scripts** | Produce evidence and do the heavy lifting | Separate voices from music, transcribe, score each line against each character's voice, grab frames, clone and mix, transcribe every rendered line back |
+| **The agent (director)** | Makes the judgement calls, in a loop | Weighs conflicting evidence on who's speaking. Fixes mishearings from context. Translates for meaning and lip timing, and keeps running jokes consistent. Decides what stays in the original (names, whispers, lines already in English). Triages QA flags. Flags its own guesses. |
+| **You** | Listen, and decide taste and rights | Judge the acting, the voices and the mix. Choose between A/B versions. Decide what may be cloned or shared. |
+
+[CLAUDE.md](CLAUDE.md) describes the directing workflow for an AI agent.
+A person can run the same loop by hand.
 
 Built and tested for **Japanese → English** on Windows with an NVIDIA GPU.
 
@@ -83,10 +91,10 @@ directing workflow, file formats and hard-won gotchas are in
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT |
 | `fit.py <name>` | Each rendered line's length vs its window |
-| `lineqa.py <name>` | Transcribe each rendered line alone; flag leaked, dropped or garbled words |
+| `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `asr_words.py <wav> [offset]` | Careful Whisper pass with word timings |
+| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav) |
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 
