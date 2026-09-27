@@ -1,0 +1,1220 @@
+{
+ "theme": "standard",
+ "nodes": [
+  {
+   "id": "title",
+   "bounds": {
+    "x": 0,
+    "y": -210,
+    "width": 1000,
+    "height": 50
+   },
+   "label": "dubrama  —  how a dub gets made",
+   "shape": "text",
+   "labelColor": "#ECEFF1"
+  },
+  {
+   "id": "subtitle",
+   "bounds": {
+    "x": 0,
+    "y": -150,
+    "width": 1000,
+    "height": 80
+   },
+   "label": "Video dubbing in each speaker's voice, with the original music and effects.\nMachines separate, transcribe, clone and mix. The director reviews the transcript,\ncasting, translation and timing. Current workflow: Japanese to English.",
+   "shape": "text",
+   "labelColor": "#ECEFF1"
+  },
+  {
+   "id": "local-note",
+   "bounds": {
+    "x": 1160,
+    "y": -150,
+    "width": 480,
+    "height": 80
+   },
+   "label": "Runs locally on your GPU. videos/ and work/ are\ngit-ignored for source media, transcripts and voice\nreferences. Keep production details out of commits.",
+   "shape": "text",
+   "labelColor": "#ECEFF1"
+  },
+  {
+   "id": "source",
+   "bounds": {
+    "x": 280,
+    "y": 0,
+    "width": 440,
+    "height": 70
+   },
+   "label": "Source video  ·  videos/<stem>.mkv\nChoose a clip or split a longer recording",
+   "shape": "cylinder",
+   "nodeColor": "#546E7A",
+   "labelColor": "#ECEFF1"
+  },
+  {
+   "id": "g1",
+   "bounds": {
+    "x": 0,
+    "y": 120,
+    "width": 1000,
+    "height": 210
+   },
+   "label": "1 · Split & prep",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "split",
+   "bounds": {
+    "x": 30,
+    "y": 170,
+    "width": 450,
+    "height": 120
+   },
+   "label": "split.py  ·  long video → ~3-min parts\ncut in the pauses between lines (Silero VAD)\nframe-accurate · parts.json keeps offsets",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g1"
+  },
+  {
+   "id": "prep",
+   "bounds": {
+    "x": 520,
+    "y": 170,
+    "width": 450,
+    "height": 120
+   },
+   "label": "dub.py prep  →  VoiceStudio\nDemucs: vocals.wav + background\nWhisper large-v3 · pyannote diarization\n(a rough first transcript only)",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g1"
+  },
+  {
+   "id": "g2",
+   "bounds": {
+    "x": 0,
+    "y": 380,
+    "width": 1000,
+    "height": 220
+   },
+   "label": "2 · Draft",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "draft",
+   "bounds": {
+    "x": 30,
+    "y": 430,
+    "width": 560,
+    "height": 150
+   },
+   "label": "draft.py  ·  the first draft of the script\ncareful Whisper pass over the separated vocals\ntimings snapped to real speech (Whisper runs ~0.4 s early)\nre-listens to skipped speech · flags hallucinations\nsuggests a speaker per line (WeSpeaker embeddings)",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g2"
+  },
+  {
+   "id": "asr",
+   "bounds": {
+    "x": 620,
+    "y": 460,
+    "width": 350,
+    "height": 90
+   },
+   "label": "asr_words.py\nfocused re-listen of short cuts\nwhere lines look garbled",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#546E7A",
+   "labelColor": "#ECEFF1",
+   "parentId": "g2"
+  },
+  {
+   "id": "g3",
+   "bounds": {
+    "x": 0,
+    "y": 650,
+    "width": 1000,
+    "height": 300
+   },
+   "label": "3 · Cast — who says what",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "cast",
+   "bounds": {
+    "x": 30,
+    "y": 700,
+    "width": 300,
+    "height": 120
+   },
+   "label": "cast.py\ncluster lines across parts\nby voice: one cluster =\none character",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g3"
+  },
+  {
+   "id": "frames",
+   "bounds": {
+    "x": 350,
+    "y": 700,
+    "width": 300,
+    "height": 120
+   },
+   "label": "frames.py\nlabelled frame grids: who's\nin close-up · on-screen\nname captions",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g3"
+  },
+  {
+   "id": "pitch",
+   "bounds": {
+    "x": 670,
+    "y": 700,
+    "width": 300,
+    "height": 120
+   },
+   "label": "pitch.py · contour.py\ntie-breaker only: actors\nleave their range when\nplayful or shouting",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#546E7A",
+   "labelColor": "#ECEFF1",
+   "parentId": "g3"
+  },
+  {
+   "id": "voices",
+   "bounds": {
+    "x": 150,
+    "y": 850,
+    "width": 700,
+    "height": 80
+   },
+   "label": "work/voices.json  ·  the cast, one voice per character\n5–15 s of clean, complete phrases + their exact text, read back by Whisper",
+   "shape": "document",
+   "nodeColor": "#00897B",
+   "labelColor": "#ffffff",
+   "parentId": "g3"
+  },
+  {
+   "id": "g4",
+   "bounds": {
+    "x": 0,
+    "y": 1000,
+    "width": 1000,
+    "height": 290
+   },
+   "label": "4 · Direct — the director's calls",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#AB47BC"
+  },
+  {
+   "id": "decide",
+   "bounds": {
+    "x": 30,
+    "y": 1050,
+    "width": 470,
+    "height": 210
+   },
+   "label": "Director's calls\nfix mishearings using context\ntranslate for meaning and consistent terminology\nmatch voices across clips\nplace windows at true speech boundaries\nsplit long lines at natural pauses\nfit the translation to each window\ncaption speech kept in the original",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#8E24AA",
+   "labelColor": "#ffffff",
+   "parentId": "g4"
+  },
+  {
+   "id": "script",
+   "bounds": {
+    "x": 530,
+    "y": 1050,
+    "width": 440,
+    "height": 210
+   },
+   "label": "work/<clip>/script.json  ·  the directed dub\nper line: start · end · voice\nja (corrected) · text (English)\noptional: instruct (whisper) · effect\ncaptions: speech kept in the original,\nstill in the subtitles",
+   "shape": "document",
+   "nodeColor": "#00897B",
+   "labelColor": "#ffffff",
+   "parentId": "g4"
+  },
+  {
+   "id": "g5",
+   "bounds": {
+    "x": 0,
+    "y": 1340,
+    "width": 1000,
+    "height": 190
+   },
+   "label": "5 · Render",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "generate",
+   "bounds": {
+    "x": 30,
+    "y": 1390,
+    "width": 560,
+    "height": 120
+   },
+   "label": "dub.py generate --match-level\nOmniVoice clones each actor from their voice clip\n32 steps · natural pace from the window start\neach line levelled to its actor · only changes re-render",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g5"
+  },
+  {
+   "id": "mix",
+   "bounds": {
+    "x": 620,
+    "y": 1390,
+    "width": 350,
+    "height": 120
+   },
+   "label": "VoiceStudio mix  →  part .mp4\ndub over the preserved background:\noriginal sound between lines,\nDemucs bed under them",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "g5"
+  },
+  {
+   "id": "g6",
+   "bounds": {
+    "x": 0,
+    "y": 1580,
+    "width": 1000,
+    "height": 200
+   },
+   "label": "6 · QA loop",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "fit",
+   "bounds": {
+    "x": 30,
+    "y": 1630,
+    "width": 220,
+    "height": 120
+   },
+   "label": "fit.py\nline vs its window\n→ shorten or widen",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "g6"
+  },
+  {
+   "id": "lineqa",
+   "bounds": {
+    "x": 270,
+    "y": 1630,
+    "width": 270,
+    "height": 120
+   },
+   "label": "lineqa.py\neach line heard alone:\nleaked syllables, dropped\nor garbled words",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "g6"
+  },
+  {
+   "id": "qa",
+   "bounds": {
+    "x": 560,
+    "y": 1630,
+    "width": 190,
+    "height": 120
+   },
+   "label": "qa.py\nthe full mix\nheard back\nin English",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "g6"
+  },
+  {
+   "id": "listen",
+   "bounds": {
+    "x": 770,
+    "y": 1630,
+    "width": 200,
+    "height": 120
+   },
+   "label": "You listen\nacting · casting\n· the mix",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#8E24AA",
+   "labelColor": "#ffffff",
+   "parentId": "g6"
+  },
+  {
+   "id": "g7",
+   "bounds": {
+    "x": 0,
+    "y": 1830,
+    "width": 1000,
+    "height": 190
+   },
+   "label": "7 · Package",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "assemble",
+   "bounds": {
+    "x": 30,
+    "y": 1880,
+    "width": 600,
+    "height": 120
+   },
+   "label": "assemble.py  ·  parts → one video\nvideo stream-copied from the source: no seams at cuts\naudio: English dub (default) + original Japanese\nsoft subtitles: English + 日本語 (+ any in the source)",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g7"
+  },
+  {
+   "id": "srt",
+   "bounds": {
+    "x": 660,
+    "y": 1880,
+    "width": 310,
+    "height": 120
+   },
+   "label": "sidecar subtitles\n<stem>.dubbed.en.srt\n<stem>.dubbed.ja.srt",
+   "shape": "document",
+   "nodeColor": "#00897B",
+   "labelColor": "#ffffff",
+   "parentId": "g7"
+  },
+  {
+   "id": "output",
+   "bounds": {
+    "x": 80,
+    "y": 2070,
+    "width": 500,
+    "height": 80
+   },
+   "label": "<stem>.dubbed.mp4\none file · two audio tracks · two subtitle tracks",
+   "shape": "ellipse",
+   "nodeColor": "#43A047",
+   "labelColor": "#ffffff"
+  },
+  {
+   "id": "backend",
+   "bounds": {
+    "x": 1160,
+    "y": 120,
+    "width": 480,
+    "height": 510
+   },
+   "label": "VoiceStudio backend  ·  local GPU  ·  :3900",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "m-demucs",
+   "bounds": {
+    "x": 1190,
+    "y": 170,
+    "width": 420,
+    "height": 70
+   },
+   "label": "Demucs htdemucs\nsplits voices from music and effects",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "m-whisper",
+   "bounds": {
+    "x": 1190,
+    "y": 260,
+    "width": 420,
+    "height": 70
+   },
+   "label": "Whisper large-v3 (faster-whisper)\nJapanese transcript with word times",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "m-pyannote",
+   "bounds": {
+    "x": 1190,
+    "y": 350,
+    "width": 420,
+    "height": 70
+   },
+   "label": "pyannote 3.1 + WeSpeaker\nwho spoke when · voice embeddings",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "m-omnivoice",
+   "bounds": {
+    "x": 1190,
+    "y": 440,
+    "width": 420,
+    "height": 70
+   },
+   "label": "OmniVoice (k2-fsa)\nzero-shot voice cloning",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "m-ffmpeg",
+   "bounds": {
+    "x": 1190,
+    "y": 530,
+    "width": 420,
+    "height": 70
+   },
+   "label": "ffmpeg\nmix · encode · mux",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "key",
+   "bounds": {
+    "x": 1160,
+    "y": 690,
+    "width": 480,
+    "height": 300
+   },
+   "label": "Key",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "k-tool",
+   "bounds": {
+    "x": 1190,
+    "y": 740,
+    "width": 200,
+    "height": 40
+   },
+   "label": "dubrama script",
+   "shape": "pill",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "key"
+  },
+  {
+   "id": "k-dir",
+   "bounds": {
+    "x": 1410,
+    "y": 740,
+    "width": 200,
+    "height": 40
+   },
+   "label": "director's call",
+   "shape": "pill",
+   "nodeColor": "#8E24AA",
+   "labelColor": "#ffffff",
+   "parentId": "key"
+  },
+  {
+   "id": "k-qa",
+   "bounds": {
+    "x": 1190,
+    "y": 800,
+    "width": 200,
+    "height": 40
+   },
+   "label": "QA check",
+   "shape": "pill",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "key"
+  },
+  {
+   "id": "k-vs",
+   "bounds": {
+    "x": 1410,
+    "y": 800,
+    "width": 200,
+    "height": 40
+   },
+   "label": "VoiceStudio / model",
+   "shape": "pill",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "key"
+  },
+  {
+   "id": "k-file",
+   "bounds": {
+    "x": 1190,
+    "y": 860,
+    "width": 420,
+    "height": 50
+   },
+   "label": "file in work/  (gitignored)",
+   "shape": "document",
+   "nodeColor": "#00897B",
+   "labelColor": "#ffffff",
+   "parentId": "key"
+  },
+  {
+   "id": "k-dash",
+   "bounds": {
+    "x": 1190,
+    "y": 930,
+    "width": 420,
+    "height": 40
+   },
+   "label": "dashed = feedback or helper input",
+   "shape": "text",
+   "labelColor": "#ECEFF1",
+   "parentId": "key"
+  },
+  {
+   "id": "lessons",
+   "bounds": {
+    "x": 1160,
+    "y": 1050,
+    "width": 480,
+    "height": 310
+   },
+   "label": "Hard-won lessons  (docs/directing.md)",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "lessons-body",
+   "bounds": {
+    "x": 1180,
+    "y": 1100,
+    "width": 440,
+    "height": 240
+   },
+   "label": "Review speech boundaries with VAD\nUse complete phrases for voice references\nCombine embeddings, frames and context\nRephrase persistent pronunciation errors\nUse only supported synthesis tags\nCheck each rendered line on its own\nAsk a listener to review acting and the mix",
+   "shape": "rectangle",
+   "nodeColor": "#37474F",
+   "labelColor": "#ECEFF1",
+   "borderColor": "#546E7A",
+   "parentId": "lessons"
+  },
+  {
+   "id": "speed",
+   "bounds": {
+    "x": 1160,
+    "y": 1420,
+    "width": 480,
+    "height": 100
+   },
+   "label": "Runtime depends on hardware and source material\nReuse approved takes for timing and level edits\nMeasure new synthesis and review costs per project",
+   "shape": "rectangle",
+   "nodeColor": "#37474F",
+   "labelColor": "#ECEFF1",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "margin",
+   "bounds": {
+    "x": -240,
+    "y": 0,
+    "width": 10,
+    "height": 10
+   },
+   "label": "",
+   "shape": "text",
+   "labelColor": "#ECEFF1"
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-src-split",
+   "from": {
+    "nodeId": "source",
+    "anchor": [
+     220.0,
+     70
+    ]
+   },
+   "to": {
+    "nodeId": "split",
+    "anchor": [
+     225.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "waypoints": [
+    {
+     "x": 500,
+     "y": 100
+    },
+    {
+     "x": 255,
+     "y": 100
+    }
+   ]
+  },
+  {
+   "id": "e-split-prep",
+   "from": {
+    "nodeId": "split",
+    "anchor": [
+     450,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "prep",
+    "anchor": [
+     0,
+     60.0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-prep-vs",
+   "from": {
+    "nodeId": "prep",
+    "anchor": [
+     450,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "backend",
+    "anchor": [
+     0,
+     110
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed",
+   "label": "VoiceStudio API"
+  },
+  {
+   "id": "e-prep-draft",
+   "from": {
+    "nodeId": "prep",
+    "anchor": [
+     225.0,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "draft",
+    "anchor": [
+     280,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "waypoints": [
+    {
+     "x": 745,
+     "y": 340
+    },
+    {
+     "x": 310,
+     "y": 340
+    }
+   ],
+   "label": "vocals.wav + rough transcript"
+  },
+  {
+   "id": "e-asr-draft",
+   "from": {
+    "nodeId": "asr",
+    "anchor": [
+     0,
+     45.0
+    ]
+   },
+   "to": {
+    "nodeId": "draft",
+    "anchor": [
+     560,
+     75
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
+   "id": "e-draft-cast",
+   "from": {
+    "nodeId": "draft",
+    "anchor": [
+     280,
+     150
+    ]
+   },
+   "to": {
+    "nodeId": "cast",
+    "anchor": [
+     150.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "waypoints": [
+    {
+     "x": 310,
+     "y": 625
+    },
+    {
+     "x": 180,
+     "y": 625
+    }
+   ],
+   "label": "draft.json"
+  },
+  {
+   "id": "e-cast-voices",
+   "from": {
+    "nodeId": "cast",
+    "anchor": [
+     150.0,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "voices",
+    "anchor": [
+     30,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-frames-voices",
+   "from": {
+    "nodeId": "frames",
+    "anchor": [
+     150.0,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "voices",
+    "anchor": [
+     350,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-pitch-voices",
+   "from": {
+    "nodeId": "pitch",
+    "anchor": [
+     150.0,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "voices",
+    "anchor": [
+     670,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dotted"
+  },
+  {
+   "id": "e-voices-decide",
+   "from": {
+    "nodeId": "voices",
+    "anchor": [
+     115,
+     80
+    ]
+   },
+   "to": {
+    "nodeId": "decide",
+    "anchor": [
+     235.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "label": "cast + draft"
+  },
+  {
+   "id": "e-decide-script",
+   "from": {
+    "nodeId": "decide",
+    "anchor": [
+     470,
+     105.0
+    ]
+   },
+   "to": {
+    "nodeId": "script",
+    "anchor": [
+     0,
+     105.0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-script-gen",
+   "from": {
+    "nodeId": "script",
+    "anchor": [
+     220.0,
+     210
+    ]
+   },
+   "to": {
+    "nodeId": "generate",
+    "anchor": [
+     280,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "waypoints": [
+    {
+     "x": 750,
+     "y": 1315
+    },
+    {
+     "x": 310,
+     "y": 1315
+    }
+   ],
+   "label": "lines"
+  },
+  {
+   "id": "e-voices-gen",
+   "from": {
+    "nodeId": "voices",
+    "anchor": [
+     0,
+     65
+    ]
+   },
+   "to": {
+    "nodeId": "generate",
+    "anchor": [
+     0,
+     60
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed",
+   "labelPos": 0.32,
+   "waypoints": [
+    {
+     "x": -50,
+     "y": 915
+    },
+    {
+     "x": -50,
+     "y": 1450
+    }
+   ],
+   "label": "voice clips"
+  },
+  {
+   "id": "e-gen-mix",
+   "from": {
+    "nodeId": "generate",
+    "anchor": [
+     560,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "mix",
+    "anchor": [
+     0,
+     60.0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-gen-fit",
+   "from": {
+    "nodeId": "generate",
+    "anchor": [
+     110,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "fit",
+    "anchor": [
+     110.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-gen-lineqa",
+   "from": {
+    "nodeId": "generate",
+    "anchor": [
+     375,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "lineqa",
+    "anchor": [
+     135.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-mix-qa",
+   "from": {
+    "nodeId": "mix",
+    "anchor": [
+     35,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "qa",
+    "anchor": [
+     95.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-mix-listen",
+   "from": {
+    "nodeId": "mix",
+    "anchor": [
+     250,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "listen",
+    "anchor": [
+     100.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-fb-script",
+   "from": {
+    "nodeId": "listen",
+    "anchor": [
+     200,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "script",
+    "anchor": [
+     440,
+     105.0
+    ]
+   },
+   "arrow": "end",
+   "color": "#FB8C00",
+   "labelColor": "#FFB74D",
+   "style": "dashed",
+   "labelPos": 0.32,
+   "waypoints": [
+    {
+     "x": 1070,
+     "y": 1690
+    },
+    {
+     "x": 1070,
+     "y": 1155
+    }
+   ],
+   "label": "rewrite · re-time · re-roll a take"
+  },
+  {
+   "id": "e-fb-voices",
+   "from": {
+    "nodeId": "fit",
+    "anchor": [
+     0,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "voices",
+    "anchor": [
+     0,
+     25
+    ]
+   },
+   "arrow": "end",
+   "color": "#FB8C00",
+   "labelColor": "#FFB74D",
+   "style": "dashed",
+   "labelPos": 0.235,
+   "waypoints": [
+    {
+     "x": -130,
+     "y": 1690
+    },
+    {
+     "x": -130,
+     "y": 875
+    }
+   ],
+   "label": "re-cut a leaking voice clip"
+  },
+  {
+   "id": "e-listen-asm",
+   "from": {
+    "nodeId": "listen",
+    "anchor": [
+     100.0,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "assemble",
+    "anchor": [
+     300,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "waypoints": [
+    {
+     "x": 870,
+     "y": 1805
+    },
+    {
+     "x": 330,
+     "y": 1805
+    }
+   ],
+   "label": "parts that pass"
+  },
+  {
+   "id": "e-asm-srt",
+   "from": {
+    "nodeId": "assemble",
+    "anchor": [
+     600,
+     60.0
+    ]
+   },
+   "to": {
+    "nodeId": "srt",
+    "anchor": [
+     0,
+     60.0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-asm-out",
+   "from": {
+    "nodeId": "assemble",
+    "anchor": [
+     300,
+     120
+    ]
+   },
+   "to": {
+    "nodeId": "output",
+    "anchor": [
+     250.0,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  }
+ ]
+}

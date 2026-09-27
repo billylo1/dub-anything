@@ -16,6 +16,12 @@ Built and tested for **Japanese → English** on Windows with an NVIDIA GPU.
 
 ## How it works
 
+![How a dub gets made](docs/process.png)
+
+The diagram is [docs/process.jg](docs/process.jg), a [Jumpgate](https://github.com/swax/jumpgate)
+file: open it in Jumpgate to pan, zoom or edit, and re-render with
+`npm run render -- <path>/docs/process.jg` from Jumpgate's `packages/jumpgate`.
+
 | Step | Model | Where |
 |---|---|---|
 | Separate voices from music/SFX | Demucs htdemucs | VoiceStudio (`dub.py prep`) |
