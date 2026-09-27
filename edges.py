@@ -1,4 +1,5 @@
-"""Find lines whose window opens after the actor has already started speaking.
+"""Find window edges that cut the actor mid-sound: starts that open after the
+actor has already started speaking, and ends that close before they stop.
 
 Usage: edges.py <name> [--apply]   (after `dub.py prep`; works on script.json)
 
@@ -10,10 +11,18 @@ which is heard as a click just before the English starts. This finds every
 window start where the original voice is active and walks back to where that
 sound began. For a clear soft attack (see MIN_SHIFT/MAX_SHIFT/CUT_DB) it moves
 the window to start 20 ms before it, never before the previous window's end;
-the rest are listed as 'skip'. --apply writes the moves to script.json. It's
-timing only: the next `dub.py generate` re-mixes without re-synthesizing, and
-the take starts a little earlier, closer to the actor's mouth.
-Window ends where the original voice is still sounding are noted, not changed.
+the rest are listed as 'skip'.
+
+Window ends are the mirror image: the original mix fades back in over the
+window's last 10 ms, so a voice still sounding there plays a clipped tail of
+the original after the English. A short tail that clearly belongs to the line
+(same rule) moves the end to 20 ms after the voice stops, never closer than
+50 ms to the next window. Longer ones are usually the next speaker, a laugh or
+a crowd, and are only noted.
+
+--apply writes the moves to script.json. It's timing only: the next
+`dub.py generate` re-mixes without re-synthesizing. An earlier start also
+starts the take a little earlier, closer to the actor's mouth.
 """
 import argparse
 import json
@@ -49,6 +58,20 @@ def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
     return max(floor_t, j * HOP / SR - lead)
 
 
+def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
+    """If the voice is sounding just after time t, the time it stops (plus
+    `lag`), not later than ceil_t; else None. The mirror of voiced_onset."""
+    k = int(t * SR / HOP)
+    thresh = level - below
+    if k + 2 > len(db) or min(db[k:k + 2]) < thresh:  # the 10 ms after the edge
+        return None
+    j = k
+    ceil_k = min(len(db) - 1, int(ceil_t * SR / HOP))
+    while j + 1 <= ceil_k and db[j + 1] >= thresh:
+        j += 1
+    return min(ceil_t, (j + 1) * HOP / SR + lag)
+
+
 def line_level(db, a, b):
     seg = db[int(a * SR / HOP):int(b * SR / HOP)]
     return float(np.percentile(seg, 90)) if len(seg) else -90.0
@@ -81,19 +104,29 @@ def check(name, apply=False, min_shift=0.015):
             moved.append((i, line["start"], round(onset, 2), line["text"], cut, fix))
             if apply and fix:
                 line["start"] = round(onset, 2)
-        k = int(line["end"] * SR / HOP)
         nxt = lines[i + 1]["start"] if i + 1 < len(lines) else line["end"] + 1
-        if nxt - line["end"] > 0.05 and k + 2 < len(db) and min(db[k:k + 2]) >= level - 20:
-            tails.append((i, line["end"], line["text"]))
+        if nxt - line["end"] <= 0.05:
+            continue
+        ceil = nxt - 0.05
+        release = voiced_release(db, line["end"], min(ceil, line["end"] + 0.3), level)
+        if release is not None:
+            k = int(line["end"] * SR / HOP)
+            cut = float(min(db[k:k + 2])) - level
+            fix = MIN_SHIFT - 1e-6 <= release - line["end"] <= MAX_SHIFT + 1e-6 and cut >= CUT_DB                 and release < min(ceil, line["end"] + 0.3)  # the voice really stopped
+            tails.append((i, line["end"], round(release, 2), line["text"], cut, fix))
+            if apply and fix:
+                line["end"] = round(release, 2)
     for i, old, new, text, cut, fix in moved:
         print(f"  {'FIX ' if fix else 'skip'} L{i:02d} start {old:7.2f} -> {new:7.2f}  ({(old - new) * 1000:3.0f} ms "
               f"earlier, voice {cut:+5.1f} dB at the cut)  {text[:40]}")
-    for i, end, text in tails:
-        print(f"  note L{i:02d} end   {end:7.2f}  original voice still sounding at the window end  {text[:36]}")
+    for i, old, new, text, cut, fix in tails:
+        what = f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later," if fix else             f"   voice sounds {(new - old) * 1000:3.0f}+ ms on," if new >= old + 0.3 - 1e-6 else             f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
+        print(f"  {'FIX ' if fix else 'note'} L{i:02d} end   {old:7.2f} {what} voice {cut:+5.1f} dB at the cut)  {text[:36]}")
     fixes = sum(m[5] for m in moved)
-    print(f"{name}: {fixes} starts to move{' (applied)' if apply else ''}, {len(moved) - fixes} left alone, "
-          f"{len(tails)} ends noted")
-    if apply and fixes:
+    end_fixes = sum(t[5] for t in tails)
+    print(f"{name}: {fixes} starts and {end_fixes} ends to move{' (applied)' if apply else ''}, "
+          f"{len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone")
+    if apply and (fixes or end_fixes):
         body = ",\n".join("    " + json.dumps(l, ensure_ascii=False) for l in lines)
         caps = ",\n".join("    " + json.dumps(l, ensure_ascii=False) for l in script.get("captions", []))
         path.write_text('{\n  "lines": [\n' + body + "\n  ]" + (',\n  "captions": [\n' + caps + "\n  ]" if caps else "")

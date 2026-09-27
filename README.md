@@ -86,16 +86,17 @@ directing workflow, file formats and hard-won gotchas are in
 | Script | Does |
 |---|---|
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
-| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line → `draft.json` |
+| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, speech already in English found → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT |
 | `fit.py <name>` | Each line's length vs its window: measured once rendered, estimated from the voice's pace before, so overflows are fixed ahead of the first render |
-| `edges.py <name> [--apply]` | Find windows that open after the actor has started (a click as the original gets chopped) and move them to the true attack |
+| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound (a click as the original gets chopped): starts after the attack, ends before the release. Move the clear ones |
+| `tails.py <name>` | How long each line's original voice rings on: flags flashback echo and big rooms, next to each take's own tail |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav) |
+| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 

@@ -1,9 +1,10 @@
-"""Careful Japanese transcription with word timings (beam 5, no VAD filter).
+"""Careful transcription with word timings (beam 5, no VAD filter), Japanese by default.
 
 Usage: asr_words.py <wav> [offset_seconds]        a wav file (offset is added to printed times)
        asr_words.py <clip> <t0> <t1>               a stretch of a prepped clip's separated vocals,
                                                    plus where the VAD hears speech in it
 Options: --model <repo>  (default Systran/faster-whisper-large-v3)
+         --lang en    for speech already in English (default ja)
 """
 import argparse
 import sys
@@ -20,6 +21,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("source", help="a wav file, or a prepped clip name")
 ap.add_argument("times", nargs="*", type=float, help="offset for a wav; t0 t1 for a clip")
 ap.add_argument("--model", default="Systran/faster-whisper-large-v3")
+ap.add_argument("--lang", default="ja", help="language spoken (default ja)")
 args = ap.parse_args()
 
 seg_doc = WORK / args.source / "segments.json"
@@ -37,7 +39,7 @@ else:
     source, offset = args.source, (args.times[0] if args.times else 0.0)
 
 model = WhisperModel(args.model, device="auto", compute_type="default")
-segs, _ = model.transcribe(source, language="ja", beam_size=5, vad_filter=False,
+segs, _ = model.transcribe(source, language=args.lang, beam_size=5, vad_filter=False,
                            condition_on_previous_text=False, word_timestamps=True)
 for s in segs:
     words = " ".join(f"{w.word}[{w.start + offset:.2f}]" for w in s.words)

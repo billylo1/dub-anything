@@ -3,7 +3,12 @@
 Done so far:
 - joining parts into one video (dub + original audio, EN/JA soft subtitles);
 - VAD onset snapping, plus pulling window starts back to the true attack
-  (`edges.py`), which removed clicks at line starts;
+  and window ends past the release (`edges.py`), which removed clicks at line
+  starts;
+- speech already in English found and transcribed as English (`draft.py`),
+  so it's kept and captioned instead of read as Japanese;
+- flashback echo matched: `tails.py` measures each line's reverb tail, and a
+  patched-in `echo` preset provides heavy reverberation;
 - casting by speaker embeddings, voice clustering, and a show-wide casting
   registry built from lines already cast;
 - voices pooled from several parts, so a character's reference can use clean
@@ -18,10 +23,9 @@ Done so far:
 
 Next, roughly by expected payoff:
 
-1. **Line edges.** `edges.py` fixes the clearest chopped starts. Still open:
+1. **Line edges.** `edges.py` fixes the clearest chopped starts and ends.
+   Still open:
    - fragments it skips;
-   - window ends where the original voice is still sounding (a few per part,
-     noted but not changed);
    - VoiceStudio's 10 ms crossfade itself: a longer or level-aware fade would
      soften any remaining edge, but that means patching VoiceStudio.
 
@@ -44,5 +48,5 @@ Next, roughly by expected payoff:
    before choosing a separator for a new project.
 
 8. **Upstream to VoiceStudio:**
-   - the three fixes in `voicestudio-local-fixes.patch`;
+   - the fixes in `voicestudio-local-fixes.patch`, and the `echo` preset;
    - free-text `direction`/`instruct` aborting OmniVoice dubs.

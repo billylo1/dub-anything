@@ -61,7 +61,8 @@ voice without re-rendering parts already approved, add it under a new key
   whole render inside VoiceStudio. There is no emotion control.
 - `effect` (optional): VoiceStudio's voice processing for this line, overriding
   `--effect`. The options are `broadcast` (default), `raw`, `cinematic`, `warm`,
-  `bright` and `podcast`.
+  `bright`, `podcast`, and `echo` (from the local patch) for flashbacks; see
+  the echo gotcha below.
 
 With `concise` timing (the default), each line is spoken at its natural pace from
 the window start. It may run up to 0.3 s past the end (`--overflow`), but not
@@ -90,7 +91,11 @@ first draft:
 - every phrase snapped to where Silero VAD hears speech;
 - focused re-transcription of speech the full pass skipped;
 - known Whisper hallucinations flagged ("ご視聴ありがとうございました" on music);
-- a suggested speaker for each phrase, with score and runner-up.
+- a suggested speaker for each phrase, with score and runner-up;
+- speech already in English, found by Whisper's language detection and
+  transcribed in English. Forced to Japanese, Whisper silently *translates*
+  English speech, so without this a scene in English reads like Japanese
+  dialogue.
 
 Short or weak matches get a `?`, and any speech left uncovered is listed.
 
@@ -165,7 +170,9 @@ audio and put the line in `captions`.
   before the first render and fix the flags: widen short windows into
   following silence, merge them with a neighbour, or cut words.
 - **Keep what's already in the target language.** If characters speak English in
-  the original, leave it and caption it.
+  the original, leave it and caption it. `draft.py` tags such lines
+  `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
+  video has burned-in Japanese subtitles there, use them for the captions' `ja`.
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
   narration fragments into full sentences. Short sentence fragments can be harder to synthesize clearly.
 
@@ -261,9 +268,18 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   near the line's level at the cut is often the same speaker starting early.
   Confirm it with `asr_words.py` (Whisper's start plus ~0.35 s) and move it by
   hand. Leave it when the sound could be someone else, such as a sigh louder
-  than the line itself. The fix is best checked by ear on the flagged lines;
-  `edges.py` also notes window ends where the original voice is still
-  sounding.
+  than the line itself. The fix is best checked by ear on the flagged lines.
+  Window ends are the mirror image: a voice still sounding when the window
+  closes plays a clipped tail of the original after the English. `edges.py`
+  moves the end past short tails (same rule) and notes the rest for manual review.
+- **Match reverberation to the source.** `tails.py <clip>` compares the
+  original voice tail with the rendered take. Music or a following sound can
+  look like reverb, so review the scene before choosing an effect. `echo`
+  provides heavy reverb with a 1 s tail; `pa` provides public-address tone
+  and reverb with a 0.5 s tail. These are starting presets: compare them on
+  your material. Extend the speech window over the original tail without
+  covering the next speaker. Effects lengthen the take, which `fit.py` does
+  not predict; leave room and check the rendered duration.
 - **Timing strategy.** Use `concise`, dub.py's default: natural pace, placed at the
   window start, and it fails loudly on overflow. `strict_slot` (the VoiceStudio UI
   default) stretches every line to fill its window, which gives slowed or rushed
@@ -291,5 +307,6 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   float16 on CPU, where it is about 7× slower (`backend/services/model_manager.py`).
   A render that stopped at a timing overflow didn't record its takes as
   reusable, so the next one re-synthesized everything
-  (`backend/api/routers/dub_generate.py`). All three are worth reporting
-  upstream.
+  (`backend/api/routers/dub_generate.py`). Reverb presets stopped dead where
+  the dry take ended, cutting their own tail (`backend/services/audio_dsp.py`,
+  which also gains the `echo` preset). All are worth reporting upstream.

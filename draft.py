@@ -13,6 +13,9 @@ Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
    its reference clips plus every line already cast to it in the show's other
    scripts, so casting gets surer with each directed part. The best match and
    runner-up are shown, and weak or short matches are flagged with '?'.
+4. Speech already in English is found by Whisper's language detection and
+   re-transcribed in English (forced Japanese, Whisper silently *translates*
+   it). Such lines are tagged [English]: keep the original, caption it.
 
 Prints the draft and writes work/<name>/draft.json ({"lines": [...]} with start,
 end, voice, ja, text="" plus score fields). The director still decides: fix
@@ -47,9 +50,15 @@ def vad_spans(audio):
     return [(s["start"] / SR, s["end"] / SR) for s in get_speech_timestamps(audio, opts)]
 
 
-def transcribe(model, audio, offset=0.0):
+def spoken_language(model, clip):
+    """Whisper's language for a phrase, when it is sure (else None)."""
+    lang, prob, _ = model.detect_language(clip)
+    return lang if prob >= 0.6 else None
+
+
+def transcribe(model, audio, offset=0.0, language="ja"):
     """Whisper phrases with their words, as [(start, end, text)] in clip time."""
-    segs, _ = model.transcribe(audio, language="ja", beam_size=5, vad_filter=False,
+    segs, _ = model.transcribe(audio, language=language, beam_size=5, vad_filter=False,
                                condition_on_previous_text=False, word_timestamps=True)
     out = []
     for s in segs:
@@ -181,6 +190,12 @@ def main():
             if words:
                 phrases.append({**snap(phrase(words), spans, duration), "recovered": True})
     phrases = settle(phrases)
+    # Speech already in English: forced Japanese, Whisper translates it.
+    for p in phrases:
+        clip = audio[int(p["start"] * SR):int(p["end"] * SR)]
+        if p["end"] - p["start"] >= 1.0 and spoken_language(model, clip) == "en":
+            p["lang"] = "en"
+            p["ja"] = " ".join(q["ja"] for q in transcribe(model, clip, language="en")) or p["ja"]
     del model
     # Start windows at the true attack. VAD misses soft onsets, and a window
     # that opens mid-sound chops the actor audibly (edges.py has the rule).
@@ -214,6 +229,8 @@ def main():
         who = f"{p.get('voice', '-'):>10s} {p.get('score', 0):4.2f}{' ' if sure else '?'}"
         alt = f"({p['alt']} {p['alt_score']:.2f})" if "alt" in p else ""
         tag = " [recovered]" if p.get("recovered") else ""
+        if p.get("lang") == "en":
+            tag += " [English: keep the original, caption it]"
         if any(h in p["ja"] for h in HALLUCINATIONS):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
@@ -223,7 +240,7 @@ def main():
         print("speech not in any line (hums/laughs, or missed words):",
               " ".join(f"{a:.2f}-{b:.2f}" for a, b in gaps))
     lines = [{"start": p["start"], "end": p["end"], "voice": p.get("voice", ""), "ja": p["ja"], "text": "",
-              **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect") if k in p}}
+              **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang") if k in p}}
              for p in phrases]
     (work / "draft.json").write_text(json.dumps({"lines": lines}, ensure_ascii=False, indent=1),
                                      encoding="utf-8")

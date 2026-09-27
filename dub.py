@@ -270,7 +270,7 @@ INSTRUCT_TAGS = {
     *(f"{a} accent" for a in ("american", "british", "australian", "chinese", "canadian",
                               "indian", "korean", "portuguese", "russian", "japanese")),
 }
-EFFECTS = ["broadcast", "cinematic", "podcast", "warm", "bright", "raw"]
+EFFECTS = ["broadcast", "cinematic", "podcast", "warm", "bright", "raw", "echo"]  # echo: local patch
 
 
 def check_instruct(line):
