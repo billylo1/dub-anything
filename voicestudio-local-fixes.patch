@@ -23,6 +23,23 @@ index 10f4e5e1..d3d200e8 100644
                      finally:
                          try: os.remove(tmp.name)
                          except OSError: pass
+diff --git a/backend/api/routers/dub_generate.py b/backend/api/routers/dub_generate.py
+index 756283b4..6e2cfaaa 100644
+--- a/backend/api/routers/dub_generate.py
++++ b/backend/api/routers/dub_generate.py
+@@ -1609,6 +1609,12 @@ async def dub_generate(job_id: str, req: DubRequest):
+             job.setdefault("seg_natural_durs_by_lang", {}).setdefault(
+                 lang_code, {},
+             ).update(_natural_dur_records)
++        # Every cached WAV is natural-rate once synthesis is done (a full run
++        # just rewrote them all). Record it now, not only after assembly, so a
++        # run that stops at a timing overflow still allows partial regen next
++        # time instead of re-synthesizing every segment.
++        job.setdefault("seg_wav_kind_by_lang", {})[lang_code] = "natural"
++        job["seg_wav_kind"] = "natural"
+         # Single job flush instead of one per 8 segments.
+         _save_job(job_id, job)
+         _t_diskw = time.perf_counter() - _t_diskw_0
 diff --git a/backend/services/model_manager.py b/backend/services/model_manager.py
 index bbcbd7de..4a86a6f5 100644
 --- a/backend/services/model_manager.py

@@ -178,6 +178,13 @@ def voice_sig(key):
     return hashlib.sha1(json.dumps(spec, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def voice_clips(spec):
+    """A voice's reference clips as (clip, start, end). An entry is [start, end]
+    in the voice's "from" clip, or ["clip", start, end] from any prepped clip,
+    so a bit part can pool its clean lines from several parts."""
+    return [tuple(c) if len(c) == 3 else (spec["from"], *c) for c in spec["clips"]]
+
+
 def ensure_voice(key):
     """Resolve a voice key from work/voices.json to a profile id, building a
     VoiceStudio voice profile from hand-picked clean clips when needed."""
@@ -191,11 +198,13 @@ def ensure_voice(key):
     if old and old["sig"] == sig and requests.get(f"{API}/profiles/{old['id']}", timeout=30).ok:
         return old["id"]
 
-    src_job = load_json(WORK / spec["from"] / "segments.json")["job_id"]
-    audio, sr = sf.read(JOBS / src_job / "vocals.wav", dtype="float32")
-    gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")
-    parts = []
-    for a, b in spec["clips"]:
+    sources, parts, gap = {}, [], None
+    for clip, a, b in voice_clips(spec):
+        if clip not in sources:
+            job = load_json(WORK / clip / "segments.json")["job_id"]
+            sources[clip] = sf.read(JOBS / job / "vocals.wav", dtype="float32")
+        audio, sr = sources[clip]
+        gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")
         parts += [audio[int(a * sr):int(b * sr)], gap]
     ref = WORK / "voices" / f"{key}.wav"
     ref.parent.mkdir(parents=True, exist_ok=True)
@@ -272,13 +281,70 @@ def check_instruct(line):
     return ", ".join(tags)
 
 
-def fit_rows(name, overflow=0.3):
+def speech_length(wav):
+    """A take's length as VoiceStudio times it: generated edge silence trimmed
+    to the first/last sample above -50 dBFS, plus 50 ms either side
+    (services/audio_dsp.trim_speech_padding)."""
+    audio, sr = sf.read(wav, dtype="float32")
+    env = np.abs(audio).max(axis=1) if audio.ndim > 1 else np.abs(audio)
+    voiced = np.nonzero(env > 10 ** (-50 / 20))[0]
+    if not len(voiced):
+        return len(env) / sr
+    margin = int(sr * 0.05)
+    return (min(len(env), voiced[-1] + 1 + margin) - max(0, voiced[0] - margin)) / sr
+
+
+def _length_features(text):
+    return [1.0, len(re.sub(r"[^A-Za-z0-9]", "", text)), len(re.findall(r"[.,!?;:—-]", text))]
+
+
+def length_model():
+    """Predict a line's rendered length from its text, per voice: seconds =
+    a + b * letters + c * punctuation, fitted on every line already rendered in
+    the show's directed clips. Voices with few rendered lines lean on the
+    all-voice fit. Estimates depend on available renders and vary between takes."""
+    data = {}
+    for script in WORK.glob("*/script.json"):
+        seg = load_json(script.parent / "segments.json")
+        if not seg:
+            continue
+        for line in load_json(script).get("lines", []):
+            wav = JOBS / seg["job_id"] / f"seg_en_{line_id(line)}.wav"
+            if wav.exists():
+                data.setdefault(line["voice"], []).append((_length_features(line["text"]), speech_length(wav)))
+    rows = [r for rs in data.values() for r in rs]
+    if len(rows) < 10:
+        return None
+    X_all, y_all = np.array([r[0] for r in rows]), np.array([r[1] for r in rows])
+
+    def solve(X, y, w):
+        coef, *_ = np.linalg.lstsq(X * np.sqrt(w)[:, None], y * np.sqrt(w), rcond=None)
+        return coef
+
+    overall = solve(X_all, y_all, np.ones(len(rows)))
+    coefs = {}
+    for voice, rs in data.items():
+        X, y = np.array([r[0] for r in rs]), np.array([r[1] for r in rs])
+        if len(rs) < 15:  # blend in the whole cast, worth 15 lines
+            X, y = np.r_[X, X_all], np.r_[y, y_all]
+            w = np.r_[np.full(len(rs), 3.0), np.full(len(rows), 15 / len(rows))]
+        else:
+            w = np.ones(len(rs))
+        coefs[voice] = solve(X, y, w)
+    return lambda voice, text: float(np.array(_length_features(text)) @ coefs.get(voice, overall))
+
+
+def fit_rows(name, overflow=0.3, predict=False):
     """Each rendered clip's length vs its window, and the room concise timing
     allows: VoiceStudio's own rule (dub_generate.py) of the window, plus up to
     0.25 s of the gap before the next line (less a 0.05 s buffer), plus the
-    overflow budget. The clip is measured whole, as VoiceStudio does."""
+    overflow budget. Takes are measured with their edge silence trimmed, as
+    VoiceStudio does. With `predict`, lines not rendered yet get an estimated
+    length ("est") and a flag: "OVER?" if the estimate exceeds the room, "risk"
+    if within 0.3 s of it."""
     job = load_json(WORK / name / "segments.json")["job_id"]
     lines = load_json(WORK / name / "script.json")["lines"]
+    estimate = length_model() if predict else None
     rows = []
     for i, line in enumerate(lines):
         wav = JOBS / job / f"seg_en_{line_id(line)}.wav"
@@ -287,11 +353,15 @@ def fit_rows(name, overflow=0.3):
         borrow = min(gap - 0.05, 0.25) if gap > 0.05 else 0.0
         row["room"] = row["window"] + borrow + overflow
         if wav.exists():
-            row["speech"] = sf.info(wav).duration
+            row["speech"] = speech_length(wav)
             row["flag"] = "OVER" if row["speech"] > row["room"] else (
                 "tight" if row["speech"] > row["window"] else "")
         else:
             row["speech"], row["flag"] = None, ""
+            if estimate:
+                row["est"] = estimate(line["voice"], line["text"])
+                row["flag"] = "OVER?" if row["est"] > row["room"] else (
+                    "risk" if row["est"] > row["room"] - 0.3 else "")
         rows.append(row)
     return rows
 

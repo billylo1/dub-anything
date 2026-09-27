@@ -35,9 +35,13 @@ real voices.
 ```
 
 `from` names a prepped clip. Its separated `vocals.wav` supplies the audio.
+A clip can also come from any other prepped part, written `["episode-03", 81.2,
+84.9]`, so a bit part can pool clean lines from every part it appears in.
 `dub.py` joins the clips (with 0.3 s gaps) into `work/voices/<key>.wav` and
 creates a VoiceStudio profile on first use. Changing a voice's entry re-renders
-every line that voice speaks.
+every line that voice speaks, in every part. To give a character a better
+voice without re-rendering parts already approved, add it under a new key
+(`speaker_1_v2`) and use that from then on.
 
 ### script.json
 
@@ -153,11 +157,13 @@ audio and put the line in `captions`.
   its ±0.6 s search limit on noise.
 - **Split long lines at the actor's pauses** so the English lands where the lips
   move.
-- **Size the text:** OmniVoice speaks English at about 14–17 characters per second.
-  It follows each actor's pace, so a fast talker's clone runs quicker. Short
-  lines cost more than their length suggests: even "Really?" takes 0.8–1.2 s.
-  Widen short windows into following silence, merge them with a neighbour, or
-  cut words.
+- **Size the text:** each clone follows its actor's pace, from about 8 to 16
+  letters per second. Short lines cost more than their length suggests: even
+  "Really?" takes 0.8–1.2 s. `fit.py <clip>` estimates every line not rendered
+  yet from its voice's rate on the lines already rendered (typically within
+  0.2 s) and flags `OVER?` and `risk` against the room each line has. Run it
+  before the first render and fix the flags: widen short windows into
+  following silence, merge them with a neighbour, or cut words.
 - **Keep what's already in the target language.** If characters speak English in
   the original, leave it and caption it.
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
@@ -176,12 +182,11 @@ overflow budget. Fix them all in one pass. `fit.py` prints the same table
 anytime. `generate` also warns about lines ending in "…", which tend to swallow
 their last word.
 
-**Until a part's first successful render, every attempt re-rolls every take.**
-VoiceStudio ignores partial re-renders on a job that has never completed. Each
-failed attempt therefore brings new takes, and lines near the limit can tip
-over. On a first render, trim anything within ~0.15 s of its room along with the
-lines that failed. After one success, only changed or re-rolled lines are
-synthesized, and timing or level changes are just a re-mix of about 5 s.
+Only new, changed or re-rolled lines are synthesized, so fixing an overflow
+costs just the lines you touched, and timing or level changes are a re-mix of
+about 5 s. (Unpatched VoiceStudio ignores partial re-renders until a job's
+first render succeeds, so every failed first attempt re-rolls every take;
+`voicestudio-local-fixes.patch` fixes that.)
 
 `--match-level` sets each line's gain from the original actor's level. The
 clip-wide offset is matched fully and each line's deviation by half, so
@@ -251,19 +256,25 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   the cut that began 20–130 ms before the window. Shorter fragments weren't
   heard, and longer ones are usually someone else's sound. It's timing only, so
   the re-render is a re-mix and approved takes stay. `draft.py` applies the same
-  rule to new drafts. The fix is best checked by ear on the flagged lines;
+  rule to new drafts. Windows you set by hand bypass it, so run `edges.py`
+  after writing a script. A `skip` with a long shift (150–300 ms) and a voice
+  near the line's level at the cut is often the same speaker starting early.
+  Confirm it with `asr_words.py` (Whisper's start plus ~0.35 s) and move it by
+  hand. Leave it when the sound could be someone else, such as a sigh louder
+  than the line itself. The fix is best checked by ear on the flagged lines;
   `edges.py` also notes window ends where the original voice is still
   sounding.
 - **Timing strategy.** Use `concise`, dub.py's default: natural pace, placed at the
   window start, and it fails loudly on overflow. `strict_slot` (the VoiceStudio UI
   default) stretches every line to fill its window, which gives slowed or rushed
   speech.
-- **Partial re-render** only works after one successful render of the job. If
-  the first render fails at assembly, the next one re-synthesizes everything.
 - **Pronunciation.** Rephrase persistent errors with clearer words.
   Review names and specialist terms with the listener. Keep examples from
   source material in `work/NOTES.md`.
 
+- **Short replies need care.** Widen windows into following silence
+  when possible. If a short acknowledgement cannot fit or render clearly,
+  retain the original audio and caption it.
 - **No acting direction with OmniVoice.** VoiceStudio's `direction` field and
   free-text `instruct` values (such as "excited") crash the dub. Its only style
   tag is `whisper`. Delivery comes from the reference clip, so pick references
@@ -278,4 +289,7 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   transcription ignored the source-language hint, so short Japanese clips were
   heard as English (`backend/api/routers/dub_core.py`). OmniVoice loaded in
   float16 on CPU, where it is about 7× slower (`backend/services/model_manager.py`).
-  Both are worth reporting upstream.
+  A render that stopped at a timing overflow didn't record its takes as
+  reusable, so the next one re-synthesized everything
+  (`backend/api/routers/dub_generate.py`). All three are worth reporting
+  upstream.

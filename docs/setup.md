@@ -32,7 +32,7 @@ $d = "C:\VoiceStudioData"
 dubrama's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR`, so it
 must be set in any shell that runs them.
 
-## 3. VoiceStudio, pinned, with two fixes
+## 3. VoiceStudio, pinned, with three fixes
 
 ```powershell
 git clone https://github.com/debpalash/VoiceStudio.git C:\git\VoiceStudio
@@ -44,8 +44,10 @@ uv run --no-sync python -c "import torch; print(torch.cuda.is_available())"   # 
 
 `uv sync` installs the CUDA 12.8 PyTorch build on Windows. `scripts/setup.py`
 adds the cuDNN 8 libraries that faster-whisper needs next to PyTorch's cuDNN 9.
-The patch fixes two bugs: the dubbing transcriber ignored the source-language
-hint, and OmniVoice ran in float16 on CPU (about 7× slower). See
+The patch fixes three bugs. The dubbing transcriber ignored the source-language
+hint. OmniVoice ran in float16 on CPU (about 7× slower). And a render that
+stopped at a timing overflow threw its takes away: the next attempt
+re-synthesized every line instead of only the changed ones. See
 [directing.md](directing.md#gotchas).
 
 ## 4. Start the backend

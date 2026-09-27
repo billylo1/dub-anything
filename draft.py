@@ -27,7 +27,7 @@ import sys
 import numpy as np
 
 import edges
-from dub import HF_CACHE, JOBS, WORK, load_json, whisper_setup
+from dub import HF_CACHE, JOBS, WORK, load_json, voice_clips, whisper_setup
 
 whisper_setup()
 import torch  # noqa: E402
@@ -134,8 +134,8 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
 
     wanted = [k for k in voices if not keys or k in keys]
     for key in wanted:
-        if "from" in voices[key]:
-            samples[key] = [(voices[key]["from"], a, b) for a, b in voices[key]["clips"]]
+        if voices[key].get("clips"):
+            samples[key] = voice_clips(voices[key])
     for script in sorted(WORK.glob("*/script.json")):
         if script.parent.name == exclude:
             continue
