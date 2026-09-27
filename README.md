@@ -33,6 +33,7 @@ file: open it in Jumpgate to pan, zoom or edit, and re-render with
 | Step | Model | Where |
 |---|---|---|
 | Separate voices from music/SFX | Demucs htdemucs | VoiceStudio (`dub.py prep`) |
+| Re-separate, cleaner under music | Mel-Band Roformer (audio-separator) | `separate.py` |
 | Transcribe the original language | Whisper large-v3 (faster-whisper) | VoiceStudio |
 | Rough "who speaks when" | pyannote 3.1 or Sortformer | VoiceStudio |
 | Fix transcript, cast, translate, time every line | **the director** → `script.json` | you / Claude |
@@ -68,6 +69,7 @@ $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"   # dubrama runs in VoiceStu
 
 & $py split.py videos\episode.mkv                   # long video -> ~3-minute parts at pauses
 & $py dub.py prep videos\episode-parts\episode-01.mp4   # separate, transcribe, diarize
+# separate.py episode-01 (own env, see CLAUDE.md)   # cleaner vocals and background under music
 & $py draft.py episode-01                           # careful transcript, real timings, suggested cast
 # ...direct: write work\episode-01\script.json (and voices in work\voices.json)
 & $py dub.py generate episode-01 --match-level      # clone, synthesize, mix, export
@@ -86,6 +88,7 @@ directing workflow, file formats and hard-won gotchas are in
 | Script | Does |
 |---|---|
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
+| `separate.py <clip> ... [--restore]` | Re-separate prepped clips with a Roformer model: far less music left in the vocals, so cleaner clones (needs audio-separator; see CLAUDE.md) |
 | `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, speech already in English found, long hallucinations re-transcribed → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
@@ -94,7 +97,7 @@ directing workflow, file formats and hard-won gotchas are in
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound (a click as the original gets chopped): starts after the attack, ends before the release. Move the clear ones |
 | `tails.py <name>` | How long each line's original voice rings on: flags flashback echo, PA announcements and big rooms, next to each take's own tail |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
+| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs. A part whose script has no lines (commercials, credits) keeps its original audio |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
 | `register.py report\|build\|route\|check\|drop` | Match each character's voice reference to the register (calm, raised) of the lines it speaks: find mismatches, build a second reference from the character's own lines, route each line to the nearest, verify the takes follow |

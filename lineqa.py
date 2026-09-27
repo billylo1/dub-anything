@@ -52,6 +52,7 @@ def spell(n):
 def words(text):
     t = text.lower().replace("’", "'")
     t = re.sub(r"(\d+)\s*%", r"\1 percent", t)
+    t = re.sub(r"\bno\.\s*(?=\d)", "number ", t)  # "No.1" is "number one", not a negation
     t = re.sub(r"(?<=\d),(?=\d{3})", "", t)
     t = re.sub(r"(\d)\.(\d)", r"\1 point \2", t)
     t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t)  # "a2.5cm" -> "a 2.5 cm"

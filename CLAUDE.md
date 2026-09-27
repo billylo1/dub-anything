@@ -44,12 +44,13 @@ what may be cloned or shared are final.
   env vars, but a shell started before they were set won't have them.
 - Anything needing librosa (`pitch.py`, `contour.py`):
   `uv run --no-project --python 3.12 --with librosa --with soundfile python <script>`.
+- `separate.py` needs audio-separator and a CUDA PyTorch: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python separate.py <clip> ...`.
 - `second.py` needs sherpa-onnx: `uv run --no-project --python 3.12 --with sherpa-onnx
   --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip>`.
 
 ## The loop, per clip
 
-`dub.py prep` → `draft.py` (and `cast.py` / `frames.py` when there are new
+`dub.py prep` → `separate.py` → `draft.py` (and `cast.py` / `frames.py` when there are new
 characters) → `second.py` for lines two other recognisers hear differently →
 `asr_words.py <clip> t0 t1` on garbled stretches → write `script.json` →
 `edges.py --apply` (check long `skip`s by hand) → `tails.py` for flashback echo

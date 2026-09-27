@@ -18,6 +18,8 @@ Done so far:
 - register-matched references (`register.py`): a second reference per
   character, calm or raised, built from their own lines and chosen per line
   by the original's delivery, with a check that it delivers;
+- cleaner separation (`separate.py`): Kim's Mel-Band Roformer instead of
+  htdemucs. Compare vocals and background on each new project;
 - casting by speaker embeddings, voice clustering, and a show-wide casting
   registry built from lines already cast;
 - voices pooled from several parts, so a character's reference can use clean
@@ -55,11 +57,9 @@ Next, roughly by expected payoff:
 5. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
 6. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.
-7. **Cleaner separation** (BS-Roformer / Mel-Band Roformer vs Demucs).
-   Compare residual speech in the background and music in the vocal stem
-   before choosing a separator for a new project.
-
-8. **Upstream to VoiceStudio:**
+7. **Upstream to VoiceStudio:**
    - the fixes in `voicestudio-local-fixes.patch`, and the `echo` and `pa`
      presets;
+   - a Roformer separator as an option next to htdemucs (dubrama swaps the
+     stems in the job folder with `separate.py`);
    - free-text `direction`/`instruct` aborting OmniVoice dubs.

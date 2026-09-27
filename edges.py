@@ -127,10 +127,15 @@ def check(name, apply=False, min_shift=0.015):
     print(f"{name}: {fixes} starts and {end_fixes} ends to move{' (applied)' if apply else ''}, "
           f"{len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone")
     if apply and (fixes or end_fixes):
-        body = ",\n".join("    " + json.dumps(l, ensure_ascii=False) for l in lines)
-        caps = ",\n".join("    " + json.dumps(l, ensure_ascii=False) for l in script.get("captions", []))
-        path.write_text('{\n  "lines": [\n' + body + "\n  ]" + (',\n  "captions": [\n' + caps + "\n  ]" if caps else "")
-                        + "\n}\n", encoding="utf-8")
+        # One entry per line, keeping every other top-level key (captions, notes).
+        parts = []
+        for key, val in {**script, "lines": lines}.items():
+            if isinstance(val, list):
+                body = ",\n".join("    " + json.dumps(l, ensure_ascii=False) for l in val)
+                parts.append(f"  {json.dumps(key)}: [\n{body}\n  ]" if val else f"  {json.dumps(key)}: []")
+            else:
+                parts.append(f"  {json.dumps(key)}: {json.dumps(val, ensure_ascii=False)}")
+        path.write_bytes(("{\n" + ",\n".join(parts) + "\n}\n").encode("utf-8"))
     return moved
 
 

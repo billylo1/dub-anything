@@ -104,5 +104,11 @@ $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
 & $py dub.py prep <some short clip>.mp4      # prints a Japanese transcript
 ```
 
+Two tools run in their own throwaway uv environments, so they can't disturb
+VoiceStudio's: `separate.py` (audio-separator with the CUDA 12.8 PyTorch; its
+Roformer model, about 900 MB, downloads on first use into
+`%OMNIVOICE_CACHE_DIR%\audio-separator`) and `second.py` (sherpa-onnx). The
+commands are in CLAUDE.md.
+
 Voice profiles are rebuilt automatically from `work/voices.json` on first use.
 Profile ids are machine-specific and cached in `work/profiles.json`.

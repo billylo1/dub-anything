@@ -18,7 +18,6 @@ from faster_whisper.vad import VadOptions, get_speech_timestamps
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR = 16000
-FRAME = 1001 / 30000  # snap cuts to whole video frames (29.97 fps)
 
 p = argparse.ArgumentParser()
 p.add_argument("video")
@@ -35,6 +34,11 @@ quality = (["-preset", "p5", "-cq", "20"] if "nvenc" in args.encoder
            else ["-preset", "veryfast", "-crf", "18"])
 video = pathlib.Path(args.video).resolve()
 out = pathlib.Path(args.out) if args.out else video.parent / f"{video.stem}-parts"
+# Snap cuts to whole video frames of the source (29.97, 30, 25 fps...), so parts join without drift.
+rate = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate",
+                       "-of", "csv=p=0", str(video)], capture_output=True, text=True).stdout.strip() or "30000/1001"
+num, den = (int(x) for x in rate.split("/"))
+FRAME = den / num
 out.mkdir(parents=True, exist_ok=True)
 
 print(f"voice activity in {video.name}")

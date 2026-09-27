@@ -73,11 +73,15 @@ def main():
     for p in parts:
         doc = load_json(WORK / p["name"] / "segments.json")
         mp4 = out_dir(doc) / f"{p['name']}.en.mp4"
+        script = load_json(WORK / p["name"] / "script.json")
+        if not mp4.exists() and script is not None and not script["lines"] and p.get("file"):
+            # A part directed to stay as it is (commercials, credits): its original audio.
+            print(f"  {p['name']}: no lines to dub, original audio")
+            mp4 = pathlib.Path(p["file"])
         if not mp4.exists():
             raise SystemExit(f"{p['name']}: no dub yet ({mp4})")
         dubs.append((mp4, p["end"] - p["start"]))
         off = p["start"] - t0
-        script = load_json(WORK / p["name"] / "script.json")
         # "captions": speech left in the original (another language already,
         # names, whispers) that still belongs in the subtitles.
         for line in sorted(script["lines"] + script.get("captions", []), key=lambda l: l["start"]):

@@ -80,6 +80,10 @@ With `concise` timing (the default), each line is spoken at its natural pace fro
 the window start. It may run up to 0.3 s past the end (`--overflow`), but not
 into the next window. Outside all windows the original soundtrack plays.
 
+A part with no lines at all (a commercial break recorded with the show, the
+closing credits) gets a `script.json` with an empty `"lines"` list, and
+`assemble.py` uses its original audio.
+
 A top-level `"captions": [{start, end, ja, text}]` list holds speech that stays in
 the original audio but still belongs in the subtitles. Examples: dialogue already in
 English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
@@ -96,7 +100,16 @@ list to both subtitle tracks.
 ```
 
 `prep` separates the voices and prints Whisper's rough transcript. It also
-switches VoiceStudio to pyannote when it's installed. `draft.py` is the real
+switches VoiceStudio to pyannote when it's installed.
+
+For cleaner references, try `separate.py episode-01` (its own environment;
+see CLAUDE.md). Residual music in the vocals can affect clones, transcripts,
+register measurements and level matching. Compare the vocals and background
+on your material before choosing a separator. Run separation before drafting
+and building voices. `--restore` restores htdemucs stems; changing stems under
+approved takes also changes their background and level measurements.
+
+`draft.py` is the real
 first draft:
 
 - a careful Whisper pass over the separated vocals;
