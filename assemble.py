@@ -1,0 +1,155 @@
+"""Package dubbed clips as one video: dub + original audio, subtitles in both languages.
+
+Usage: assemble.py <stem> [--parts 1-4] [--out FILE] [--sub FILE.srt:lang[:title]] ...
+
+<stem> is a split video (videos/<stem>-parts/parts.json from split.py) or a
+single prepped clip (work/<stem>). The result has:
+  - the source video (stream-copied when starting at 0, so no seams at part cuts)
+  - audio 1: the dub (default), audio 2: the original soundtrack
+  - soft subtitles: the dub's text and the corrected original from script.json
+    (its "lines" plus any caption-only "captions" left in the original audio),
+    any text subtitle tracks already in the source, and any --sub files
+    (timed to the source video)
+plus sidecar .srt files. Output defaults to the parts' `dubbed` folder.
+"""
+import argparse
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+from dub import HERE, WORK, load_json, out_dir, srt_time
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu"}
+TITLES = {"eng": "English", "jpn": "日本語"}
+TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
+
+
+def probe(path):
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                          "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name",
+                          "-of", "json", str(path)], capture_output=True, encoding="utf-8", check=True).stdout
+    return json.loads(out)
+
+
+def pick(parts, spec):
+    if not spec:
+        return parts
+    a, _, b = spec.partition("-")
+    return parts[int(a) - 1:int(b or a)]
+
+
+def write_srt(path, cues):
+    with open(path, "w", encoding="utf-8") as f:
+        for n, (a, b, text) in enumerate(cues, 1):
+            f.write(f"{n}\n{srt_time(a)} --> {srt_time(b)}\n{text}\n\n")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("stem")
+    ap.add_argument("--parts", help="range of split parts, e.g. 1-4 (default: all)")
+    ap.add_argument("--out")
+    ap.add_argument("--sub", action="append", default=[],
+                    help="extra subtitle file timed to the source video: FILE.srt:lang[:title]")
+    ap.add_argument("--encoder", default="h264_nvenc",
+                    help="video encoder when the range doesn't start at 0 (else stream copy)")
+    args = ap.parse_args()
+
+    manifest = HERE / "videos" / f"{args.stem}-parts" / "parts.json"
+    if manifest.exists():
+        pj = load_json(manifest)
+        source, parts = pathlib.Path(pj["video"]), pick(pj["parts"], args.parts)
+    else:
+        doc = load_json(WORK / args.stem / "segments.json")
+        source = pathlib.Path(doc["video"])
+        parts = [{"name": args.stem, "start": 0.0,
+                  "end": float(probe(source)["format"]["duration"])}]
+    t0, t1 = parts[0]["start"], parts[-1]["end"]
+
+    dubs, en, ja = [], [], []
+    for p in parts:
+        doc = load_json(WORK / p["name"] / "segments.json")
+        mp4 = out_dir(doc) / f"{p['name']}.en.mp4"
+        if not mp4.exists():
+            raise SystemExit(f"{p['name']}: no dub yet ({mp4})")
+        dubs.append((mp4, p["end"] - p["start"]))
+        off = p["start"] - t0
+        script = load_json(WORK / p["name"] / "script.json")
+        # "captions": speech left in the original (another language already,
+        # names, whispers) that still belongs in the subtitles.
+        for line in sorted(script["lines"] + script.get("captions", []), key=lambda l: l["start"]):
+            en.append((line["start"] + off, line["end"] + off, line["text"]))
+            if line.get("ja"):
+                ja.append((line["start"] + off, line["end"] + off, line["ja"]))
+
+    first_doc = load_json(WORK / parts[0]["name"] / "segments.json")
+    dest = out_dir(first_doc)
+    suffix = f".p{args.parts}" if args.parts else ""
+    out = pathlib.Path(args.out) if args.out else dest / f"{args.stem}.dubbed{suffix}.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subs = []
+    for lang, cues in (("en", en), ("ja", ja)):
+        if cues:
+            srt = out.with_suffix(f".{lang}.srt")
+            write_srt(srt, cues)
+            subs.append((srt, LANG3[lang], TITLES[LANG3[lang]], 0.0))
+    for s in args.sub:
+        m = re.match(r"^(.+\.(?:srt|ass|ssa|vtt))(?::([^:]+))?(?::(.+))?$", s, re.IGNORECASE)
+        if not m:
+            raise SystemExit(f"--sub {s}: expected FILE.srt:lang[:title]")
+        path, lang, title = m.groups()
+        lang3 = LANG3.get(lang or "und", lang or "und")
+        subs.append((pathlib.Path(path), lang3, title or TITLES.get(lang3, ""), -t0))
+
+    src = probe(source)
+    src_subs = [s for s in src["streams"] if s["codec_type"] == "subtitle"]
+    skipped = [s for s in src_subs if s["codec_name"] not in TEXT_SUBS]
+    src_subs = [s for s in src_subs if s["codec_name"] in TEXT_SUBS]
+    if skipped:
+        print(f"  skipping {len(skipped)} image-based subtitle track(s) (MP4 can't hold them)")
+
+    copy_video = t0 == 0
+    cmd = ["ffmpeg", "-v", "error", "-y", "-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}", "-i", str(source)]
+    for mp4, _ in dubs:
+        cmd += ["-i", str(mp4)]
+    for path, _, _, shift in subs:
+        cmd += (["-itsoffset", f"{shift:.3f}"] if shift else []) + ["-i", str(path)]
+    chain = "".join(f"[{i + 1}:a:0]atrim=duration={d:.3f},asetpts=PTS-STARTPTS,apad=whole_dur={d:.3f}[a{i}];"
+                    for i, (_, d) in enumerate(dubs))
+    chain += "".join(f"[a{i}]" for i in range(len(dubs))) + f"concat=n={len(dubs)}:v=0:a=1[dub]"
+    cmd += ["-filter_complex", chain, "-map", "0:v:0", "-map", "[dub]", "-map", "0:a:0"]
+    for s in src_subs:
+        cmd += ["-map", f"0:{s['index']}"]
+    for k in range(len(subs)):
+        cmd += ["-map", f"{1 + len(dubs) + k}:0"]
+    cmd += ["-c:v", "copy"] if copy_video else ["-c:v", args.encoder, "-cq", "19"] if "nvenc" in args.encoder \
+        else ["-c:v", args.encoder, "-crf", "18"]
+    cmd += ["-c:a", "aac", "-b:a", "192k", "-c:s", "mov_text", "-t", f"{t1 - t0:.3f}",
+            "-disposition:a:0", "default", "-disposition:a:1", "0"]
+
+    def label(spec, lang, title):
+        # MP4 players show handler_name as the track name; title for everyone else.
+        return [f"-metadata:s:{spec}", f"language={lang}"] + (
+            [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else [])
+    cmd += label("a:0", "eng", "English (dub)") + label("a:1", "jpn", "日本語 (original)")
+    sub_meta = [((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs]
+    sub_meta += [(lang, title) for _, lang, title, _ in subs]
+    for k, (lang, title) in enumerate(sub_meta):
+        cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "0"]
+    cmd += ["-movflags", "+faststart", str(out)]
+
+    print(f"assemble {len(parts)} part(s), {t0:.2f}-{t1:.2f}s -> {out}")
+    subprocess.run(cmd, check=True)
+    info = probe(out)
+    for s in info["streams"]:
+        tags = s.get("tags") or {}
+        name = tags.get("title") or tags.get("handler_name", "")
+        print(f"  #{s['index']} {s['codec_type']:8s} {s['codec_name']:10s} {tags.get('language', ''):4s} {name}")
+    print(f"  duration {float(info['format']['duration']):.2f}s")
+
+
+if __name__ == "__main__":
+    main()

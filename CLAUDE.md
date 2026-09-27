@@ -21,6 +21,13 @@ workflow and the gotchas that cost the most time to find.
 - Anything needing librosa (`pitch.py`, `contour.py`):
   `uv run --no-project --python 3.12 --with librosa --with soundfile python <script>`.
 
+## The loop, per clip
+
+`dub.py prep` → `draft.py` (and `cast.py` / `frames.py` when there are new
+characters) → write `script.json` → `dub.py generate --match-level` → `fit.py`
+when a line overflows → `lineqa.py` until only digits and spelling are flagged
+→ `assemble.py`.
+
 ## Ground rules
 
 - `videos/` and `work/` are never committed: they hold copyrighted source,

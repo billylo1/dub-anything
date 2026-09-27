@@ -54,13 +54,17 @@ $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"   # dubrama runs in VoiceStu
 
 & $py split.py videos\episode.mkv                   # long video -> ~3-minute parts at pauses
 & $py dub.py prep videos\episode-parts\episode-01.mp4   # separate, transcribe, diarize
+& $py draft.py episode-01                           # careful transcript, real timings, suggested cast
 # ...direct: write work\episode-01\script.json (and voices in work\voices.json)
 & $py dub.py generate episode-01 --match-level      # clone, synthesize, mix, export
-& $py qa.py episode-01                              # transcribe the dub back and compare
+& $py lineqa.py episode-01                          # check every rendered line on its own
+& $py assemble.py episode --parts 1-4               # one video: dub + original audio, EN/JA subtitles
 ```
 
-The finished MP4 and SRT land in a `dubbed` folder next to the source clip. The
-full directing workflow, file formats and hard-won gotchas are in
+Each part's dub lands in a `dubbed` folder next to the source clip. `assemble.py`
+joins parts into one MP4 with the dub as the default audio track, the original
+soundtrack as a second track, and soft subtitles in both languages. The full
+directing workflow, file formats and hard-won gotchas are in
 **[docs/directing.md](docs/directing.md)**.
 
 ## Tools
@@ -68,14 +72,17 @@ full directing workflow, file formats and hard-won gotchas are in
 | Script | Does |
 |---|---|
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
+| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line → `draft.json` |
+| `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
+| `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT |
+| `fit.py <name>` | Each rendered line's length vs its window |
+| `lineqa.py <name>` | Transcribe each rendered line alone; flag leaked, dropped or garbled words |
+| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `asr_words.py <wav> [offset]` | Careful Whisper pass with word timings |
-| `onsets.py <name>` | Script windows vs where each actor's voice really starts |
-| `fit.py <name>` | Each rendered line's length vs its window |
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
-| `energy.py <name>` | Per-second loudness of vocals vs background |
-| `pitch.py <name>`, `contour.py <name> <t0> <t1>` | Pitch per phrase / in fine steps, for casting (need librosa) |
+| `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 
 ## Performance
 

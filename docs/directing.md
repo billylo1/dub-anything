@@ -51,44 +51,66 @@ every line that voice speaks.
 - `voice`: a key in `voices.json`.
 - `ja`: the corrected original.
 - `text`: the English that is spoken.
+- `instruct` (optional): OmniVoice tags, comma-separated, from a fixed
+  vocabulary only. The useful one is `whisper`; the others cover gender, age,
+  pitch and accent. `dub.py` rejects anything else, because free text aborts the
+  whole render inside VoiceStudio. There is no emotion control.
+- `effect` (optional): VoiceStudio's voice processing for this line, overriding
+  `--effect`. The options are `broadcast` (default), `raw`, `cinematic`, `warm`,
+  `bright` and `podcast`.
 
 With `concise` timing (the default), each line is spoken at its natural pace from
 the window start. It may run up to 0.3 s past the end (`--overflow`), but not
 into the next window. Outside all windows the original soundtrack plays.
 
+A top-level `"captions": [{start, end, ja, text}]` list holds speech that stays in
+the original audio but still belongs in the subtitles. Examples: dialogue already in
+English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
+list to both subtitle tracks.
+
 ## Workflow
 
-### 1. Prep
+### 1. Prep and draft
 
 ```powershell
 & $py split.py videos\episode.mkv          # only for long videos: ~3-minute parts
 & $py dub.py prep videos\episode-parts\episode-01.mp4
+& $py draft.py episode-01                  # after the cast exists: --cast key,key,...
 ```
 
-`prep` prints Whisper's transcript with rough speaker labels. Treat it as a
-first draft. For a careful transcript with word timings, run `asr_words.py` on
-the separated vocals. They are in `$env:OMNIVOICE_DATA_DIR\dub_jobs\<job_id>\vocals.wav`, where `job_id` is in
-`segments.json`. Re-run it on short cuts (`ffmpeg -ss A -t D -i vocals.wav cut.wav`,
-pass `A` as the offset) wherever lines are missing or garbled. A focused pass
-often recovers lines the full pass skipped.
+`prep` separates the voices and prints Whisper's rough transcript. It also
+switches VoiceStudio to pyannote when it's installed. `draft.py` is the real
+first draft:
 
-Correct mishearings using surrounding dialogue and on-screen text.
+- a careful Whisper pass over the separated vocals;
+- every phrase snapped to where Silero VAD hears speech;
+- focused re-transcription of speech the full pass skipped;
+- known Whisper hallucinations flagged ("ご視聴ありがとうございました" on music);
+- a suggested speaker for each phrase, with score and runner-up.
+
+Short or weak matches get a `?`, and any speech left uncovered is listed.
+
+Whisper still mishears. Re-run `asr_words.py` on short cuts of the vocals
+(`$env:OMNIVOICE_DATA_DIR\dub_jobs\<job_id>\vocals.wav`, with `job_id` from
+`segments.json`; cut with `ffmpeg -ss A -t D -i vocals.wav cut.wav` and pass `A`
+as the offset) where lines look garbled. Correct remaining errors using surrounding dialogue and on-screen text.
 
 ### 2. Cast
 
 Automatic diarisation is only a hint. It merges similar voices and splits
 others. Decide each line's speaker from:
 
-1. **Speaker embeddings.** They're the most reliable signal. Pick 3–4 phrases you
-   are sure of per character, then score every phrase against each character with
-   the WeSpeaker model that ships with pyannote (`pyannote/wespeaker-voxceleb-resnet34-LM`).
-   A clear winner is usually 0.3–0.8 cosine above the rest; clips under ~0.5 s
-   are unreliable. Load the checkpoint from its local file after
-   `torch.serialization.add_safe_globals([TorchVersion, Problem, Resolution, Specifications])`.
-   pyannote 3.4's `from_pretrained` breaks on huggingface_hub 1.x.
+1. **Speaker embeddings.** They're the most reliable signal. `draft.py` scores each
+   phrase against the cast in `voices.json` using WeSpeaker, which ships with
+   pyannote. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2
+   or more. Lines under ~0.6 s are unreliable. For a new show or many new
+   characters, run `cast.py part-01 part-02 ...` first: it clusters every line
+   across parts by voice, so each cluster is one person. Name the clusters once,
+   build their voices, then re-run `draft.py`.
 2. **Video frames** at the line's time: who is in close-up with their mouth open.
+   On-screen names and role captions can help identify a speaker.
    ```powershell
-   ffmpeg -ss 36 -i clip.mp4 -t 3 -vf "fps=2,scale=320:-1,tile=6x1" -frames:v 1 strip.jpg
+   & $py frames.py grid.jpg videos\episode-parts\episode-02.mp4 84:announce 121.5:interjection 147.5
    ```
 3. **Pitch** (`pitch.py`, `contour.py`). Rough guide: male 80–180 Hz, female
    200–450 Hz. Actors go outside their range when playful or shouting, so a
@@ -96,7 +118,9 @@ others. Decide each line's speaker from:
 4. The dialogue itself: who would say it, and who answers.
 
 For a new character, build a voice from 5–15 s of **clean, single-speaker**
-speech (see the reference-leakage gotcha below).
+speech (see the reference-leakage gotcha below). 3–4 s works for a bit part. For
+anyone with less than that (walk-ons, a single whisper), or for a line that's a
+name, keep the original audio and put the line in `captions`.
 
 ### 3. Translate and time
 
@@ -114,9 +138,14 @@ speech (see the reference-leakage gotcha below).
 - **Split long lines at the actor's pauses** so the English lands where the lips
   move.
 - **Size the text:** OmniVoice speaks English at about 14–17 characters per second.
-  Short lines cost more than their length suggests: even "Really?" takes 0.8–1.2 s.
+  It follows each actor's pace, so a fast talker's clone runs quicker. Short
+  lines cost more than their length suggests: even "Really?" takes 0.8–1.2 s.
   Widen short windows into following silence, merge them with a neighbour, or
   cut words.
+- **Keep what's already in the target language.** If characters speak English in
+  the original, leave it and caption it.
+- **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
+  narration fragments into full sentences. Short sentence fragments can be harder to synthesize clearly.
 
 ### 4. Render
 
@@ -135,6 +164,11 @@ clip-wide offset is matched fully and each line's deviation by half, so
 whispers stay quieter than shouts. Without it, dialogue comes out about 10 dB
 louder than the film mix.
 
+`--steps` defaults to 32, OmniVoice's quality preset; VoiceStudio's own default
+is 16. `--effect` picks the voice processing. `dub.py` records what each cached
+line was made with (`work/<clip>/rendered.json`), so changing steps, effect or
+instruct re-synthesizes exactly the affected lines.
+
 ### 5. QA
 
 - `qa.py episode-01` transcribes the finished MP4 in English and lines it up with
@@ -142,13 +176,30 @@ louder than the film mix.
   word appearing in the neighbouring window is usually fine. Whisper also
   invents words on background noise; check `energy.py` before
   worrying.
-- **Check each rendered line on its own as well.** The full-mix QA hid these
-  problems, which isolated transcription of each `seg_en_<id>.wav` in the job
-  folder exposes:
+- **Check each rendered line on its own too:** `lineqa.py episode-01`. The
+  full-mix QA hid these problems:
   - junk at the start of lines (reference leakage, below)
   - dropped words in fast lists
   - ambiguities like "can" heard as "can't"
+  - words a voice can't say
+  - lines that came out silent
+
+  Digits and spelling ("3 billion", "Dr. X") also get flagged; skip those. Every
+  new take is a fresh roll of the dice, so re-check after each re-render.
 - Listen. Machines can't judge acting.
+
+### 6. Package
+
+```powershell
+& $py assemble.py episode --parts 1-4      # or: assemble.py <clip> for an unsplit clip
+```
+
+This produces one MP4. The video is stream-copied from the source, so part cuts
+leave no seams. Audio 1 is the dub (default) and audio 2 is the original
+soundtrack. The subtitles are English (the dub's text) and Japanese (the
+corrected original), both including `captions`. Any text subtitle tracks already
+in the source are kept, and `--sub file.srt:lang[:title]` adds more (for example
+official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 
 ## Gotchas
 
@@ -165,8 +216,17 @@ louder than the film mix.
   speech.
 - **Partial re-render** only works after one successful render of the job. If
   the first render fails at assembly, the next one re-synthesizes everything.
-- **Pronunciation.** Rephrase persistent errors using clearer words.
-  Review names and specialist terms with the listener.
+- **Pronunciation.** Rephrase persistent errors with clearer words.
+  Review names and specialist terms with the listener. Keep examples from
+  source material in `work/NOTES.md`.
+
+- **No acting direction with OmniVoice.** VoiceStudio's `direction` field and
+  free-text `instruct` values (such as "excited") crash the dub. Its only style
+  tag is `whisper`. Delivery comes from the reference clip, so pick references
+  in the character's usual register.
+- **After an NVIDIA driver update, restart the backend.** A backend that was
+  running during the update keeps "CUDA out of memory" errors on an empty GPU
+  and silently runs Whisper on the CPU.
 - **Speaker detection.** Automatic diarisation can merge similar voices or split one speaker.
   Confirm casting with multiple signals. Sortformer can't handle clips over 120 s or more than 4 speakers, ignores
   count hints, and has CC-BY-NC weights.

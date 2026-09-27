@@ -1,6 +1,6 @@
 """Cut a long video into ~N-minute parts at pauses in speech, to dub part by part.
 
-Usage: split.py <video> [--minutes 3] [--out DIR] [--encoder libx264|h264_nvenc]
+Usage: split.py <video> [--minutes 3] [--out DIR] [--encoder auto|h264_nvenc|libx264]
 Silero VAD over the full mix finds the gaps between speech; near each N-minute
 mark (+-30 s) the longest gap wins and the cut goes in its middle, so no line
 is split. Parts are re-encoded so cuts are frame-accurate and dubbed parts can
@@ -24,9 +24,13 @@ p = argparse.ArgumentParser()
 p.add_argument("video")
 p.add_argument("--minutes", type=float, default=3)
 p.add_argument("--out")
-# NVENC in current FFmpeg builds needs NVIDIA driver >= 610; x264 works anywhere.
-p.add_argument("--encoder", default="libx264")
+# auto: NVENC when it works (current FFmpeg builds need NVIDIA driver >= 610), else x264.
+p.add_argument("--encoder", default="auto")
 args = p.parse_args()
+if args.encoder == "auto":
+    nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                            "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)
+    args.encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
 quality = (["-preset", "p5", "-cq", "20"] if "nvenc" in args.encoder
            else ["-preset", "veryfast", "-crf", "18"])
 video = pathlib.Path(args.video).resolve()

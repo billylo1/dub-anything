@@ -59,6 +59,10 @@ cd C:\git\VoiceStudio; uv run --no-sync uvicorn main:app --app-dir backend --hos
 It's ready when `http://127.0.0.1:3900/health` returns
 `{"status":"ok","device":"cuda (...)"}`.
 
+Restart it after an NVIDIA driver update. A backend that was running across the
+update reports "CUDA out of memory" on an empty GPU and falls back to the CPU,
+while `/health` still says `cuda`.
+
 ## 5. Models (~15 GB)
 
 ```powershell

@@ -3,9 +3,10 @@
   prep <video> [--speakers N]   upload, separate vocals, transcribe + diarize;
                                 writes work/<name>/segments.json and prints the transcript
   generate <name>               reads work/<name>/script.json (hand-directed lines:
-                                start/end/voice/text; voices from work/voices.json)
-                                or else en.json ({segment_id: English text}),
-                                synthesizes cloned English speech, exports MP4 + SRT
+                                start/end/voice/text, optional instruct/effect;
+                                voices from work/voices.json) or else en.json
+                                ({segment_id: English text}), synthesizes cloned
+                                English speech, exports MP4 + SRT
 """
 import argparse
 import hashlib
@@ -100,6 +101,19 @@ def srt_time(t):
     return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
 
 
+def ensure_diarizer(prefer="pyannote"):
+    """VoiceStudio can fall back to Sortformer after installs or restarts, which
+    can't handle clips over 120 s; switch to pyannote when it is installed."""
+    try:
+        d = requests.get(f"{API}/engines/diarisation", timeout=30).json()
+    except (requests.RequestException, ValueError):
+        return
+    opt = next((o for o in d.get("options", []) if o.get("id") == prefer), None)
+    if d.get("active") != prefer and opt and opt.get("installed"):
+        requests.post(f"{API}/engines/diarisation/select", json={"engine_id": prefer}, timeout=30)
+        print(f"  diarisation engine: {d.get('active')} -> {prefer}")
+
+
 def cmd_prep(args):
     video = pathlib.Path(args.video)
     work = WORK / video.stem
@@ -117,6 +131,7 @@ def cmd_prep(args):
     wait_task(job["task_id"], {"ready"})
 
     print("transcribe + diarize")
+    ensure_diarizer()
     params = {"per_segment_refs": "true"}
     if args.speakers:
         params["num_speakers"] = args.speakers
@@ -237,6 +252,25 @@ def match_gains(job_id, lines, ids):
     return gains
 
 
+# OmniVoice only accepts these instruct tags (omnivoice/utils/voice_design.py);
+# anything else, including VoiceStudio's free-text `direction`, aborts the dub.
+INSTRUCT_TAGS = {
+    "male", "female", "child", "teenager", "young adult", "middle-aged", "elderly",
+    "very low pitch", "low pitch", "moderate pitch", "high pitch", "very high pitch", "whisper",
+    *(f"{a} accent" for a in ("american", "british", "australian", "chinese", "canadian",
+                              "indian", "korean", "portuguese", "russian", "japanese")),
+}
+EFFECTS = ["broadcast", "cinematic", "podcast", "warm", "bright", "raw"]
+
+
+def check_instruct(line):
+    tags = [t.strip() for t in line.get("instruct", "").split(",") if t.strip()]
+    bad = [t for t in tags if t not in INSTRUCT_TAGS]
+    if bad:
+        raise SystemExit(f"line {line['start']}: unsupported instruct {bad}; allowed: {sorted(INSTRUCT_TAGS)}")
+    return ", ".join(tags)
+
+
 def line_id(line):
     """Stable id from voice + text, so retiming a line reuses its cached speech;
     changing the voice's clips in voices.json re-synthesizes its lines."""
@@ -260,15 +294,25 @@ def cmd_generate(args):
                 seg["gain"] = gain
         return any(g is None for g in gains)
 
+    rendered_path = work / "rendered.json"  # synthesis settings each cached line was made with
+    rendered, settings = load_json(rendered_path, {}), {}
     if script:
         # Hand-directed lines: own timing, speaker and English text per line.
         for line in script["lines"]:
-            segments.append({"start": line["start"], "end": line["end"], "text": line["text"],
-                             "profile_id": ensure_voice(line["voice"]), "target_lang": "en"})
+            seg = {"start": line["start"], "end": line["end"], "text": line["text"],
+                   "profile_id": ensure_voice(line["voice"]), "target_lang": "en",
+                   "effect_preset": line.get("effect", args.effect)}
+            if check_instruct(line):
+                seg["instruct"] = check_instruct(line)
+            segments.append(seg)
             ids.append(line_id(line))
+            settings[ids[-1]] = {"steps": args.steps, "effect": seg["effect_preset"],
+                                 "instruct": seg.get("instruct", "")}
         if not args.full:
-            # An empty list re-mixes cached speech without synthesizing anything.
-            regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists()]
+            # Missing clips, or clips made with other settings; an empty list
+            # re-mixes cached speech without synthesizing anything.
+            regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists()
+                     or rendered.get(i, {"steps": 16, "effect": "broadcast", "instruct": ""}) != settings[i]]
         if args.match_level:
             unleveled = set_gains()
     else:
@@ -283,16 +327,14 @@ def cmd_generate(args):
 
     body = {"segments": segments, "segment_ids": ids, "language": "English",
             "language_code": "en", "timing_strategy": args.timing,
-            "voice_match": args.voice_match}
-    if args.steps:
-        body["num_step"] = args.steps
+            "voice_match": args.voice_match, "num_step": args.steps}
     if args.timing == "concise":
         body["overflow_budget_s"] = args.overflow
     if regen is not None:
         body["regen_only"] = regen
     print(f"generate {args.name}: {len(segments)} segments "
           f"({len(regen) if regen is not None else len(segments)} to synthesize), "
-          f"{args.timing}, {args.voice_match}")
+          f"{args.timing}, {args.voice_match}, {args.steps} steps, {args.effect}")
 
     def run():
         r = requests.post(f"{API}/dub/generate/{job_id}", json=body, timeout=120)
@@ -300,7 +342,18 @@ def cmd_generate(args):
             raise RuntimeError(f"generate {r.status_code}: {r.text}")
         return wait_task(r.json()["task_id"], {"done"})
 
-    done = run()
+    t0 = time.time()
+    try:
+        done = run()
+    finally:
+        # Record what each clip was made with, even when assembly fails after
+        # synthesis (e.g. dub_timing_overflow), so a retry doesn't redo them.
+        for i, s in settings.items():
+            wav = JOBS / job_id / f"seg_en_{i}.wav"
+            if wav.exists() and (wav.stat().st_mtime >= t0 - 1 or (regen is not None and i not in regen)):
+                rendered[i] = s
+        if settings:
+            rendered_path.write_text(json.dumps(rendered, indent=1), encoding="utf-8")
     if unleveled:
         # Freshly synthesized lines had nothing to measure before this render;
         # level them now and re-mix the cached speech (no synthesis).
@@ -339,7 +392,10 @@ def main():
     b.add_argument("--timing", default="concise",
                    choices=["concise", "stretch_video", "strict_slot", "smart_fit"])
     b.add_argument("--voice-match", default="consistent", choices=["per_line", "consistent"])
-    b.add_argument("--steps", type=int)
+    b.add_argument("--steps", type=int, default=32,
+                   help="OmniVoice diffusion steps (32 = its quality preset; VoiceStudio's default is 16)")
+    b.add_argument("--effect", default="broadcast", choices=EFFECTS,
+                   help="VoiceStudio voice processing per line; 'raw' skips compression/EQ/normalizing")
     b.add_argument("--tag", default="")
     b.add_argument("--full", action="store_true", help="re-synthesize every line")
     b.add_argument("--match-level", action="store_true",
