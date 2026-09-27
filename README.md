@@ -91,6 +91,7 @@ directing workflow, file formats and hard-won gotchas are in
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT |
 | `fit.py <name>` | Each rendered line's length vs its window |
+| `edges.py <name> [--apply]` | Find windows that open after the actor has started (a click as the original gets chopped) and move them to the true attack |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |

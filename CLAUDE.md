@@ -49,7 +49,7 @@ what may be cloned or shared are final.
 
 `dub.py prep` → `draft.py` (and `cast.py` / `frames.py` when there are new
 characters) → `asr_words.py <clip> t0 t1` on garbled stretches → write
-`script.json` → `dub.py generate --match-level`, fixing every line it reports as
+`script.json` → `edges.py --apply` → `dub.py generate --match-level`, fixing every line it reports as
 not fitting → `lineqa.py --reroll`: reword what a voice can't say, re-roll
 glitches, repeat until clean → `assemble.py`.
 

@@ -21,20 +21,29 @@ Next, roughly by expected payoff:
    VoiceStudio re-synthesizes everything on each attempt. Pre-check lengths
    before the first render (estimate from characters per second per voice), or
    patch VoiceStudio to honour `regen_only` on uncompleted jobs.
-3. **Match room acoustics** per scene. `tails.py`, `echo` and `pa` are
-   starting points; compare reverb and EQ on the actual source. Effects
-   change synthesis cache keys, so review new takes after adjusting them.
+3. **Line edges.** `edges.py` fixes the clearest chopped starts. Still open:
+   - fragments it skips;
+   - window ends where the original voice is still sounding;
+   - VoiceStudio's 10 ms crossfade itself: a longer or level-aware fade would
+     soften any remaining edge, but that means patching VoiceStudio.
 
-4. **Cleaner separation** (BS-Roformer / Mel-Band Roformer vs Demucs).
+   Tune these by ear, using the lines listeners flag.
+4. **Better source transcripts.** Only kotoba-whisper has been tried, and it
+   lost. Still untried: SenseVoice, WhisperX aligned word timings, and importing
+   official subtitles when a show has them (VoiceStudio can import SRT). That
+   could remove most mishearing fixes.
+5. **Match room acoustics** per scene (reverb/EQ) so voices sit in the space.
+   VoiceStudio's only reverb is a fixed amount in its `cinematic` and `warm` presets.
+6. **Cleaner separation** (BS-Roformer / Mel-Band Roformer vs Demucs).
    Compare residual speech in the background and music in the vocal stem
    before choosing a separator for a new project.
 
-5. **Acting direction.** OmniVoice has no emotion control; its only style tag is
+7. **Acting direction.** OmniVoice has no emotion control; its only style tag is
    `whisper`. IndexTTS 2.5 (emotion control) is the engine to try.
-6. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
-7. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
+8. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
+9. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.
-8. **Upstream to VoiceStudio:**
+10. **Upstream to VoiceStudio:**
    - the two fixes in `voicestudio-local-fixes.patch`;
    - free-text `direction`/`instruct` aborting OmniVoice dubs;
    - `regen_only` being ignored before a job's first success.

@@ -4,9 +4,10 @@ Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
 
 1. Whisper large-v3 (beam 5, word timings) over the separated vocals.
 2. Silero VAD finds where speech really is. Whisper's times run ~0.4 s early,
-   so each phrase is snapped to the VAD onset/offset near it. Speech that no
-   phrase covers is re-transcribed on its own, which recovers lines the full
-   pass skips.
+   so each phrase is snapped to the VAD onset/offset near it, then pulled back
+   to the true attack when the VAD missed a soft onset (see edges.py). Speech
+   that no phrase covers is re-transcribed on its own, which recovers lines
+   the full pass skips.
 3. Each phrase is scored against every cast voice in work/voices.json (WeSpeaker
    embeddings, the model that ships with pyannote). A voice is represented by
    its reference clips plus every line already cast to it in the show's other
@@ -25,6 +26,7 @@ import sys
 
 import numpy as np
 
+import edges
 from dub import HF_CACHE, JOBS, WORK, load_json, whisper_setup
 
 whisper_setup()
@@ -180,6 +182,17 @@ def main():
                 phrases.append({**snap(phrase(words), spans, duration), "recovered": True})
     phrases = settle(phrases)
     del model
+    # Start windows at the true attack. VAD misses soft onsets, and a window
+    # that opens mid-sound chops the actor audibly (edges.py has the rule).
+    db = edges.frames_db(audio)
+    for i, p in enumerate(phrases):
+        floor_t = max(phrases[i - 1]["end"] if i else 0.0, p["start"] - 0.3)
+        level = edges.line_level(db, p["start"], p["end"])
+        onset = edges.voiced_onset(db, p["start"], floor_t, level)
+        k = int(p["start"] * SR / edges.HOP)
+        if onset is not None and edges.MIN_SHIFT <= p["start"] - onset <= edges.MAX_SHIFT \
+                and max(db[k - 2:k]) - level >= edges.CUT_DB:
+            p["start"] = round(onset, 2)
 
     embed = embedder()
     cents = cast_centroids(embed, set(args.cast.split(",")) if args.cast else None, exclude=args.name) \

@@ -240,6 +240,20 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   clips to real speech boundaries, keep neighbours out, then check the joined
   reference with `asr_words.py work\voices\<key>.wav`. Every phrase must be
   complete, and `ref_text` must match what is actually said.
+- **A click just before the English starts = the actor chopped mid-sound.** At
+  each window start VoiceStudio crossfades from the original mix, voice
+  included, to the voice-free bed in only 10 ms. Speech detection misses soft
+  attacks (a breath, a consonant) by 20–100 ms. If the actor is already
+  sounding when the window opens, that sliver of Japanese plays and is then
+  cut. It's rare enough to sound random ("sometimes the start is glitchy").
+  `edges.py <clip> --apply` finds these and starts the window 20 ms before the
+  true attack. It only moves clear cases: a voice within 16 dB of the line at
+  the cut that began 20–130 ms before the window. Shorter fragments weren't
+  heard, and longer ones are usually someone else's sound. It's timing only, so
+  the re-render is a re-mix and approved takes stay. `draft.py` applies the same
+  rule to new drafts. The fix is best checked by ear on the flagged lines;
+  `edges.py` also notes window ends where the original voice is still
+  sounding.
 - **Timing strategy.** Use `concise`, dub.py's default: natural pace, placed at the
   window start, and it fails loudly on overflow. `strict_slot` (the VoiceStudio UI
   default) stretches every line to fill its window, which gives slowed or rushed
