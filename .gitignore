@@ -1,0 +1,9 @@
+# Source media, per-show work and renders stay local: copyrighted material,
+# transcripts and references to real people's voices.
+videos/
+work/
+dubbed/
+
+__pycache__/
+*.pyc
+.venv/

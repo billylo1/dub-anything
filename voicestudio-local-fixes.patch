@@ -1,0 +1,44 @@
+diff --git a/backend/api/routers/dub_core.py b/backend/api/routers/dub_core.py
+index 10f4e5e1..d3d200e8 100644
+--- a/backend/api/routers/dub_core.py
++++ b/backend/api/routers/dub_core.py
+@@ -1481,7 +1481,19 @@ async def dub_transcribe_stream(
+                     tmp.close()
+                     try:
+                         _safe_soundfile_write(tmp.name, arr, local_sr)
+-                        r = _asr_backend.transcribe(tmp.name, word_timestamps=True)
++                        # Honour the user's source-language pick; without it
++                        # Whisper auto-detects per chunk and can mislabel short
++                        # or noisy clips (e.g. Japanese detected as English).
++                        lang_kw = {}
++                        hint = job.get("source_lang_override")
++                        if hint:
++                            import inspect
++                            try:
++                                if "language" in inspect.signature(_asr_backend.transcribe).parameters:
++                                    lang_kw["language"] = hint
++                            except (TypeError, ValueError):
++                                pass
++                        r = _asr_backend.transcribe(tmp.name, word_timestamps=True, **lang_kw)
+                     finally:
+                         try: os.remove(tmp.name)
+                         except OSError: pass
+diff --git a/backend/services/model_manager.py b/backend/services/model_manager.py
+index bbcbd7de..4a86a6f5 100644
+--- a/backend/services/model_manager.py
++++ b/backend/services/model_manager.py
+@@ -2444,9 +2444,13 @@ def _load_model_sync():
+             logger.info("Preloading PyTorch Whisper after TTS model load.")
+         else:
+             logger.info("Skipping PyTorch Whisper preload; ASR will load on demand.")
++        # float16 has no fast CPU kernels (~7x slower than float32 on x86), so
++        # keep half precision for accelerators only.
++        tts_dtype = torch.float32 if str(device).startswith("cpu") else torch.float16
++
+         def _load():
+             return VoiceStudio.from_pretrained(
+-                checkpoint, device_map=device, dtype=torch.float16, load_asr=False,
++                checkpoint, device_map=device, dtype=tts_dtype, load_asr=False,
+             )
+ 
+         def _recover_corrupt_weights(exc: BaseException):
