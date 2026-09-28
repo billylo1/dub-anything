@@ -2,11 +2,14 @@
 and with how long the actor actually speaks in it.
 
 Usage: fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job's seg_en_L*.wav)
-Lines not rendered yet get an estimate (~) from the voice's rate on lines
-already rendered, flagged "OVER?" or "risk", so they can be fixed before the
-first render. "SHORT" / "SHORT?" marks English that would end well before the
-actor stops even at fill's slowest speed: write fuller text for it. `dub.py
-generate` prints the same table for the failing lines when a line overflows.
+Lines not rendered yet get an estimate (~): the length OmniVoice itself will give
+them, computed with its own rule from the reference the render will use (the
+line's own original, or the voice's clips for the lines listed as falling back).
+No render is needed, so it works for a new show's first part. They're flagged
+"OVER?" or "risk", to fix before rendering. "SHORT" / "SHORT?" marks English that
+ends well before the actor stops: write fuller text for it (slowing a take adds
+little). `dub.py generate` prints the same table for the failing lines when a
+line overflows.
 """
 import argparse
 

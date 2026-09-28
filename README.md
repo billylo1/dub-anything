@@ -95,7 +95,7 @@ directing workflow, file formats and hard-won gotchas are in
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT. Each line's reference ends with the actor's own original of it (when its window is clean), and takes are re-timed to end where the actor stops |
-| `fit.py <name>` | Each line's length vs its window and the actor's speech: measured once rendered, estimated from the voice's pace before, so overflows and too-short English are fixed ahead of the first render |
+| `fit.py <name>` | Each line's length vs its window and the actor's speech: measured once rendered, predicted before with OmniVoice's own length rule, so overflows and too-short English are fixed ahead of the first render |
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound (a click as the original gets chopped): starts after the attack, ends before the release. Move the clear ones |
 | `tails.py <name>` | How long each line's original voice rings on: flags flashback echo, PA announcements and big rooms, next to each take's own tail |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |

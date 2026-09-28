@@ -211,14 +211,27 @@ their own original (see "The reference sets the register").
   window's end back to the actor's last pause is often enough.
 - **Size the text:** each clone follows its actor's pace, from about 8 to 16
   letters per second. Short lines cost more than their length suggests: even
-  "Really?" takes 0.8–1.2 s. `fit.py <clip>` estimates every line not rendered
-  yet from its voice's rate on the lines already rendered (typically within
-  0.2 s). It flags `OVER?` and `risk` against the room each line has, and
-  `SHORT?` for English that would end well before the actor stops even at
-  fill's slowest pace. Run it before the first render and fix the flags. For
-  `OVER?`: widen short windows into following silence, merge them with a
-  neighbour, or cut words. For `SHORT?`: write fuller English, closer to
-  everything the actor says. Slowing a line further would drawl.
+  "Really?" takes 0.8–1.2 s. `fit.py <clip>` computes the length OmniVoice will
+  give every line not rendered yet, with OmniVoice's own rule and the reference
+  the render will use: typically within 0.2 s, nine lines in ten within 0.4 s,
+  about as close as two takes of one line are to each other. It needs no
+  earlier renders, so it works on a new show's first part. It first lists the
+  lines that will fall back to the character's reference (snap those windows if
+  you can), then flags `OVER?` and `risk` against the room each line has, and
+  `SHORT?` for English that ends well before the actor stops at natural pace.
+  Run it before the first render and fix the flags. For `OVER?`: widen short
+  windows into following silence, merge them with a neighbour, or cut words.
+  For `SHORT?`: write fuller English, closer to everything the actor says.
+  Don't count on fill to slow a short line down (see "Render").
+- **Why the pace varies.** OmniVoice fixes a take's length before generating it:
+  the reference's duration, times the English text's weight, divided by the
+  weight of the reference's transcript. A kanji weighs 3, kana 2.2, a digit
+  3.5, a Latin letter 1 and a space 0.2 (`omnivoice/utils/duration.py`).
+  Anything under 2 s is stretched towards 2 s, which is why short lines run
+  long. With per-line references the reference includes the line's own
+  original, so a line the actor says quickly, dense in kanji, comes out fast in
+  English, and one said slowly comes out slow. The same English can take very
+  different times on two lines of one character; `fit.py` accounts for this.
 - **Keep what's already in the target language.** If characters speak English in
   the original, leave it and caption it. `draft.py` tags such lines
   `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
@@ -285,7 +298,12 @@ delivery of its line and ends where the actor stops:
   its natural pace gets sped up instead of stopping the render. Fill only
   aligns where a line ends, not pauses inside it. Lines stuck at 0.8 have
   English much shorter than the actor's speech (`fit.py` flags them `SHORT`):
-  give them fuller text, and listen to slowed lines for drawl.
+  give them fuller text, and listen to slowed lines for drawl. A take asked
+  for at 0.8 often isn't slower at all: OmniVoice says the words at its own
+  pace and leaves the extra time silent, and the silence is trimmed. Only
+  fuller text fills those lines. Fill also absorbs most natural-pace
+  overflows, which otherwise stop the render and each need a reword or a wider
+  window.
 
 `--no-line-ref` and `--no-fill` (or `--line-ref`, `--fill`) override the script
 for one run, e.g. for an A/B job. Both change takes, so try them on a copy of an

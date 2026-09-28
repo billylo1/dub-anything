@@ -12,6 +12,7 @@
                                 re-timed to end where the actor stops.
 """
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -334,6 +335,28 @@ def voice_clips(spec):
     return [tuple(c) if len(c) == 3 else (spec["from"], *c) for c in spec["clips"]]
 
 
+def voice_wav(key, rebuild=False):
+    """work/voices/<key>.wav: the voice's clips from voices.json joined with 0.3 s
+    pauses. Built when missing, when rebuild is set, or when the voice's entry no
+    longer matches the profile it was last uploaded as."""
+    spec = load_json(WORK / "voices.json", {})[key]
+    ref = WORK / "voices" / f"{key}.wav"
+    uploaded = load_json(WORK / "profiles.json", {}).get(key, {})
+    if ref.exists() and not rebuild and uploaded.get("sig") == voice_sig(key):
+        return ref
+    sources, parts = {}, []
+    for clip, a, b in voice_clips(spec):
+        if clip not in sources:
+            job = load_json(WORK / clip / "segments.json")["job_id"]
+            sources[clip] = sf.read(JOBS / job / "vocals.wav", dtype="float32")
+        audio, sr = sources[clip]
+        gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")
+        parts += [audio[int(a * sr):int(b * sr)], gap]
+    ref.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(ref, np.concatenate(parts[:-1]), sr)
+    return ref
+
+
 def ensure_voice(key):
     """Resolve a voice key from work/voices.json to a profile id, building a
     VoiceStudio voice profile from hand-picked clean clips when needed."""
@@ -347,18 +370,7 @@ def ensure_voice(key):
     if old and old["sig"] == sig and requests.get(f"{API}/profiles/{old['id']}", timeout=30).ok:
         return old["id"]
 
-    sources, parts, gap = {}, [], None
-    for clip, a, b in voice_clips(spec):
-        if clip not in sources:
-            job = load_json(WORK / clip / "segments.json")["job_id"]
-            sources[clip] = sf.read(JOBS / job / "vocals.wav", dtype="float32")
-        audio, sr = sources[clip]
-        gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")
-        parts += [audio[int(a * sr):int(b * sr)], gap]
-    ref = WORK / "voices" / f"{key}.wav"
-    ref.parent.mkdir(parents=True, exist_ok=True)
-    sf.write(ref, np.concatenate(parts[:-1]), sr)
-
+    ref = voice_wav(key, rebuild=True)
     with open(ref, "rb") as f:
         r = requests.post(f"{API}/profiles", files={"ref_audio": (ref.name, f, "audio/wav")},
                           data={"name": f"dub-{key}", "ref_text": spec.get("ref_text", "")},
@@ -443,57 +455,68 @@ def speech_length(wav):
     return (min(len(env), voiced[-1] + 1 + margin) - max(0, voiced[0] - margin)) / sr
 
 
-def _length_features(text):
-    return [1.0, len(re.sub(r"[^A-Za-z0-9]", "", text)), len(re.findall(r"[.,!?;:—-]", text))]
+OMNIVOICE_SR, OMNIVOICE_FPS = 24000, 25  # OmniVoice's audio tokenizer: 24 kHz, 960-sample frames
+STRETCH_USED = 0.5    # share of OmniVoice's stretch of short lines that a take actually speaks
+SPEED_EXPONENT = 0.7  # a take asked for at speed s changes length by 1/s**0.7, not 1/s
 
 
-def length_model():
-    """Predict a line's rendered length from its text, per voice: seconds =
-    a + b * letters + c * punctuation, fitted on every line already rendered in
-    the show's directed clips. Voices with few rendered lines lean on the
-    all-voice fit, or for a character's extra reference (register.py) on the
-    character's other lines: a raised register can be slower. Estimates depend
-    on the available renders and vary between takes."""
-    data = {}
-    who = {k: s.get("register_of", k) for k, s in load_json(WORK / "voices.json", {}).items()}
-    for script in WORK.glob("*/script.json"):
-        seg = load_json(script.parent / "segments.json")
-        if not seg:
-            continue
-        rendered = load_json(script.parent / "rendered.json", {})
-        for line in load_json(script).get("lines", []):
-            sid = line_id(line)
-            wav = JOBS / seg["job_id"] / f"seg_en_{sid}.wav"
-            if wav.exists():
-                # A take re-timed by fill ran at `speed`: undo it to get the natural pace.
-                natural = speech_length(wav) * rendered.get(sid, {}).get("speed", 1.0)
-                data.setdefault(line["voice"], []).append((_length_features(line["text"]), natural))
-    rows = [r for rs in data.values() for r in rs]
-    if len(rows) < 10:
-        return None
-    X_all, y_all = np.array([r[0] for r in rows]), np.array([r[1] for r in rows])
+def at_speed(natural, speed):
+    """A take's length at `speed`, from its length at natural pace. It changes
+    less than the speed asks: slowed, OmniVoice often says the words at its own
+    pace and leaves the extra time silent, which is trimmed; sped up, it
+    shortens less too."""
+    return natural / speed ** SPEED_EXPONENT
 
-    def solve(X, y, w):
-        coef, *_ = np.linalg.lstsq(X * np.sqrt(w)[:, None], y * np.sqrt(w), rcond=None)
-        return coef
 
-    overall = solve(X_all, y_all, np.ones(len(rows)))
-    coefs = {}
-    for voice, rs in data.items():
-        X, y = np.array([r[0] for r in rs]), np.array([r[1] for r in rs])
-        if len(rs) < 15:  # blend in the character's other voices, else the whole cast, worth 15 lines
-            kin = [r for k, v in data.items() if k != voice and who.get(k, k) == who.get(voice, voice) for r in v]
-            pool = kin if len(kin) >= 15 else rows
-            X, y = np.r_[X, [r[0] for r in pool]], np.r_[y, [r[1] for r in pool]]
-            w = np.r_[np.full(len(rs), 3.0), np.full(len(pool), 15 / len(pool))]
-        else:
-            w = np.ones(len(rs))
-        coefs[voice] = solve(X, y, w)
+@functools.lru_cache(maxsize=1)
+def _omnivoice():
+    """OmniVoice's length rule and reference helpers, and VoiceStudio's text
+    normalization, from the VoiceStudio checkout this Python runs from."""
+    import importlib.util
 
-    def estimate(voice, text):
-        coef = coefs.get(voice, coefs.get(who.get(voice, voice), overall))
-        return float(np.array(_length_features(text)) @ coef)
-    return estimate
+    import omnivoice
+    from omnivoice.utils.audio import remove_silence_safe
+    from omnivoice.utils.duration import RuleDurationEstimator
+    from omnivoice.utils.text import add_punctuation
+    path = pathlib.Path(omnivoice.__file__).parents[1] / "backend" / "services" / "text_normalization.py"
+    spec = importlib.util.spec_from_file_location("voicestudio_text_normalization", path)
+    norm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(norm)
+    return RuleDurationEstimator(), add_punctuation, remove_silence_safe, norm.normalize_text
+
+
+@functools.lru_cache(maxsize=512)
+def _ref_frames(path, mtime):
+    """A reference's length in OmniVoice frames, prepared as OmniVoice prepares it
+    (create_voice_clone_prompt): mono at 24 kHz, pauses over 0.2 s shortened and
+    the edges trimmed. (OmniVoice also raises a quiet clip's level before
+    trimming; leaving that out predicted rendered takes better.)"""
+    import torch
+    import torchaudio
+    audio, sr = sf.read(path, dtype="float32")
+    wav = torch.from_numpy(audio.mean(axis=1) if audio.ndim > 1 else audio)[None]
+    wav = torchaudio.functional.resample(wav, sr, OMNIVOICE_SR)
+    wav = _omnivoice()[2](wav, OMNIVOICE_SR, mid_sil=200, lead_sil=100, trail_sil=200)
+    return wav.size(-1) * OMNIVOICE_FPS // OMNIVOICE_SR
+
+
+def take_length(ref_audio, ref_text, text, speed=1.0):
+    """How long a take of `text` cloned from this reference will be, in seconds of
+    trimmed speech (as speech_length measures it). OmniVoice fixes a take's length
+    before generating it (omnivoice/utils/duration.py): the reference's length
+    times the text's weight over the transcript's weight. A kanji weighs 3, kana
+    2.2, a digit 3.5, a Latin letter 1 and a space 0.2, so English follows how
+    dense the actor's Japanese is and how fast they said it. Anything under 2 s
+    is stretched towards 2 s; takes speak about half of that stretch. Fitted on
+    about 1,000 takes: typically within 0.2 s, nine in ten within 0.4 s, about
+    as close as two takes of one line are to each other."""
+    estimator, add_punctuation, _, normalize = _omnivoice()
+    ref = pathlib.Path(ref_audio)
+    frames = _ref_frames(str(ref), ref.stat().st_mtime)
+    text, ref_text = normalize(text, "en"), add_punctuation(ref_text)
+    plain = estimator.estimate_duration(text, ref_text, frames, low_threshold=None)
+    stretched = estimator.estimate_duration(text, ref_text, frames)
+    return at_speed((stretched - STRETCH_USED * (stretched - plain)) / OMNIVOICE_FPS, speed)
 
 
 SHORT_BY = 0.5  # s of the actor's speech left uncovered that makes a line "SHORT"
@@ -504,44 +527,56 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
     allows: VoiceStudio's own rule (dub_generate.py) of the window, plus up to
     0.25 s of the gap before the next line (less a 0.05 s buffer), plus the
     overflow budget. Takes are measured with their edge silence trimmed, as
-    VoiceStudio does. With `predict`, lines not rendered yet get an estimated
-    length ("est") and a flag: "OVER?" if the estimate exceeds the room, "risk"
-    if within 0.3 s of it. When the part renders with fill, a line only overflows
-    if it would even at fill's fastest speed. With `short`, a line whose English
-    would end more than SHORT_BY before the actor stops even at fill's slowest
-    speed (at its natural pace without fill) is flagged "SHORT" ("SHORT?" when
-    estimated), with the actor's end in "actor": it needs fuller text."""
+    VoiceStudio does. With `predict`, lines not rendered yet get the length
+    OmniVoice will give them at natural pace ("est", take_length), from the
+    reference the render will use: the line's own original when the part renders
+    with per-line references and its window is clean (fallbacks are printed, as
+    generate prints them), otherwise the voice's clips. They're flagged "OVER?"
+    if the estimate exceeds the room, "risk" if within 0.3 s of it. When the part
+    renders with fill, a line only overflows if it would even at fill's fastest
+    speed. With `short`, a line whose English ends more than SHORT_BY before the
+    actor stops is flagged "SHORT" (the take as rendered) or "SHORT?" (the
+    estimate at natural pace), with the actor's end in "actor": it needs fuller
+    text. Estimates get no credit for fill's slowing: slowed takes often come
+    out little longer, so the text has to fill the time by itself."""
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
     script = load_json(work / "script.json")
     lines = script["lines"]
     rendered = load_json(work / "rendered.json", {})
-    fill = script.get("render", {}).get("fill", not rendered)
-    fastest, slowest = (FILL_SPEED[1], FILL_SPEED[0]) if fill else (1.0, 1.0)
-    estimate = length_model() if predict else None
+    mode = script.get("render", {})
+    fastest = FILL_SPEED[1] if mode.get("fill", not rendered) else 1.0
+    ids = [line_id(line) for line in lines]
+    own, base = {}, {}  # per-line references by line id, voices' references by key
+    if predict:
+        voices = load_json(WORK / "voices.json", {})
+        todo = [k for k, i in enumerate(ids) if not (JOBS / job / f"seg_en_{i}.wav").exists()
+                and "clips" in voices[lines[k]["voice"]]]
+        base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
+        if todo and mode.get("line_ref", not rendered):
+            own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo])
     ends = actor_ends(job, lines) if short else [None] * len(lines)
     rows = []
-    for i, (line, end) in enumerate(zip(lines, ends)):
-        sid = line_id(line)
+    for i, (line, sid, end) in enumerate(zip(lines, ids, ends)):
         wav = JOBS / job / f"seg_en_{sid}.wav"
         row = {"i": i, "start": line["start"], "text": line["text"], "window": line["end"] - line["start"],
                "actor": end}
         gap = lines[i + 1]["start"] - line["end"] if i + 1 < len(lines) else 0.0
         borrow = min(gap - 0.05, 0.25) if gap > 0.05 else 0.0
         row["room"] = row["window"] + borrow + overflow
-        natural = None
+        length = None
         if wav.exists():
-            row["speech"] = speech_length(wav)
-            natural = row["speech"] * rendered.get(sid, {}).get("speed", 1.0)
+            length = row["speech"] = speech_length(wav)
             row["flag"] = "OVER" if row["speech"] > row["room"] else (
                 "tight" if row["speech"] > row["window"] else "")
         else:
             row["speech"], row["flag"] = None, ""
-            if estimate:
-                natural = row["est"] = estimate(line["voice"], line["text"])
-                row["flag"] = "OVER?" if natural / fastest > row["room"] else (
-                    "risk" if natural / fastest > row["room"] - 0.3 else "")
-        if short and end and natural and not row["flag"] and natural / slowest < end - SHORT_BY:
+            ref = own.get(sid) or base.get(line["voice"])
+            if ref:
+                length = row["est"] = take_length(*ref, line["text"])
+                row["flag"] = "OVER?" if at_speed(length, fastest) > row["room"] else (
+                    "risk" if at_speed(length, fastest) > row["room"] - 0.3 else "")
+        if short and end and length and not row["flag"] and length < end - SHORT_BY:
             row["flag"] = "SHORT" if row["speech"] is not None else "SHORT?"
         rows.append(row)
     return rows

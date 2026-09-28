@@ -74,21 +74,59 @@ originals per part.
    they did in the original — mattered at least as much as the acting. Most
    re-timed lines were slowed, and many hit the 0.8× floor: the English was
    written much shorter than the original speech.
+8. **Fill carries the timing, per-line references carry the delivery.** On a
+   new show, one part with range was rendered three ways from the same script:
+   plain, fill only, and fill with per-line references. Fill alone halved the
+   distance between the take's end and the actor's, as much as the full
+   default did. But its delivery followed the originals no better than the
+   plain dub: the rank correlation stayed near zero. Only per-line references
+   made it clearly positive. Likeness, estimated quality and accent were about
+   the same in all three. So the preference in finding 7 isn't timing alone. The
+   plain variant also needed the old chores: five lines overflowed at natural
+   pace and had to be reworded or widened, and re-rolls changed short takes'
+   lengths enough to overflow again. Fill absorbed all of that.
+9. **OmniVoice decides a take's length by rule.** Its length is the
+   reference's duration scaled by the weight of the English against the weight
+   of the reference's transcript, with a stretch for anything under 2 s (see
+   [directing.md](directing.md#3-translate-and-time)). With per-line
+   references each line's own original enters the rule, so pace varies from
+   line to line. `fit.py` used to estimate lengths from each voice's average
+   rate on lines already rendered. That needs renders first, and it can't
+   follow per-line pace: on a new show's first parts, nine in ten of its
+   estimates were within 0.6 s, and they were biased long. Now it applies the
+   rule itself, to the reference each line will get: over about 1,000 takes,
+   typically within 0.2 s, nine in ten within 0.4 s, with no bias and no
+   renders needed. That is about as close as two takes of one line are.
+   Takes speak only about half of the stretch given to short lines. A take
+   asked for at another speed changes length by about speed^0.7, not in
+   proportion: slowed, the model often speaks at its own pace and leaves
+   silence that is trimmed. On the lines where slowing mattered most, it added
+   almost nothing. So `fit.py` flags `SHORT?` against the natural pace and
+   gives fill no credit. Before, it caught three of the lines that ended at the
+   0.8× floor on a new show's first render; now it catches thirteen of
+   seventeen.
+10. **Windows written to end in pauses keep most lines on their own
+    reference.** When every window was ended in a pause while writing the
+    script, rather than snapped afterwards, about nine lines in ten passed the
+    window check on a dialogue-heavy show, against about seven in ten before.
 
 ## What the pipeline does now
 
 `dub.py generate` renders new parts with per-line references and fill by
 default, recorded in each script's `render` block (see
-[directing.md](directing.md#4-render)). `fit.py` flags `SHORT?` lines, whose
-English is too short for the actor's speech even at the slowest fill, so the
-director writes fuller text before rendering. `register.py`'s calm/raised
+[directing.md](directing.md#4-render)). `fit.py` predicts each line's length with
+OmniVoice's own rule before the first render. It flags `SHORT?` lines, whose
+English is too short for the actor's speech at natural pace, so the director
+writes fuller text before rendering. `register.py`'s calm/raised
 references are now a fallback for characters whose lines can't use their own
 original.
 
 ## Open questions
 
-- **Is it the timing alone?** A variant with fill but without per-line
-  references would show how much of the preference is timing.
+- **Fill from the prediction.** Fill still renders each line at natural pace
+  first and re-times it afterwards, assuming length changes in proportion to
+  speed. It could choose each line's speed before the first pass from the
+  prediction, and correct with speed^0.7, saving most of a pass.
 - **Pauses inside a line.** Fill aligns where a line ends. An actor who pauses
   mid-sentence still gets continuous English.
 - **Coverage of per-line references.** Snapping windows to pauses helps. Long

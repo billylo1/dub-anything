@@ -55,8 +55,9 @@ characters) → `second.py` for lines two other recognisers hear differently →
 `asr_words.py <clip> t0 t1` on garbled stretches → write `script.json`, ending
 each window in a pause with nobody else inside it → `edges.py --apply` (check
 long `skip`s by hand) → `tails.py` for flashback echo (`"effect": "echo"`) and PA
-announcements (`"pa"`) → `fit.py`, fixing every `OVER?` it predicts and writing
-fuller English for every `SHORT?` →
+announcements (`"pa"`) → `fit.py`: snap the windows of lines it says fall back to
+the character's reference, fix every `OVER?` it predicts and write fuller English
+for every `SHORT?` →
 `dub.py generate --match-level`: new parts render with per-line references and
 fill (the script's `render` block). Check the lines it says fall back to the
 character's reference, and fix every line it reports as not fitting →
