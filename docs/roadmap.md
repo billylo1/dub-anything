@@ -30,36 +30,50 @@ Done so far:
   one-pass overflow report;
 - 32-step synthesis;
 - voice processing A/B (compare presets on each project);
-- alternative Japanese recognisers for comparison with Whisper.
+- alternative Japanese recognisers for comparison with Whisper;
+- per-line references (default): each line's reference ends with the actor's
+  own original of it, so the take follows that line's delivery with the
+  actor's accent, behind a check that the window is clean;
+- fill (default): takes re-rendered at 0.8–1.25× so each ends where the actor
+  stops, and `fit.py` flags English too short for the actor's speech;
+- IndexTTS 2.5 with per-line emotion references, as an option
+  (`--engine indextts2`). How these were chosen: [research.md](research.md).
 
 Next, roughly by expected payoff:
 
-1. **Line edges.** `edges.py` fixes the clearest chopped starts and ends.
+1. **Per-line references and fill, follow-ups** (see
+   [research.md](research.md#open-questions)): more lines with clean windows
+   (snapping, a transcript per voice clip for long lines, a kana-aware window
+   check); matching pauses inside a line, not just its end; a variant with fill
+   alone, to see how much of the gain is timing.
+2. **Line edges.** `edges.py` fixes the clearest chopped starts and ends.
    Still open:
    - fragments it skips;
    - VoiceStudio's 10 ms crossfade itself: a longer or level-aware fade would
      soften any remaining edge, but that means patching VoiceStudio.
 
    Tune these by ear, using the lines listeners flag.
-2. **Better source transcripts.** Compare recognisers on representative,
+3. **Better source transcripts.** Compare recognisers on representative,
    corrected samples. `second.py` provides agreement-based review flags.
    Explore aligned word timings and importing source subtitles.
 
-3. **Match room acoustics** per scene. `tails.py`, `echo` and `pa` are
+4. **Match room acoustics** per scene. `tails.py`, `echo` and `pa` are
    starting points; compare reverb and EQ on the actual source. Effects
    change synthesis cache keys, so review new takes after adjusting them.
 
-4. **Acting direction.** OmniVoice has no emotion control; its only style tag is
-   `whisper`. Register is now matched by choosing the reference
-   (`register.py`), but that needs 5 s of clean speech in each register, which
-   short roles lack, and it can't do emotion beyond calm vs raised (anger vs
-   joy, tears). IndexTTS 2.5 (emotion control) is the engine to try.
-5. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
-6. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
+5. **Acting beyond the original line.** OmniVoice has no emotion control; its
+   only style tag is `whisper`. Per-line references carry the actor's delivery
+   where a line's window is clean. Elsewhere the character's reference, or a
+   calm/raised one from `register.py`, sets it. IndexTTS 2.5 acts best on
+   scenes with range, but replaces the actor's accent with its own English and
+   loses likeness. A voice conversion pass back to the actor could restore the
+   likeness, but not the accent.
+6. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
+7. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.
-7. **Upstream to VoiceStudio:**
-   - the fixes in `voicestudio-local-fixes.patch`, and the `echo` and `pa`
-     presets;
+8. **Upstream to VoiceStudio:**
+   - the fixes in `voicestudio-local-fixes.patch`, the `echo` and `pa`
+     presets, and per-segment voice and emotion references in dubs;
    - a Roformer separator as an option next to htdemucs (dubrama swaps the
      stems in the job folder with `separate.py`);
    - free-text `direction`/`instruct` aborting OmniVoice dubs.

@@ -56,6 +56,7 @@ def words(text):
     t = re.sub(r"(?<=\d),(?=\d{3})", "", t)
     t = re.sub(r"(\d)\.(\d)", r"\1 point \2", t)
     t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t)  # "a2.5cm" -> "a 2.5 cm"
+    t = re.sub(r"\bnevermind\b", "never mind", t)  # one word or two, same meaning
     for a, b in (("won't", "will not"), ("can't", "can not"), ("n't", " not"), ("'re", " are"),
                  ("'ve", " have"), ("'ll", " will"), ("'m", " am"), ("'d", " would"), ("'s", " is")):
         t = t.replace(a, b)

@@ -50,8 +50,13 @@ stopped at a timing overflow threw its takes away: the next attempt
 re-synthesized every line instead of only the changed ones. It also adds two
 general-purpose voice presets, `echo` for flashbacks and `pa` for
 announcements over a public-address system, and lets reverb ring out instead of
-stopping dead where the dry take ends. See
-[directing.md](directing.md#gotchas).
+stopping dead where the dry take ends. And it lets each dub line carry its own
+voice reference (`dub.py generate --line-ref`), and its own emotion reference
+for engines that take one (IndexTTS 2, `--engine indextts2 --emo-alpha`). See [directing.md](directing.md#gotchas).
+
+IndexTTS 2.5 is optional (about 12 GB). Install it through the running backend:
+`POST http://127.0.0.1:3900/engines/sidecar/indextts2/install`, then poll
+`.../install/status`.
 
 ## 4. Start the backend
 

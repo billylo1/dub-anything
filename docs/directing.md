@@ -75,10 +75,19 @@ differs.
 - `keep_voice` (optional): `true` stops `register.py route` from moving the line
   to another of the character's references, e.g. when one of them can't say a
   word in it.
+- `line_ref` (optional): `false` keeps the character's reference for this line
+  instead of its own original (see "Render").
 
-With `concise` timing (the default), each line is spoken at its natural pace from
-the window start. It may run up to 0.3 s past the end (`--overflow`), but not
-into the next window. Outside all windows the original soundtrack plays.
+A top-level `"render": {"line_ref": true, "fill": true}` records how the part is
+rendered (see "Render"). `dub.py generate` writes it on the first run: both on
+for a part never rendered, both off for a part rendered before these became the
+default, so its approved takes don't change.
+
+With `concise` timing (the default), each line starts at the window start. With
+`fill` on, its pace is then adjusted so it ends where the actor stops (see
+"Render"); otherwise it's spoken at its natural pace. It may run up to 0.3 s past
+the end (`--overflow`), but not into the next window. Outside all windows the
+original soundtrack plays.
 
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
@@ -175,10 +184,10 @@ speaker's line, skip that clip. For anyone with less than 3 s of clean speech
 (walk-ons, a single whisper), or for a line that's a name, keep the original
 audio and put the line in `captions`.
 
-Pick reference lines in the character's usual register: the clone copies the
-reference's delivery (see "The reference sets the register"). Once a character
-has eight or more directed lines, `register.py report` shows where their
-reference sits among them.
+Pick reference lines in the character's usual register. Each line's own
+original normally sets its delivery (see "Render"). The character's reference
+holds the voice steady, and it alone sets the delivery of lines that can't use
+their own original (see "The reference sets the register").
 
 ### 3. Translate and time
 
@@ -195,13 +204,21 @@ reference sits among them.
   its ±0.6 s search limit on noise.
 - **Split long lines at the actor's pauses** so the English lands where the lips
   move.
+- **End each window in a pause, with nobody else inside it.** A line whose
+  window is clean gets the actor's own delivery (see "Render"). One where the
+  next speaker starts before the window ends, or the actor is cut mid-sound,
+  falls back to the character's reference. In overlapping dialogue, trimming a
+  window's end back to the actor's last pause is often enough.
 - **Size the text:** each clone follows its actor's pace, from about 8 to 16
   letters per second. Short lines cost more than their length suggests: even
   "Really?" takes 0.8–1.2 s. `fit.py <clip>` estimates every line not rendered
   yet from its voice's rate on the lines already rendered (typically within
-  0.2 s) and flags `OVER?` and `risk` against the room each line has. Run it
-  before the first render and fix the flags: widen short windows into
-  following silence, merge them with a neighbour, or cut words.
+  0.2 s). It flags `OVER?` and `risk` against the room each line has, and
+  `SHORT?` for English that would end well before the actor stops even at
+  fill's slowest pace. Run it before the first render and fix the flags. For
+  `OVER?`: widen short windows into following silence, merge them with a
+  neighbour, or cut words. For `SHORT?`: write fuller English, closer to
+  everything the actor says. Slowing a line further would drawl.
 - **Keep what's already in the target language.** If characters speak English in
   the original, leave it and caption it. `draft.py` tags such lines
   `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
@@ -239,6 +256,60 @@ is 16. `--effect` picks the voice processing. The default is `broadcast`;
 compare alternatives on your source. `dub.py` records what each line was made
 with (`work/<clip>/rendered.json`), so changing steps, effect or instruct
 re-synthesizes exactly the affected lines.
+
+By default (the script's `render` block) each take follows the actor's own
+delivery of its line and ends where the actor stops:
+
+- **Per-line references** (`line_ref`). Each line's reference is the voice's
+  clips from `voices.json`, a pause, then the actor's original of this very
+  line, with its `ja` after the voice's transcript. OmniVoice copies its
+  reference's delivery and accent, so the take follows the actor on that line
+  and keeps their accent, while the clips hold the voice steady. This replaces
+  sorting lines into calm and raised: the delivery comes from the line itself.
+  A line keeps the character's reference when it has `"line_ref": false`, a
+  room effect (`echo`, `pa`; the original's room would be cloned), a window too
+  long to fit OmniVoice's 20 s limit alongside the clips, or a window that isn't
+  clean. A window isn't clean if speech runs on past its end: the reference would
+  end mid-sound, and OmniVoice finishes that sound at the start of the take. Nor
+  is it clean if Whisper hears something other than the line's `ja` (crosstalk),
+  or if the voice is nearer another character. `generate` prints each line that
+  falls back and why. A line whose window overlapped the next speaker came out
+  as gibberish on every take until this check excluded it, so don't force
+  one. Snap its window instead (see "Translate and time"). A take's reference
+  depends on its window, so moving a window re-synthesizes that line.
+- **Fill** (`fill`). After the natural-pace render, `generate` finds each actor's
+  last sound in the window (Silero VAD on the vocals). It then re-renders every
+  take ending more than 0.25 s away from it, at the OmniVoice speed that lands it
+  there, within 0.8–1.25. OmniVoice sets the take's length from the speed;
+  nothing is time-stretched. Two passes converge, and a line that overflows at
+  its natural pace gets sped up instead of stopping the render. Fill only
+  aligns where a line ends, not pauses inside it. Lines stuck at 0.8 have
+  English much shorter than the actor's speech (`fit.py` flags them `SHORT`):
+  give them fuller text, and listen to slowed lines for drawl.
+
+`--no-line-ref` and `--no-fill` (or `--line-ref`, `--fill`) override the script
+for one run, e.g. for an A/B job. Both change takes, so try them on a copy of an
+approved part rather than on the part itself.
+
+`--engine indextts2 --emo-alpha 0.9` (experimental) renders with IndexTTS 2.5
+instead of OmniVoice. Each line gets the actor's own line from the separated
+vocals as an emotion reference, and the voice still comes from `voices.json`.
+The engine is VoiceStudio's global setting: `dub.py` switches it for the render
+and switches back afterwards. It needs the local patch, which adds the
+per-line reference, and it's slow, about 8 s a line against OmniVoice's 1 s.
+The reference carries the actor's pacing as well as their delivery: without
+it, IndexTTS runs well past the actor and overflows many windows. On a scene
+with a wide emotional range, its takes followed the actors' delivery more
+closely than any OmniVoice approach. On a quiet scene there was little to
+follow and no gain. The costs are likeness, which is lower than OmniVoice's,
+and the accent. OmniVoice keeps the actor's accent from the reference, while
+IndexTTS speaks its own native English. Whisper's language confidence on the
+takes measures this cheaply: clones of non-native actors score well below
+native speech. A listener may find the actor's own accent more authentic, so
+render it as a separate job and compare by ear.
+
+How these were chosen, and what else was tried, is in
+[research.md](research.md).
 
 ### 5. QA
 
@@ -332,10 +403,14 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   retain the original audio and add a caption.
 - **No acting direction with OmniVoice.** VoiceStudio's `direction` field and
   free-text `instruct` values (such as "excited") crash the dub. Its only style
-  tag is `whisper`. Delivery comes from the reference clip, so pick references
-  in the character's usual register.
+  tag is `whisper`. Delivery comes from the reference, which is why each line's
+  reference ends with the actor's own original of it (per-line references).
 - **The reference sets the register.** A clone copies delivery as well as
-  voice identity. Use `register.py` to compare references with the source:
+  voice identity. With per-line references this matters only for lines that
+  fall back to the character's reference. When many of a character's lines
+  fall back and they sound wrong, e.g. a character whose reference is projected
+  but whose fallback lines are quiet asides, give them a reference in their
+  register with `register.py`:
   1. `report` measures pitch, vocal effort and loudness relative to each
      speaker's own lines and flags mismatches.
   2. `build <voice> calm|raised` builds another reference from clean lines
@@ -350,6 +425,12 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 
   Loudness in the mix is not the same as vocal effort. Review both the
   source and the takes; these tools do not provide emotion control.
+- **VoiceStudio reuses separated stems by video content.** `prep` copies the
+  stems of the newest job made from the same video, including stems that
+  `separate.py` swapped in. So after re-separating one job, a new job for the
+  same video (an A/B copy, say) starts with Roformer stems, not htdemucs, even
+  though VoiceStudio only runs htdemucs. Check `separator.json` in the new job
+  folder, and use `separate.py --restore` or copy the stems you want.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.

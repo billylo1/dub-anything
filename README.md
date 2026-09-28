@@ -39,7 +39,7 @@ file: open it in Jumpgate to pan, zoom or edit, and re-render with
 | Transcribe the original language | Whisper large-v3 (faster-whisper) | VoiceStudio |
 | Rough "who speaks when" | pyannote 3.1 or Sortformer | VoiceStudio |
 | Fix transcript, cast, translate, time every line | **the director** → `script.json` | you / Claude |
-| Clone each actor's voice speaking the new language | OmniVoice (k2-fsa, zero-shot) | VoiceStudio (`dub.py generate`) |
+| Clone each actor's voice speaking the new language, each line prompted with the actor's own delivery of it and timed to end where they stop | OmniVoice (k2-fsa, zero-shot) | VoiceStudio (`dub.py generate`) |
 | Mix over the preserved background, export MP4 + SRT | ffmpeg | VoiceStudio |
 
 Nothing is uploaded anywhere. Hugging Face is only used to download models.
@@ -94,15 +94,15 @@ directing workflow, file formats and hard-won gotchas are in
 | `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, speech already in English found, long hallucinations re-transcribed → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
-| `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT |
-| `fit.py <name>` | Each line's length vs its window: measured once rendered, estimated from the voice's pace before, so overflows are fixed ahead of the first render |
+| `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT. Each line's reference ends with the actor's own original of it (when its window is clean), and takes are re-timed to end where the actor stops |
+| `fit.py <name>` | Each line's length vs its window and the actor's speech: measured once rendered, estimated from the voice's pace before, so overflows and too-short English are fixed ahead of the first render |
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound (a click as the original gets chopped): starts after the attack, ends before the release. Move the clear ones |
 | `tails.py <name>` | How long each line's original voice rings on: flags flashback echo, PA announcements and big rooms, next to each take's own tail |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs. A part whose script has no lines (commercials, credits) keeps its original audio |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `register.py report\|build\|route\|check\|drop` | Match each character's voice reference to the register (calm, raised) of the lines it speaks: find mismatches, build a second reference from the character's own lines, route each line to the nearest, verify the takes follow |
+| `register.py report\|build\|route\|check\|drop` | Optional: a calm or raised reference for a character's lines that can't use their own original (crosstalk, long lines): find mismatches, build a second reference from the character's own lines, route each line to the nearest, verify the takes follow |
 | `second.py <clip> [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both agree against Whisper (needs sherpa-onnx; see CLAUDE.md) |
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
@@ -112,7 +112,8 @@ directing workflow, file formats and hard-won gotchas are in
 Runtime depends on clip length, hardware, model settings and the number of
 lines that need synthesis. Timing and level edits can reuse approved takes.
 
-What's next: [docs/roadmap.md](docs/roadmap.md).
+What's next: [docs/roadmap.md](docs/roadmap.md). What was measured and tried
+along the way: [docs/research.md](docs/research.md).
 
 ## Responsible use
 
