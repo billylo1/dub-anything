@@ -109,6 +109,27 @@ originals per part.
     reference.** When every window was ended in a pause while writing the
     script, rather than snapped afterwards, about nine lines in ten passed the
     window check on a dialogue-heavy show, against about seven in ten before.
+11. **Choosing each line's speed from the prediction saves renders, not
+    timing.** On a third show, three parts of an ensemble scene (about 110
+    lines) were rendered twice from the same script, each in its own job. One
+    used the current fill: natural pace first, then re-timing. The other
+    rendered each new line at the speed the length prediction asked for, and
+    corrected afterwards by speed^0.7. The prediction put about two lines in
+    three within fill's tolerance on the first pass, where natural pace managed
+    about one in three. Fill passes re-rendered about half as many lines, and
+    the whole render made about 15% fewer takes. Everything measured on the
+    result was the same:
+    the distance between each take's end and the actor's, lines ending late,
+    `lineqa.py` flags, delivery, likeness and estimated quality. Wall time saved
+    little: the first pass dominates, and every run has fixed costs. It also
+    had a cost. Short takes vary so much from roll to roll that the speed^0.7
+    correction over-steered them. One short line swung from well under the
+    actor's time at 1.25× to far over it at 0.8×, and three times as many
+    lines ended at the 0.8× floor. So fill still
+    starts at natural pace; the prediction is a switch (`predict_speed`). Both
+    variants also stopped on lines still overflowing at 1.25×, sometimes by a
+    hundredth of a second, because fill never re-rendered a take already at
+    its fastest speed. Now such a take gets a fresh roll.
 
 ## What the pipeline does now
 
@@ -123,10 +144,10 @@ original.
 
 ## Open questions
 
-- **Fill from the prediction.** Fill still renders each line at natural pace
-  first and re-times it afterwards, assuming length changes in proportion to
-  speed. It could choose each line's speed before the first pass from the
-  prediction, and correct with speed^0.7, saving most of a pass.
+- **Steadier short takes.** Most fill passes, overflows and re-rolls come
+  from lines under about 1.5 s, whose takes vary most from roll to roll (see
+  finding 11). Rendering several takes of a short line and keeping the one
+  that fits might settle them in one pass.
 - **Pauses inside a line.** Fill aligns where a line ends. An actor who pauses
   mid-sentence still gets continuous English.
 - **Coverage of per-line references.** Snapping windows to pauses helps. Long

@@ -596,11 +596,12 @@ FILL_PASSES = 2  # re-timing passes after the natural-pace render; a third chang
 
 
 def render_mode(work, script, args):
-    """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..}.
-    A part without one gets the defaults (both on) if it has never been rendered,
-    and the earlier behaviour (both off) if it has, so approved takes don't change
-    under a new default; the block is then written so later runs agree. The
-    --[no-]line-ref and --[no-]fill flags override it for one run."""
+    """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
+    "predict_speed": ..}. A part without one gets the defaults (per-line references
+    and fill on) if it has never been rendered, and the earlier behaviour (both
+    off) if it has, so approved takes don't change under a new default; the block
+    is then written so later runs agree. The --[no-]line-ref, --[no-]fill and
+    --[no-]predict-speed flags override it for one run."""
     mode = script.get("render")
     if mode is None:
         fresh = not load_json(work / "rendered.json")
@@ -608,8 +609,8 @@ def render_mode(work, script, args):
         (work / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"  render mode written to script.json: {mode}"
               + ("" if fresh else " (this part was rendered before they became the default)"))
-    mode = {"line_ref": False, "fill": False, **mode}
-    for key in ("line_ref", "fill"):
+    mode = {"line_ref": False, "fill": False, "predict_speed": False, **mode}
+    for key in ("line_ref", "fill", "predict_speed"):
         if getattr(args, key) is not None:
             mode[key] = getattr(args, key)
     return mode
@@ -620,7 +621,7 @@ def cmd_generate(args):
     doc = json.loads((work / "segments.json").read_text(encoding="utf-8"))
     job_id = doc["job_id"]
     script = load_json(work / "script.json")
-    mode = render_mode(work, script, args) if script else {"line_ref": False, "fill": False}
+    mode = render_mode(work, script, args) if script else {"line_ref": False, "fill": False, "predict_speed": False}
     rendered_path = work / "rendered.json"  # synthesis settings each cached line was made with
     rendered = load_json(rendered_path, {})
     # Takes lineqa.py --reroll flagged: synthesized again (on the first pass) for a fresh roll.
@@ -644,6 +645,7 @@ def cmd_generate(args):
                     ids.append(s["id"])
             return segments, ids, settings, None
         # Hand-directed lines: own timing, speaker and English text per line.
+        voices = load_json(WORK / "voices.json", {})
         for line in script["lines"]:
             seg = {"start": line["start"], "end": line["end"], "text": line["text"],
                    "profile_id": ensure_voice(line["voice"]), "target_lang": "en",
@@ -671,19 +673,34 @@ def cmd_generate(args):
         if mode["fill"]:
             # Re-time takes that stop well short of the actor or run past them:
             # render them at the speed that lands their end on the actor's last sound.
-            for seg, i, end in zip(segments, ids, ends):
+            # With predict_speed, a line with no take yet starts at the speed its
+            # predicted length (take_length) asks for, and every correction follows
+            # at_speed rather than assuming length changes in proportion to speed.
+            power = 1 / SPEED_EXPONENT if mode["predict_speed"] else 1.0
+            for seg, i, end, line in zip(segments, ids, ends, script["lines"]):
                 prev = rendered.get(i, {}).get("speed")
                 speed, wav = prev, JOBS / job_id / f"seg_en_{i}.wav"
-                if end and wav.exists() and abs(speech_length(wav) - end) > FILL_TOL:
-                    speed = min(max((prev or 1.0) * speech_length(wav) / end, FILL_SPEED[0]), FILL_SPEED[1])
+                length = speech_length(wav) if wav.exists() else None
+                if length is None and end and mode["predict_speed"] and (i in refs or "clips" in voices[line["voice"]]):
+                    ref = refs.get(i) or (voice_wav(line["voice"]), voices[line["voice"]].get("ref_text", ""))
+                    # The prediction is at natural pace, whatever speed a lost take had.
+                    length, prev, speed = take_length(*ref, line["text"]), None, None
+                if end and length and abs(length - end) > FILL_TOL:
+                    speed = min(max((prev or 1.0) * (length / end) ** power, FILL_SPEED[0]), FILL_SPEED[1])
                 if speed and abs(speed - 1) >= 0.01:
                     seg["speed"] = settings[i]["speed"] = round(speed, 2)
+        # A take that overflows its room at fill's fastest speed can't be re-timed:
+        # give it a fresh take instead (takes of one line differ by a few tenths).
+        stuck = set()
+        if mode["fill"] and not first:
+            stuck = {ids[row["i"]] for row in fit_rows(args.name, args.overflow) if row["flag"] == "OVER"
+                     and rendered.get(ids[row["i"]], {}).get("speed") == settings[ids[row["i"]]].get("speed") == FILL_SPEED[1]}
         if args.full and first:
             return segments, ids, settings, None
         # Missing clips, clips made with other settings, or queued re-rolls;
         # an empty list re-mixes cached speech without synthesizing anything.
         regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists() or (first and i in reroll)
-                 or rendered.get(i, {"steps": 16, "effect": "broadcast", "instruct": ""}) != settings[i]]
+                 or i in stuck or rendered.get(i, {"steps": 16, "effect": "broadcast", "instruct": ""}) != settings[i]]
         return segments, ids, settings, regen
 
     def request(segments, ids, regen):
@@ -743,7 +760,7 @@ def cmd_generate(args):
             if done is None:
                 if not mode["fill"] or n == FILL_PASSES:
                     break
-                print("  a line overflows its room; the next fill pass re-times it")
+                print("  a line overflows its room; the next fill pass re-times it, or re-rolls it at the fastest speed")
         if done is None:
             # VoiceStudio stops at the first overflow; report them all so one
             # pass of edits fixes every line.
@@ -819,6 +836,9 @@ def main():
                    help=f"override the script's render mode for this run: re-render takes that end more than "
                         f"{FILL_TOL} s from the actor's last sound, at the speed ({FILL_SPEED[0]}-{FILL_SPEED[1]}) "
                         f"that lands them on it")
+    b.add_argument("--predict-speed", action=argparse.BooleanOptionalAction, default=None,
+                   help="override the script's render mode for this run: with fill, render new lines at the "
+                        "speed their predicted length asks for, instead of at natural pace first")
     b.set_defaults(fn=cmd_generate)
     args = p.parse_args()
     args.fn(args)

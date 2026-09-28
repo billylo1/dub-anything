@@ -221,6 +221,10 @@ their own original (see "The reference sets the register").
   `SHORT?` for English that ends well before the actor stops at natural pace.
   Run it before the first render and fix the flags. For `OVER?`: widen short
   windows into following silence, merge them with a neighbour, or cut words.
+  Treat `risk` on a window under about 1 s as `OVER?`: short English is
+  stretched (see below), so even one word takes 0.9–1.3 s, more than fill's
+  fastest speed can recover. The estimate is least reliable for such one-word
+  lines.
   For `SHORT?`: write fuller English, closer to everything the actor says.
   Don't count on fill to slow a short line down (see "Render").
 - **Why the pace varies.** OmniVoice fixes a take's length before generating it:
@@ -303,10 +307,16 @@ delivery of its line and ends where the actor stops:
   pace and leaves the extra time silent, and the silence is trimmed. Only
   fuller text fills those lines. Fill also absorbs most natural-pace
   overflows, which otherwise stop the render and each need a reword or a wider
-  window.
+  window. A take that still overflows at 1.25 gets a fresh take on the next
+  pass, since takes of one line differ by a few tenths of a second. If it
+  overflows after the last pass, `generate` stops and lists it.
+  `"predict_speed": true` in the `render` block (or `--predict-speed`) renders
+  each new line at the speed `fit.py`'s prediction asks for instead of at
+  natural pace first. That halves the re-renders but gave the same timing
+  (see [research.md](research.md)), so it is off by default.
 
-`--no-line-ref` and `--no-fill` (or `--line-ref`, `--fill`) override the script
-for one run, e.g. for an A/B job. Both change takes, so try them on a copy of an
+`--no-line-ref` and `--no-fill` (or `--line-ref`, `--fill`, `--predict-speed`)
+override the script for one run, e.g. for an A/B job. Both change takes, so try them on a copy of an
 approved part rather than on the part itself.
 
 `--engine indextts2 --emo-alpha 0.9` (experimental) renders with IndexTTS 2.5
@@ -377,6 +387,12 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   clips to real speech boundaries, keep neighbours out, then check the joined
   reference with `asr_words.py work\voices\<key>.wav`. Every phrase must be
   complete, and `ref_text` must match what is actually said.
+- **Keep screams out of voice clips.** Speech detection doesn't count a scream
+  or a wail as speech, so a clip can look like a short word with silence around
+  it while it holds seconds of screaming. That blurs the voice's speaker
+  embedding: other characters' lines, even of the other sex, then score nearer
+  it, and the per-line reference check sends them to their fallback. Build
+  references from spoken lines, even for a character who mostly shouts.
 - **A click just before the English starts = the actor chopped mid-sound.** At
   each window start VoiceStudio crossfades from the original mix, voice
   included, to the voice-free bed in only 10 ms. Speech detection misses soft
