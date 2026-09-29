@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 
-from dub import HERE, WORK, load_json, out_dir, srt_time
+from core import HERE, WORK, load_json, out_dir, srt_time
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu"}

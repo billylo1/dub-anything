@@ -22,7 +22,7 @@ import sys
 
 import soundfile as sf
 
-from dub import JOBS, WORK, line_id, whisper_setup
+from core import JOBS, WORK, line_id, whisper_setup
 
 whisper_setup()
 from faster_whisper import WhisperModel  # noqa: E402

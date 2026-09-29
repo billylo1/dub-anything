@@ -13,7 +13,7 @@ line overflows.
 """
 import argparse
 
-from dub import fit_rows
+from core import fit_rows
 
 ap = argparse.ArgumentParser()
 ap.add_argument("name")

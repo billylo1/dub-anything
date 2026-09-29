@@ -30,7 +30,7 @@ import sys
 
 import numpy as np
 
-from dub import JOBS, WORK, load_json
+from core import JOBS, WORK, load_json
 from faster_whisper.audio import decode_audio
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -15,7 +15,7 @@ import sys
 import numpy as np
 
 import draft
-from dub import JOBS, WORK, load_json
+from core import JOBS, WORK, load_json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

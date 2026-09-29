@@ -18,7 +18,7 @@ import sys
 import numpy as np
 import soundfile as sf
 
-from dub import JOBS, WORK, line_id, load_json
+from core import JOBS, WORK, line_id, load_json
 from edges import HOP, SR, frames_db
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps

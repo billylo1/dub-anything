@@ -25,7 +25,7 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 WORK = HERE / "work"
-# Same resolution as dub.py / VoiceStudio's backend/core/config.py.
+# Same resolution as core.py / VoiceStudio's backend/core/config.py.
 DATA = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
 JOBS = DATA / "dub_jobs"

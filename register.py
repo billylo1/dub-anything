@@ -33,7 +33,7 @@ import sys
 import numpy as np
 
 import draft
-from dub import JOBS, WORK, line_id, load_json, voice_clips
+from core import JOBS, WORK, line_id, load_json, voice_clips
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
 

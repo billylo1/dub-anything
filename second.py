@@ -26,7 +26,7 @@ import soundfile as sf
 from huggingface_hub import snapshot_download
 from scipy.signal import resample_poly
 
-# Same resolution as dub.py.
+# Same resolution as core.py.
 WORK = pathlib.Path(__file__).resolve().parent / "work"
 JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"

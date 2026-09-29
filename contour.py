@@ -12,7 +12,7 @@ import sys
 import librosa
 import numpy as np
 
-# Same job-folder resolution as dub.py / VoiceStudio's backend/core/config.py.
+# Same job-folder resolution as core.py / VoiceStudio's backend/core/config.py.
 JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
 WORK = pathlib.Path(__file__).resolve().parent / "work"

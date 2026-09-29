@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-from dub import WORK, out_dir, whisper_setup
+from core import WORK, out_dir, whisper_setup
 
 whisper_setup()  # VoiceStudio's downloaded Whisper + cuDNN 8
 from faster_whisper import WhisperModel  # noqa: E402

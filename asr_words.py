@@ -9,7 +9,7 @@ Options: --model <repo>  (default Systran/faster-whisper-large-v3)
 import argparse
 import sys
 
-from dub import JOBS, WORK, load_json, whisper_setup
+from core import JOBS, WORK, load_json, whisper_setup
 
 whisper_setup()  # VoiceStudio's downloaded Whisper + cuDNN 8
 from faster_whisper import WhisperModel  # noqa: E402

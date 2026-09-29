@@ -37,7 +37,7 @@ import sys
 import numpy as np
 
 import edges
-from dub import HF_CACHE, JOBS, WORK, load_json, voice_clips, whisper_setup
+from core import HF_CACHE, JOBS, WORK, load_json, voice_clips, whisper_setup
 
 whisper_setup()
 import torch  # noqa: E402

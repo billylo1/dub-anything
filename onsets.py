@@ -10,7 +10,7 @@ import sys
 import numpy as np
 import soundfile as sf
 
-from dub import JOBS, WORK
+from core import JOBS, WORK
 
 name = sys.argv[1]
 job = json.loads((WORK / name / "segments.json").read_text(encoding="utf-8"))["job_id"]
