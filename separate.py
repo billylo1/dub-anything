@@ -1,6 +1,6 @@
 """Re-separate prepped clips' vocals with a Roformer model instead of VoiceStudio's htdemucs.
 
-Usage (its own env, see CLAUDE.md):
+Usage (its own env, see AGENTS.md):
   separate.py <clip> [<clip> ...] [--model vocals_mel_band_roformer.ckpt]
   separate.py <clip> --restore            put htdemucs's stems back
 

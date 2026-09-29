@@ -1,132 +1,111 @@
 # dubrama
 
-Dub video into another language **in each speaker's own voice**, keeping the
-original music and sound effects. Everything runs locally on your GPU.
+Dub video into another language **in each actor's own voice**, keeping the
+original music and sound effects. Everything runs locally on your GPU. Built and
+tested for **Japanese → English** on Windows with an NVIDIA GPU.
 
-**dubrama is built to be run by an AI agent.** It is a set of scripts around the
-dubbing API of [VoiceStudio](https://github.com/debpalash/VoiceStudio), a local,
-ElevenLabs-style app. The scripts are instruments: they separate, transcribe,
-measure, render and check, but none of them decides anything. The agent is the
-**director**. It reads the evidence the tools produce, makes the calls, and
-loops until the checks pass. A person does the one thing the agent can't:
-listen.
+## How you use it
 
-| | Does | For example |
+You don't run the scripts yourself. Open this folder in an AI coding agent
+(Claude Code, Codex, Cursor or another harness that reads
+[AGENTS.md](AGENTS.md)) and ask it to dub a video. The agent directs the dub,
+and `AGENTS.md` tells it how:
+
+- **The scripts** do the heavy lifting: separate voices from music, transcribe,
+  clone, mix, and check every line.
+- **The agent** makes the calls: who says what, what Whisper misheard, natural
+  English timed to the actor's lips, what stays in the original, which QA flags
+  are real. It tells you which lines are guesses.
+- **You** listen. You judge the acting, the voices and the mix, and decide what
+  may be cloned or shared.
+
+In practice:
+
+1. Set up once: [docs/setup.md](docs/setup.md).
+2. Put the video in `videos\` and ask, for example: *"Dub the first 10 minutes
+   of videos\my-show.mkv."*
+3. Answer one question: which voice (below).
+4. Listen to what the agent sends and to the moments it asks you to check, and
+   say what to change.
+5. Watch the result: `videos\<show>-parts\dubbed\<show>.dubbed.p1-4.mp4`, with
+   the dub as the default audio track, the original as a second track, and
+   English and Japanese subtitles.
+
+## The one choice: the voice
+
+| | **Actor's voice** (default) | **American** |
 |---|---|---|
-| **The scripts** | Produce evidence and do the heavy lifting | Separate voices from music, transcribe, score each line against each character's voice, grab frames, clone and mix, transcribe every rendered line back |
-| **The agent (director)** | Makes the judgement calls, in a loop | Weighs conflicting evidence on who's speaking. Fixes mishearings from context. Translates for meaning and lip timing, and keeps running jokes consistent. Decides what stays in the original (names, whispers, lines already in English). Triages QA flags. Flags its own guesses. |
-| **You** | Listen, and decide taste and rights | Judge the acting, the voices and the mix. Choose between A/B versions. Decide what may be cloned or shared. |
+| Sounds like | The actor speaking English, with their own accent | Native American English, converted towards each actor's voice |
+| Best for | Live action | Anime and animation |
+| Trade-off | Accented English | Looser timing and a little less of the acting; about 4× slower to render |
 
-[CLAUDE.md](CLAUDE.md) describes the directing workflow for an AI agent.
-A person can run the same loop by hand.
-
-Built and tested for **Japanese → English** on Windows with an NVIDIA GPU.
-The workflow supports different kinds of video; source and target language
-selection is still a planned extension.
+Not sure? The agent can render one short part both ways first. Everything else
+(separation, timing, voice processing) has defaults chosen by ear.
 
 ## How it works
 
 ![How a dub gets made](docs/process.png)
 
-The diagram is [docs/process.jg](docs/process.jg), a [Jumpgate](https://github.com/swax/jumpgate)
-file: open it in Jumpgate to pan, zoom or edit, and re-render with
+1. **Split** long videos into ~3-minute parts at pauses in speech.
+2. **Separate** the voices from music and effects (Mel-Band Roformer).
+3. **Transcribe** the Japanese (Whisper large-v3, with two other recognisers as a
+   second opinion). If the picture has burned-in closed captions, they are read
+   too: the exact words, often with the speaker's name.
+4. **Direct** (the agent): cast each line, correct the transcript, translate,
+   and time every line to the actor → `work/<part>/script.json`.
+5. **Voice** each line. With the actor's voice, OmniVoice clones the actor,
+   prompted with their own delivery of that line. With American, IndexTTS
+   speaks native English following the actor's delivery, and Chatterbox then
+   converts it to the actor's voice.
+6. **Fit, mix and check.** Each take is re-timed to end where the actor stops
+   and mixed over the original background; every line is transcribed back to
+   catch garbled words.
+
+Outside the dubbed lines you hear the original soundtrack, so songs, laughs and
+names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
+[Jumpgate](https://github.com/swax/jumpgate) file. It is rendered with
 `npm run render -- <path>/docs/process.jg` from Jumpgate's `packages/jumpgate`.
 
-| Step | Model | Where |
-|---|---|---|
-| Separate voices from music/SFX | Demucs htdemucs | VoiceStudio (`dub.py prep`) |
-| Re-separate, cleaner under music | Mel-Band Roformer (audio-separator) | `separate.py` |
-| Transcribe the original language | Whisper large-v3 (faster-whisper) | VoiceStudio |
-| Rough "who speaks when" | pyannote 3.1 or Sortformer | VoiceStudio |
-| Fix transcript, cast, translate, time every line | **the director** → `script.json` | you / Claude |
-| Clone each actor's voice speaking the new language, each line prompted with the actor's own delivery of it and timed to end where they stop | OmniVoice (k2-fsa, zero-shot) | VoiceStudio (`dub.py generate`) |
-| Mix over the preserved background, export MP4 + SRT | ffmpeg | VoiceStudio |
+## Doing it by hand
 
-Nothing is uploaded anywhere. Hugging Face is only used to download models.
-
-## What directing looks like
-
-Each clip gets a `work/<clip>/script.json`. One entry per line of dialogue:
-
-```json
-{"lines": [
-  {"start": 4.30, "end": 5.90, "voice": "speaker_1", "ja": "こんにちは", "text": "Hello."},
-  {"start": 6.40, "end": 8.80, "voice": "speaker_2",  "ja": "お元気ですか", "text": "How are you?"}
-]}
-```
-
-`start`/`end` is the window the English line may occupy, snapped to where the
-actor really speaks. `voice` is a character from `work/voices.json`: a few
-seconds of that actor's clean speech, cut from the separated vocals, which
-OmniVoice clones. Outside the windows you hear the original soundtrack, so
-laughs, sighs and hums stay the actor's own.
-
-## Quick start
-
-Setup (VoiceStudio, models, GPU) is in **[docs/setup.md](docs/setup.md)**. Once
-the backend is running on `http://127.0.0.1:3900`:
+The agent's loop can be run by hand with VoiceStudio's Python
+(`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`) and the backend running:
 
 ```powershell
-$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"   # dubrama runs in VoiceStudio's venv
-
-& $py split.py videos\episode.mkv                   # long video -> ~3-minute parts at pauses
-& $py dub.py prep videos\episode-parts\episode-01.mp4   # separate, transcribe, diarize
-# separate.py episode-01 (own env, see CLAUDE.md)   # cleaner vocals and background under music
-& $py draft.py episode-01                           # careful transcript, real timings, suggested cast
-# ...direct: write work\episode-01\script.json (and voices in work\voices.json)
-& $py dub.py generate episode-01 --match-level      # clone, synthesize, mix, export
-& $py lineqa.py episode-01                          # check every rendered line on its own
-& $py assemble.py episode --parts 1-4               # one video: dub + original audio, EN/JA subtitles
+& $py split.py videos\episode.mkv                     # long video -> parts at pauses
+& $py dub.py prep videos\episode-parts\episode-01.mp4  # upload, separate, transcribe
+& $py draft.py episode-01                            # careful transcript, suggested cast
+# write work\episode-01\script.json and the cast in work\voices.json
+& $py dub.py generate episode-01 --match-level       # clone, time, mix, export
+& $py lineqa.py episode-01                           # check each rendered line
+& $py assemble.py episode --parts 1-4                # one video with both audio tracks
 ```
 
-Each part's dub lands in a `dubbed` folder next to the source clip. `assemble.py`
-joins parts into one MP4 with the dub as the default audio track, the original
-soundtrack as a second track, and soft subtitles in both languages. The full
-directing workflow, file formats and hard-won gotchas are in
-**[docs/directing.md](docs/directing.md)**.
-
-## Tools
-
-| Script | Does |
-|---|---|
-| `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
-| `separate.py <clip> ... [--restore]` | Re-separate prepped clips with a Roformer model: far less music left in the vocals, so cleaner clones (needs audio-separator; see CLAUDE.md) |
-| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, speech already in English found, long hallucinations re-transcribed → `draft.json` |
-| `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
-| `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
-| `dub.py generate <name> --match-level` | Render `script.json` with cloned voices, levelled against the original actors → MP4 + SRT. Each line's reference ends with the actor's own original of it (when its window is clean), and takes are re-timed to end where the actor stops |
-| `fit.py <name>` | Each line's length vs its window and the actor's speech: measured once rendered, predicted before with OmniVoice's own length rule, so overflows and too-short English are fixed ahead of the first render |
-| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound (a click as the original gets chopped): starts after the attack, ends before the release. Move the clear ones |
-| `tails.py <name>` | How long each line's original voice rings on: flags flashback echo, PA announcements and big rooms, next to each take's own tail |
-| `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs. A part whose script has no lines (commercials, credits) keeps its original audio |
-| `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `register.py report\|build\|route\|check\|drop` | Optional: a calm or raised reference for a character's lines that can't use their own original (crosstalk, long lines): find mismatches, build a second reference from the character's own lines, route each line to the nearest, verify the takes follow |
-| `second.py <clip> [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both agree against Whisper (needs sherpa-onnx; see CLAUDE.md) |
-| `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
-| `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
-
-## Performance
-
-Runtime depends on clip length, hardware, model settings and the number of
-lines that need synthesis. Timing and level edits can reuse approved takes.
-
-What's next: [docs/roadmap.md](docs/roadmap.md). What was measured and tried
-along the way: [docs/research.md](docs/research.md).
+Some steps need their own environments (`separate.py`, `subs.py`, `second.py`;
+see [AGENTS.md](AGENTS.md)). The workflow, the script format, every tool and the
+gotchas are in [docs/directing.md](docs/directing.md). What was measured and
+tried is in [docs/research.md](docs/research.md), and what's next is in
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Responsible use
 
-Only dub media you have the rights to, and only clone voices with the consent a
-use requires. Output made from someone else's film or voice is for private use
-unless you have permission. `videos/` and `work/` are git-ignored so source
-media, transcripts and cloned-voice references stay out of normal commits.
-Do not force-add them. Use invented examples in docs and commit messages.
+Only dub media you have the rights to, and only clone voices with the consent
+the use requires. Output made from someone else's film or voice is for private
+use unless you have permission. `videos/` and `work/` are git-ignored, so source
+media, transcripts and voice references stay out of commits: don't force-add
+them, and use invented examples in docs and commit messages.
 
 ## License
 
-dubrama is MIT-licensed ([LICENSE](LICENSE)). It talks to VoiceStudio over HTTP
-and does not include its code. VoiceStudio is AGPL-3.0, and so is
+dubrama is MIT-licensed ([LICENSE](LICENSE)). It talks to
+[VoiceStudio](https://github.com/debpalash/VoiceStudio) over HTTP and does not
+include its code. VoiceStudio is AGPL-3.0, and so is
 `voicestudio-local-fixes.patch`, a change to VoiceStudio's source. Models have
-their own licenses: pyannote is gated on Hugging Face, and the Sortformer
-weights are CC-BY-NC. Check each model before commercial use.
+their own licenses:
+- pyannote is gated on Hugging Face;
+- the Sortformer weights are CC-BY-NC;
+- Chatterbox (the American voice's converter) is MIT, and marks its output with
+  an inaudible watermark.
+
+Check each model before commercial use. Nothing is uploaded anywhere; Hugging
+Face is only used to download models.

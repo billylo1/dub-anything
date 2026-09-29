@@ -100,6 +100,9 @@ list to both subtitle tracks.
 
 ## Workflow
 
+For a new show, settle one thing with the user before the first part: the
+voice (see "Voice" under Render). Everything else has a default.
+
 ### 1. Prep and draft
 
 ```powershell
@@ -112,7 +115,7 @@ list to both subtitle tracks.
 switches VoiceStudio to pyannote when it's installed.
 
 For cleaner references, try `separate.py episode-01` (its own environment;
-see CLAUDE.md). Residual music in the vocals can affect clones, transcripts,
+see AGENTS.md). Residual music in the vocals can affect clones, transcripts,
 register measurements and level matching. Compare the vocals and background
 on your material before choosing a separator. Run separation before drafting
 and building voices. `--restore` restores htdemucs stems; changing stems under
@@ -148,7 +151,19 @@ prove that a transcription is right.
 
 `second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
 flags lines where both disagree with Whisper. Re-listen with `asr_words.py`
-and decide from context. It needs its own environment (see CLAUDE.md).
+and decide from context. It needs its own environment (see AGENTS.md).
+
+Some recordings have the broadcaster's closed captions burned into the
+picture. They are the best transcript there is: the exact words, the names
+spelled right, a bracketed name when the speaker isn't obvious, "≪" for a
+voice off screen, and often a colour of their own for each main character.
+`subs.py <clip>` reads them (OCR over sampled frames) into
+`work/<clip>/subs.json`. Run it before `draft.py`, which then prints the
+captions on screen under each phrase and lists captions no phrase covers.
+Caption times follow the display, not the speech, so windows still come from
+the VAD. The OCR misreads a character now and then (a kana for its katakana
+twin, a rare kanji), so weigh it against Whisper and the context. Song lyrics
+become bare `♪` markers: songs stay in the original audio.
 
 ### 2. Cast
 
@@ -167,7 +182,10 @@ others. Decide each line's speaker from:
    cluster, so check the nearest-cast hint. Name the clusters once, build their
    voices, then re-run `draft.py`.
 2. **Video frames** at the line's time: who is in close-up with their mouth open.
-   On-screen names and role captions can help identify a speaker.
+   On-screen names and role captions can help identify a speaker. Burned-in
+   closed captions (`subs.py`) often give each main character a colour of
+   their own and put a name in brackets when the speaker isn't obvious;
+   `draft.py` prints them under each phrase.
    ```powershell
    & $py frames.py grid.jpg videos\episode-parts\episode-02.mp4 84:announce 121.5:interjection 147.5
    ```
@@ -319,8 +337,36 @@ delivery of its line and ends where the actor stops:
 override the script for one run, e.g. for an A/B job. Both change takes, so try them on a copy of an
 approved part rather than on the part itself.
 
-`--engine indextts2 --emo-alpha 0.9` (experimental) renders with IndexTTS 2.5
-instead of OmniVoice. Each line gets the actor's own line from the separated
+**Voice** (the `render` block's `"voice"`, or `--voice`) is how the English
+sounds, and the one choice to put to the user for a new show. Everything else
+above has a default.
+
+- `"actor"` (the default): OmniVoice clones each actor, so the English carries
+  the actor's accent. Timing is tightest and the sound cleanest, and per-line
+  references give each take the actor's delivery.
+- `"american"`: IndexTTS 2.5 speaks native American English, following each
+  line's original as an emotion reference (below), and `vc.py` then converts
+  every take to the actor's timbre with Chatterbox's voice converter.
+  `generate` does both. Fill judges timing on IndexTTS's own takes (kept as
+  `src_en_<id>.wav` in the job); once the timing has settled, the new takes
+  are converted and the part re-mixed. It is slower (about 8 s a line), its
+  takes end short of the actor more often, and conversion re-generates some
+  of the intonation, a little lower in pitch. Per-line references don't
+  apply.
+
+Recommend one by genre, and offer to render one short part both ways before
+committing. In trials, `"american"` came out closer to the actors than the
+clones on an animated series. On a live-action drama it stayed less like the
+actors than the clones, and conversion cost some of the native accent. Record
+the choice in `work/NOTES.md` and in each part's `render` block, so later parts
+follow it and approved parts don't change. Two things that look like options
+aren't. OmniVoice's `american accent` instruct tag doesn't change the accent
+while the reference carries the actor's, which per-line references always do.
+IndexTTS without the conversion speaks American English but doesn't sound like
+the actors.
+
+`--engine indextts2 --emo-alpha 0.9` alone renders with IndexTTS 2.5 instead of
+OmniVoice, without the conversion. Each line gets the actor's own line from the separated
 vocals as an emotion reference, and the voice still comes from `voices.json`.
 The engine is VoiceStudio's global setting: `dub.py` switches it for the render
 and switches back afterwards. It needs the local patch, which adds the
@@ -378,6 +424,12 @@ in the source are kept, and `--sub file.srt:lang[:title]` adds more (for example
 official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 
 ## Gotchas
+
+- **Takes can only be replaced in a job that has rendered.** On a job's first
+  render VoiceStudio synthesizes every line, whatever files are already in the
+  job folder; after that it re-mixes the takes it finds. So post-processing a
+  take (`vc.py`) happens after a successful render, and a take made elsewhere
+  can't be dropped into a fresh job.
 
 - **Voice-reference leakage (the big one).** If a clip in `voices.json` cuts a
   word off, or includes someone else's voice, OmniVoice "finishes" it at the
@@ -481,3 +533,27 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   (`backend/api/routers/dub_generate.py`). Reverb presets stopped dead where
   the dry take ended, cutting their own tail (`backend/services/audio_dsp.py`,
   which also gains the `echo` preset). All are worth reporting upstream.
+
+## Tools
+
+| Script | Does |
+|---|---|
+| `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
+| `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
+| `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
+| `subs.py <clip>` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment) |
+| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
+| `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
+| `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
+| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
+| `second.py <clip> [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
+| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones |
+| `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
+| `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule: `OVER?`, `risk`, `SHORT?` |
+| `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
+| `vc.py --pairs <file>` | Convert takes to the actor's timbre (Chatterbox); `dub.py generate` runs it for the `"american"` voice |
+| `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
+| `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
+| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
+| `register.py report\|build\|route\|check\|drop` | Optional calm or raised reference for a character's lines that can't use their own original |
+| `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |

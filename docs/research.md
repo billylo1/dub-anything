@@ -131,6 +131,52 @@ originals per part.
     hundredth of a second, because fill never re-rendered a take already at
     its fastest speed. Now such a take gets a fresh roll.
 
+12. **Burned-in captions are the best transcript, and a casting signal.** A
+    fourth show, an animated series, was recorded with the broadcaster's closed
+    captions burned into the picture. Read by OCR (`subs.py`), they were on
+    screen for nine dubbed lines in ten. Whisper's draft was more than a quarter
+    wrong on about one line in eight: names swapped for other names, a key word
+    heard as a similar-sounding one, slang it didn't know, and three stock
+    "thank you for watching" phrases over silence. The captions had most of
+    those right. They also carried the cast: the lead's lines were in a colour
+    of their own on most of them, bit parts too short for speaker embeddings
+    had their name in brackets, and an off-screen or inner voice was marked.
+    Where the embeddings' first choice and the final cast disagreed (under one
+    line in ten), the captions usually decided. In one gag, the colour showed
+    that a line the context gave to the lead was the other character's. The OCR
+    misreads a character now and then, so captions and Whisper are read side by
+    side, and window timing still comes from the VAD.
+
+13. **American English in the actor's voice takes conversion, not a tag.** On
+    two shows, an animated series and a live-action drama, one scene was
+    rendered five ways from the same script:
+    * the clones (the actor's accent);
+    * the clones with OmniVoice's `american accent` tag;
+    * IndexTTS, speaking native English with each line's original as its
+      emotion reference;
+    * IndexTTS followed by one of two voice converters, Seed-VC and
+      Chatterbox, which change only the timbre, towards the actor.
+
+    The tag changed nothing measurable: the reference carries the actor's
+    accent, and with per-line references it always does. IndexTTS came out
+    native (Whisper was about 0.97 sure it was English, against 0.5–0.6 for the
+    clones) and followed the delivery at least as well as the clones, but it
+    was the least like the actors. Conversion won likeness back while keeping
+    most of the accent. On the animated series it went past the clones; on the
+    drama it recovered about half the gap. Its costs:
+    * Part of the intonation is re-generated, a little lower in pitch.
+    * IndexTTS's takes end short of the actor more often, so timing is looser
+      than with the clones.
+
+    Chatterbox (MIT) kept the sound quality closer to the clones'. Seed-VC
+    (GPL) kept slightly more likeness, but it made shouted lines hoarse, and its
+    pitch-preserving model gained no likeness at all. A longer, pooled target
+    of the actor's speech didn't help either converter. OpenVoice made voices
+    less like the actors. Some characters converted better than others, so the
+    genre result is a tendency, not a rule. The listener kept the clones for
+    the drama and chose conversion (Chatterbox) for the animation. It is now
+    the `"american"` voice.
+
 ## What the pipeline does now
 
 `dub.py generate` renders new parts with per-line references and fill by
@@ -140,7 +186,9 @@ OmniVoice's own rule before the first render. It flags `SHORT?` lines, whose
 English is too short for the actor's speech at natural pace, so the director
 writes fuller text before rendering. `register.py`'s calm/raised
 references are now a fallback for characters whose lines can't use their own
-original.
+original. A show can instead take the `"american"` voice: IndexTTS with the
+emotion reference and fill, then `vc.py` converts each settled take to the
+actor's timbre.
 
 ## Open questions
 
@@ -155,5 +203,11 @@ original.
   fewer clips needs a transcript per clip. The window check compares
   transcripts as raw text, so kanji against kana counts as a difference, and it
   only rejects gross mismatches; a kana-aware comparison could be stricter.
-- **IndexTTS's acting with the actor's voice.** A voice conversion pass could
-  bring back the likeness, but not the accent.
+- **A Japanese recogniser for captions.** `subs.py` reads captions with
+  PP-OCRv5, a Chinese model that also reads kana. It confuses a kana with its
+  katakana twin and garbles the odd rare kanji. A recogniser trained on
+  Japanese (manga-ocr, say) run on the caption boxes might read them cleanly.
+- **Conversion that keeps the intonation.** Chatterbox and Seed-VC re-generate
+  part of the pitch contour; Seed-VC's pitch-preserving model kept it but won
+  no likeness. A converter that does both would give the `"american"` voice
+  the delivery IndexTTS had before conversion.

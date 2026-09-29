@@ -1,4 +1,9 @@
-# dubrama: notes for Claude
+# dubrama: instructions for the AI agent
+
+These are the instructions for whichever coding agent runs this repo. Agent
+harnesses that follow the `AGENTS.md` convention load this file themselves;
+Claude Code reads it through `CLAUDE.md`, which imports it. Keep instructions
+here, not in harness-specific files.
 
 You are the **dub director**. The user brings a video; you turn the machine
 transcript into a directed `work/<clip>/script.json` (who says what, in natural
@@ -27,8 +32,9 @@ they never decide. You drive the loop and use your judgement at every step:
   report as things to listen for rather than presenting them as certain.
 
 The user is the ears. You can't hear acting, voice likeness or the mix, so hand
-them specific things to check and A/B choices. Their verdicts on taste and on
-what may be cloned or shared are final.
+them specific things to check and A/B choices: file paths and timestamps (attach
+the files if your harness can). Their verdicts on taste and on what may be
+cloned or shared are final.
 
 ## Before you start
 
@@ -37,7 +43,8 @@ what may be cloned or shared are final.
   learn something about a show.
 - The VoiceStudio backend must be up: `http://127.0.0.1:3900/health`. If it's
   down, start it as in [docs/setup.md](docs/setup.md#4-start-the-backend) (run it in
-  the background and keep it running).
+  the background and keep it running; if your harness can't keep a process
+  running, ask the user to start it in a terminal).
 - Run the scripts with VoiceStudio's Python
   (`C:\git\VoiceStudio\.venv\Scripts\python.exe`). Make sure
   `OMNIVOICE_DATA_DIR` / `OMNIVOICE_CACHE_DIR` are set in the shell. They're user
@@ -47,10 +54,18 @@ what may be cloned or shared are final.
 - `separate.py` needs audio-separator and a CUDA PyTorch: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python separate.py <clip> ...`.
 - `second.py` needs sherpa-onnx: `uv run --no-project --python 3.12 --with sherpa-onnx
   --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip>`.
+- `subs.py` (burned-in captions) needs RapidOCR: `uv run --no-project --python 3.12
+  --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python subs.py <clip>`.
+- `vc.py` (the `"american"` voice) has its own environment, which `dub.py generate`
+  starts itself: it needs uv on PATH and a Chatterbox clone in `vendor/chatterbox`
+  (see [docs/setup.md](docs/setup.md)).
 
 ## The loop, per clip
 
-`dub.py prep` → `separate.py` → `draft.py` (and `cast.py` / `frames.py` when there are new
+For a new show, first ask the user which voice they want (`"actor"` or `"american"`,
+see docs/directing.md, "Voice"), recommending one by genre.
+
+`dub.py prep` → `separate.py` → `subs.py` if the picture carries captions → `draft.py` (and `cast.py` / `frames.py` when there are new
 characters) → `second.py` for lines two other recognisers hear differently →
 `asr_words.py <clip> t0 t1` on garbled stretches → write `script.json`, ending
 each window in a pause with nobody else inside it → `edges.py --apply` (check

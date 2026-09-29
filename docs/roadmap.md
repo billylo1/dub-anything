@@ -37,7 +37,12 @@ Done so far:
 - fill (default): takes re-rendered at 0.8–1.25× so each ends where the actor
   stops, and `fit.py` flags English too short for the actor's speech;
 - IndexTTS 2.5 with per-line emotion references, as an option
-  (`--engine indextts2`). How these were chosen: [research.md](research.md).
+  (`--engine indextts2`);
+- burned-in closed captions read by OCR (`subs.py`) and shown under each
+  draft phrase: exact words, speaker names and colours, song lyrics kept out;
+- the `"american"` voice: IndexTTS's native English, converted to each actor's
+  timbre (`vc.py`, Chatterbox), offered per show next to the actor's own
+  accented voice. How these were chosen: [research.md](research.md).
 
 Next, roughly by expected payoff:
 
@@ -54,8 +59,10 @@ Next, roughly by expected payoff:
 
    Tune these by ear, using the lines listeners flag.
 3. **Better source transcripts.** Compare recognisers on representative,
-   corrected samples. `second.py` provides agreement-based review flags.
-   Explore aligned word timings and importing source subtitles.
+   corrected samples. `second.py` provides agreement-based review flags, and
+   burned-in captions (`subs.py`) give the exact words where a recording has
+   them; a Japanese-trained OCR model would misread fewer of them. Explore
+   aligned word timings and importing subtitle streams.
 
 4. **Match room acoustics** per scene. `tails.py`, `echo` and `pa` are
    starting points; compare reverb and EQ on the actual source. Effects
@@ -64,10 +71,11 @@ Next, roughly by expected payoff:
 5. **Acting beyond the original line.** OmniVoice has no emotion control; its
    only style tag is `whisper`. Per-line references carry the actor's delivery
    where a line's window is clean. Elsewhere the character's reference, or a
-   calm/raised one from `register.py`, sets it. IndexTTS 2.5 acts best on
-   scenes with range, but replaces the actor's accent with its own English and
-   loses likeness. A voice conversion pass back to the actor could restore the
-   likeness, but not the accent.
+   calm/raised one from `register.py`, sets it. The `"american"` voice
+   (IndexTTS, then conversion to the actor) acts well but loses some of its
+   intonation in conversion, and its takes end short of the actor more often:
+   a converter that keeps the pitch contour, and English sized for IndexTTS's
+   faster pace (`fit.py` predicts OmniVoice's), would close both gaps.
 6. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
 7. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.

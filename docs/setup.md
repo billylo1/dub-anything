@@ -16,8 +16,9 @@ others work.
 
 Put VoiceStudio's data, its model cache and uv's Python installs somewhere
 neutral. The VoiceStudio GUI can share them, and they survive sandboxed shells.
-The Claude desktop app redirects AppData writes, which breaks
-`uv sync` ("Missing expected target directory for Python minor version link").
+Some sandboxed agent apps (the Claude desktop app, for one) redirect AppData
+writes, which breaks `uv sync` ("Missing expected target directory for Python
+minor version link").
 In PowerShell, then open a new terminal:
 
 ```powershell
@@ -101,6 +102,17 @@ clips and 4 speakers.
 If the audio.cpp runtime install fails with `PermissionError ... Access is denied`
 on the final rename, Defender was scanning the new DLLs. Post the install again.
 
+**The `"american"` voice** (optional) needs IndexTTS 2.5 (above) and Chatterbox's
+voice converter, which `vc.py` runs in its own uv environment. Clone its source
+into the repo's `vendor` folder (git-ignored):
+
+```powershell
+git clone --depth 1 https://github.com/resemble-ai/chatterbox vendor\chatterbox
+```
+
+The weights (`ResembleAI/chatterbox`, about 1 GB) download into the Hugging Face
+cache (`HF_HUB_CACHE`, else `OMNIVOICE_CACHE_DIR`) on the first conversion.
+
 ## 6. Check
 
 ```powershell
@@ -109,11 +121,16 @@ $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
 & $py dub.py prep <some short clip>.mp4      # prints a Japanese transcript
 ```
 
-Two tools run in their own throwaway uv environments, so they can't disturb
-VoiceStudio's: `separate.py` (audio-separator with the CUDA 12.8 PyTorch; its
-Roformer model, about 900 MB, downloads on first use into
-`%OMNIVOICE_CACHE_DIR%\audio-separator`) and `second.py` (sherpa-onnx). The
-commands are in CLAUDE.md.
+Four tools run in their own throwaway uv environments, so they can't disturb
+VoiceStudio's:
+- `separate.py`: audio-separator with the CUDA 12.8 PyTorch. Its Roformer model
+  (about 900 MB) downloads on first use into `%OMNIVOICE_CACHE_DIR%\audio-separator`.
+- `second.py`: sherpa-onnx.
+- `subs.py`: RapidOCR.
+- `vc.py`: Chatterbox, which `dub.py generate` starts itself for the
+  `"american"` voice.
+
+The commands are in [AGENTS.md](../AGENTS.md).
 
 Voice profiles are rebuilt automatically from `work/voices.json` on first use.
 Profile ids are machine-specific and cached in `work/profiles.json`.
