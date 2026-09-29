@@ -18,6 +18,8 @@ import json
 import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 import time
 
@@ -593,15 +595,23 @@ def line_id(line):
 
 
 FILL_PASSES = 2  # re-timing passes after the natural-pace render; a third changed nothing in trials
+# The render's "voice": "actor" (OmniVoice clones the actor, accent and all) or "american"
+# (IndexTTS speaks native English, following each line's original delivery, and vc.py
+# then gives every take the actor's timbre).
+VOICES = ("actor", "american")
+
+
+def file_sha(path):
+    return hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:16]
 
 
 def render_mode(work, script, args):
     """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
-    "predict_speed": ..}. A part without one gets the defaults (per-line references
-    and fill on) if it has never been rendered, and the earlier behaviour (both
-    off) if it has, so approved takes don't change under a new default; the block
-    is then written so later runs agree. The --[no-]line-ref, --[no-]fill and
-    --[no-]predict-speed flags override it for one run."""
+    "predict_speed": .., "voice": "actor" | "american"}. A part without one gets the
+    defaults (per-line references and fill on) if it has never been rendered, and the
+    earlier behaviour (both off) if it has, so approved takes don't change under a new
+    default; the block is then written so later runs agree. The --[no-]line-ref,
+    --[no-]fill, --[no-]predict-speed and --voice flags override it for one run."""
     mode = script.get("render")
     if mode is None:
         fresh = not load_json(work / "rendered.json")
@@ -609,10 +619,15 @@ def render_mode(work, script, args):
         (work / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"  render mode written to script.json: {mode}"
               + ("" if fresh else " (this part was rendered before they became the default)"))
-    mode = {"line_ref": False, "fill": False, "predict_speed": False, **mode}
-    for key in ("line_ref", "fill", "predict_speed"):
+    mode = {"line_ref": False, "fill": False, "predict_speed": False, "voice": "actor", **mode}
+    for key in ("line_ref", "fill", "predict_speed", "voice"):
         if getattr(args, key) is not None:
             mode[key] = getattr(args, key)
+    if mode["voice"] not in VOICES:
+        raise SystemExit(f"render voice {mode['voice']!r}: use one of {VOICES}")
+    if mode["voice"] == "american" and mode["line_ref"]:
+        # IndexTTS takes the actor's delivery from its emotion reference instead.
+        mode["line_ref"] = False
     return mode
 
 
@@ -621,7 +636,17 @@ def cmd_generate(args):
     doc = json.loads((work / "segments.json").read_text(encoding="utf-8"))
     job_id = doc["job_id"]
     script = load_json(work / "script.json")
-    mode = render_mode(work, script, args) if script else {"line_ref": False, "fill": False, "predict_speed": False}
+    mode = render_mode(work, script, args) if script else {"line_ref": False, "fill": False, "predict_speed": False,
+                                                           "voice": "actor"}
+    american = mode["voice"] == "american"
+    if args.engine is None:
+        args.engine = "indextts2" if american else "omnivoice"
+    if args.emo_alpha is None:
+        args.emo_alpha = 0.9 if american and args.engine != "omnivoice" else 0.0
+    # Takes whose seg_en file holds a voice-converted copy (id -> its hash); the
+    # engine's own take is kept beside it as src_en_<id>.wav.
+    converted_path = work / "converted.json"
+    converted = load_json(converted_path, {})
     rendered_path = work / "rendered.json"  # synthesis settings each cached line was made with
     rendered = load_json(rendered_path, {})
     # Takes lineqa.py --reroll flagged: synthesized again (on the first pass) for a fresh roll.
@@ -630,6 +655,38 @@ def cmd_generate(args):
     for line in script["lines"] if script else []:
         if re.search(r"(\.\.\.|…)\s*$", line["text"]):
             print(f"  warning {line['start']}: ends in '…'; the last word tends to get swallowed")
+
+    def engine_take(i):
+        """The engine's own take. A converted copy can start or end a little
+        differently, so fill judges timing by the take it was made from."""
+        seg, src = JOBS / job_id / f"seg_en_{i}.wav", JOBS / job_id / f"src_en_{i}.wav"
+        if src.exists() and seg.exists() and converted.get(i) == file_sha(seg):
+            return src
+        return seg
+
+    def convert(ids):
+        """Give every take not converted yet the actor's timbre (vc.py, its own environment)."""
+        import vc
+        todo = []
+        for line, i in zip(script["lines"], ids):
+            seg, src = JOBS / job_id / f"seg_en_{i}.wav", JOBS / job_id / f"src_en_{i}.wav"
+            if not seg.exists() or converted.get(i) == file_sha(seg):
+                continue
+            shutil.copy2(seg, src)
+            todo.append({"in": str(src), "target": str(voice_wav(line["voice"])), "out": str(seg), "id": i})
+        if not todo:
+            return False
+        pairs = work / "vc-pairs.json"
+        pairs.write_text(json.dumps(todo, indent=1), encoding="utf-8")
+        try:
+            subprocess.run(vc.UV_RUN + ["python", str(HERE / "vc.py"), "--pairs", str(pairs)], check=True,
+                           env={**os.environ, "HF_HUB_CACHE": HF_CACHE})
+        except FileNotFoundError:
+            raise SystemExit("voice conversion needs uv on PATH (see AGENTS.md)")
+        for p in todo:
+            converted[p["id"]] = file_sha(p["out"])
+        converted_path.write_text(json.dumps(converted, indent=1), encoding="utf-8")
+        return True
 
     def plan(first):
         """One pass: the segments to send, their ids, the settings each take is made
@@ -679,7 +736,7 @@ def cmd_generate(args):
             power = 1 / SPEED_EXPONENT if mode["predict_speed"] else 1.0
             for seg, i, end, line in zip(segments, ids, ends, script["lines"]):
                 prev = rendered.get(i, {}).get("speed")
-                speed, wav = prev, JOBS / job_id / f"seg_en_{i}.wav"
+                speed, wav = prev, engine_take(i)
                 length = speech_length(wav) if wav.exists() else None
                 if length is None and end and mode["predict_speed"] and (i in refs or "clips" in voices[line["voice"]]):
                     ref = refs.get(i) or (voice_wav(line["voice"]), voices[line["voice"]].get("ref_text", ""))
@@ -771,11 +828,16 @@ def cmd_generate(args):
                     print(f"  L{row['i']:02d} {row['start']:7.2f}  {row['speech']:4.2f}s / {row['window']:4.2f}s "
                           f"/ {row['room']:4.2f}s  {row['flag']:5s} {row['text']}")
             raise SystemExit("shorten the text or widen the window of each OVER line, then generate again")
-        if args.match_level and script and synthesized:
+        # "american": now that the takes' timing is settled, give the new ones the
+        # actor's timbre. VoiceStudio re-mixes the files it finds (the job has rendered).
+        voiced = bool(script) and american and convert(ids)
+        if script and (voiced or (args.match_level and synthesized)):
             # Levels are measured on the takes: level the new ones and re-mix (no synthesis).
-            print("re-mix: levels for newly synthesized lines")
+            print("re-mix: " + ", ".join(["converted takes"] * voiced + ["levels for newly synthesized lines"]
+                                         * bool(args.match_level and synthesized)))
             segments, ids, _, _ = plan(first=False)
-            level(segments, ids)
+            if args.match_level:
+                level(segments, ids)
             done = run(request(segments, ids, []))
     finally:
         if prev_engine and prev_engine != args.engine:
@@ -823,11 +885,17 @@ def main():
                    help="set each line's gain to the original actor's speech level")
     b.add_argument("--overflow", type=float, default=0.3,
                    help="seconds a concise-mode line may run past its window")
-    b.add_argument("--engine", default="omnivoice",
-                   help="VoiceStudio TTS engine for this render (e.g. indextts2); the previous one is restored after")
-    b.add_argument("--emo-alpha", type=float, default=0.0,
+    b.add_argument("--engine", default=None,
+                   help="VoiceStudio TTS engine for this render (default: omnivoice, or indextts2 for the "
+                        "american voice); the previous one is restored after")
+    b.add_argument("--emo-alpha", type=float, default=None,
                    help="engines with emotion control: follow each line's original delivery at this "
-                        "strength (0-1; a line's own emo_alpha overrides; 0 = off)")
+                        "strength (0-1; a line's own emo_alpha overrides; 0 = off; default 0.9 for the "
+                        "american voice, else 0)")
+    b.add_argument("--voice", choices=VOICES, default=None,
+                   help="override the script's render voice for this run: 'actor' clones the actor (their "
+                        "accent too); 'american' speaks native English (IndexTTS) and converts each take to "
+                        "the actor's timbre (vc.py)")
     b.add_argument("--line-ref", action=argparse.BooleanOptionalAction, default=None,
                    help="override the script's render mode for this run: give each line a reference of its "
                         "voice's clips plus its own original, so the take follows the actor's delivery on that "

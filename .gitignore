@@ -22,3 +22,6 @@ dubbed/
 __pycache__/
 *.pyc
 .venv/
+
+# Third-party code fetched at setup (vc.py: Chatterbox).
+vendor/
