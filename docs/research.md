@@ -83,8 +83,10 @@ originals per part.
    default did. But its delivery followed the originals no better than the
    plain dub: the rank correlation stayed near zero. Only per-line references
    made it clearly positive. Likeness, estimated quality and accent were about
-   the same in all three. So the preference in finding 7 isn't timing alone. The
-   plain variant also needed the old chores: five lines overflowed at natural
+   the same in all three. So the preference in finding 7 isn't timing alone, and
+   the listener confirmed it by ear: of the three, the one with per-line
+   references and fill sounded best. The plain variant also needed the old
+   chores: five lines overflowed at natural
    pace and had to be reworded or widened, and re-rolls changed short takes'
    lengths enough to overflow again. Fill absorbed all of that.
 9. **OmniVoice decides a take's length by rule.** Its length is the

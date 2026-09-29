@@ -1,87 +1,67 @@
 # Roadmap
 
-Done so far:
-- joining parts into one video (dub + original audio, EN/JA soft subtitles);
-- VAD onset snapping, plus pulling window starts back to the true attack
-  and window ends past the release (`edges.py`), which removed clicks at line
-  starts;
-- speech already in English found and transcribed as English (`draft.py`),
-  so it's kept and captioned instead of read as Japanese;
-- flashback echo matched: `tails.py` measures each line's reverb tail, and a
-  patched-in `echo` preset provides heavy reverberation;
-- PA announcements matched: a patched-in `pa` preset (reverb plus the PA's
-  tone), for reverberant announcements;
-- a second opinion on the transcript: ReazonSpeech and SenseVoice
-  (`second.py`) flag lines where both disagree with Whisper;
-- long Whisper hallucinations re-transcribed a stretch at a time, finding
-  accented English by Whisper's confidence in each language;
-- register-matched references (`register.py`): a second reference per
-  character, calm or raised, built from their own lines and chosen per line
-  by the original's delivery, with a check that it delivers;
-- cleaner separation (`separate.py`): Kim's Mel-Band Roformer instead of
-  htdemucs. Compare vocals and background on each new project;
-- casting by speaker embeddings, voice clustering, and a show-wide casting
-  registry built from lines already cast;
-- voices pooled from several parts, so a character's reference can use clean
-  lines from every part they appear in;
-- no more first-render re-rolls: patched VoiceStudio keeps a failed render's
-  takes, and `fit.py` predicts each line's length per voice before rendering;
-- per-line QA with normalization, negation checks and re-rolls, plus a
-  one-pass overflow report;
-- 32-step synthesis;
-- voice processing A/B (compare presets on each project);
-- alternative Japanese recognisers for comparison with Whisper;
-- per-line references (default): each line's reference ends with the actor's
-  own original of it, so the take follows that line's delivery with the
-  actor's accent, behind a check that the window is clean;
-- fill (default): takes re-rendered at 0.8–1.25× so each ends where the actor
-  stops, and `fit.py` flags English too short for the actor's speech;
-- IndexTTS 2.5 with per-line emotion references, as an option
-  (`--engine indextts2`);
-- burned-in closed captions read by OCR (`subs.py`) and shown under each
-  draft phrase: exact words, speaker names and colours, song lyrics kept out;
-- the `"american"` voice: IndexTTS's native English, converted to each actor's
-  timbre (`vc.py`, Chatterbox), offered per show next to the actor's own
-  accented voice. How these were chosen: [research.md](research.md).
+## Where it stands
 
-Next, roughly by expected payoff:
+dubrama dubs Japanese video into English end to end:
 
-1. **Per-line references and fill, follow-ups** (see
-   [research.md](research.md#open-questions)): more lines with clean windows
-   (snapping, a transcript per voice clip for long lines, a kana-aware window
-   check); matching pauses inside a line, not just its end; a variant with fill
-   alone, to see how much of the gain is timing.
-2. **Line edges.** `edges.py` fixes the clearest chopped starts and ends.
-   Still open:
-   - fragments it skips;
-   - VoiceStudio's 10 ms crossfade itself: a longer or level-aware fade would
-     soften any remaining edge, but that means patching VoiceStudio.
+- **Transcript and cast.** Parts are separated with Mel-Band Roformer and
+  transcribed by Whisper, with two other recognisers as a second opinion and
+  burned-in captions read where a recording has them. Lines are cast by
+  speaker embeddings across the show.
+- **Voice and timing.** The actor's own voice: OmniVoice clones each actor,
+  prompted with their delivery of each line (per-line references). Or American:
+  IndexTTS converted to the actor's timbre. Either way, each take is re-timed
+  to end where the actor stops (fill).
+- **Checks and packaging.** Every line is transcribed back and checked. Parts
+  are assembled into one video with the dub, the original audio, and English
+  and Japanese subtitles.
 
-   Tune these by ear, using the lines listeners flag.
-3. **Better source transcripts.** Compare recognisers on representative,
-   corrected samples. `second.py` provides agreement-based review flags, and
-   burned-in captions (`subs.py`) give the exact words where a recording has
-   them; a Japanese-trained OCR model would misread fewer of them. Explore
-   aligned word timings and importing subtitle streams.
+How each piece was chosen, and the measurements behind it, are in
+[research.md](research.md). The tools are listed in
+[directing.md](directing.md#tools).
 
-4. **Match room acoustics** per scene. `tails.py`, `echo` and `pa` are
-   starting points; compare reverb and EQ on the actual source. Effects
-   change synthesis cache keys, so review new takes after adjusting them.
+## Next, by payoff for what the listener hears
 
-5. **Acting beyond the original line.** OmniVoice has no emotion control; its
-   only style tag is `whisper`. Per-line references carry the actor's delivery
-   where a line's window is clean. Elsewhere the character's reference, or a
-   calm/raised one from `register.py`, sets it. The `"american"` voice
-   (IndexTTS, then conversion to the actor) acts well but loses some of its
-   intonation in conversion, and its takes end short of the actor more often:
-   a converter that keeps the pitch contour, and English sized for IndexTTS's
-   faster pace (`fit.py` predicts OmniVoice's), would close both gaps.
-6. **Lip sync** (LatentSync / MuseTalk). Feasible on a decent NVIDIA GPU.
-7. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
-   source and English target.
-8. **Upstream to VoiceStudio:**
-   - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
-     presets, and per-segment voice and emotion references in dubs;
-   - a Roformer separator as an option next to htdemucs (dubrama swaps the
-     stems in the job folder with `separate.py`);
-   - free-text `direction`/`instruct` aborting OmniVoice dubs.
+1. **American-voice timing.** IndexTTS speaks faster than the clones, so
+   English written at the clones' pace ends early. On an animated series,
+   over a third of the lines sat at fill's slowest speed, and three times as
+   many ended early as with the clones. `fit.py` predicts only OmniVoice's
+   lengths. Teach it IndexTTS's pace, so `SHORT?` and `OVER?` work for that
+   voice too, and write fuller English before the first render.
+2. **Steadier short lines.** Lines under about 1.5 s cause most overflows, fill
+   re-renders and garbled takes; one-word lines and stutters are the worst,
+   and conversion makes them worse still. Render two or three takes of a short
+   line and keep the one that fits and transcribes cleanly, instead of
+   re-rolling round after round.
+3. **More lines on their own reference, and pauses inside lines.** In
+   overlapping dialogue many lines fall back to the character's reference. That
+   could be reduced by:
+   - snapping windows;
+   - a transcript per voice clip, for long lines;
+   - a kana-aware window check.
+
+   Fill aligns only where a line ends, so an actor who pauses mid-sentence
+   still gets continuous English.
+4. **Captions, second pass.** A Japanese-trained OCR model, which would misread
+   fewer kana and kanji. Turn caption colours and bracketed names into speaker
+   suggestions in `draft.py`.
+5. **Keep the intonation through conversion.** The American voice's converter
+   re-generates part of the pitch contour. A converter that kept it while still
+   gaining likeness would keep IndexTTS's acting; Seed-VC's pitch-preserving
+   model kept the contour but gained no likeness.
+6. **By ear, as listeners flag them:**
+   - line edges: fragments `edges.py` skips, and VoiceStudio's 10 ms
+     crossfade;
+   - room acoustics per scene, starting from `tails.py` and the `echo` and
+     `pa` presets.
+
+## Later
+
+- **Lip sync** (LatentSync / MuseTalk); feasible on a decent NVIDIA GPU.
+- **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
+  source and an English target.
+- **Upstream to VoiceStudio:**
+  - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
+    presets, and per-segment voice and emotion references in dubs;
+  - a Roformer separator as an option next to htdemucs;
+  - a fix for free-text `direction`/`instruct` aborting OmniVoice dubs.
