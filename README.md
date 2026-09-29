@@ -100,7 +100,7 @@ them, and use invented examples in docs and commit messages.
 dubrama is MIT-licensed ([LICENSE](LICENSE)). It talks to
 [VoiceStudio](https://github.com/debpalash/VoiceStudio) over HTTP and does not
 include its code. VoiceStudio is AGPL-3.0, and so is
-`voicestudio-local-fixes.patch`, a change to VoiceStudio's source. Models have
+`patches/voicestudio-local-fixes.patch`, a change to VoiceStudio's source. Models have
 their own licenses:
 - pyannote is gated on Hugging Face;
 - the Sortformer weights are CC-BY-NC;

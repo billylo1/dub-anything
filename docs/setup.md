@@ -38,7 +38,7 @@ must be set in any shell that runs them.
 ```powershell
 git clone https://github.com/debpalash/VoiceStudio.git C:\git\VoiceStudio
 git -C C:\git\VoiceStudio checkout -b local-fixes c52618af
-git -C C:\git\VoiceStudio apply <path-to-dubrama>\voicestudio-local-fixes.patch
+git -C C:\git\VoiceStudio apply <path-to-dubrama>\patches\voicestudio-local-fixes.patch
 cd C:\git\VoiceStudio; uv sync; uv run --no-sync python scripts/setup.py
 uv run --no-sync python -c "import torch; print(torch.cuda.is_available())"   # True
 ```

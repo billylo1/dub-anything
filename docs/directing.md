@@ -279,7 +279,7 @@ Only new, changed or re-rolled lines are synthesized, so fixing an overflow
 costs just the lines you touched, and timing or level changes are a re-mix of
 about 5 s. (Unpatched VoiceStudio ignores partial re-renders until a job's
 first render succeeds, so every failed first attempt re-rolls every take;
-`voicestudio-local-fixes.patch` fixes that.)
+`patches/voicestudio-local-fixes.patch` fixes that.)
 
 `--match-level` sets each line's gain from the original actor's level. The
 clip-wide offset is matched fully and each line's deviation by half, so
@@ -524,7 +524,7 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   split one speaker. Confirm casting with multiple signals. Sortformer can't
   handle clips over 120 s or more than 4 speakers, ignores
   count hints, and has CC-BY-NC weights.
-- **VoiceStudio bugs (fixed by `voicestudio-local-fixes.patch`).** Dubbing
+- **VoiceStudio bugs (fixed by `patches/voicestudio-local-fixes.patch`).** Dubbing
   transcription ignored the source-language hint, so short Japanese clips were
   heard as English (`backend/api/routers/dub_core.py`). OmniVoice loaded in
   float16 on CPU, where it is about 7× slower (`backend/services/model_manager.py`).
@@ -535,6 +535,8 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   which also gains the `echo` preset). All are worth reporting upstream.
 
 ## Tools
+
+The loop, in the order it runs:
 
 | Script | Does |
 |---|---|
@@ -551,9 +553,16 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 | `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule: `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
-| `vc.py --pairs <file>` | Convert takes to the actor's timbre (Chatterbox); `dub.py generate` runs it for the `"american"` voice |
 | `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
+
+Used now and then:
+
+| Script | Does |
+|---|---|
+| `vc.py --pairs <file>` | Convert takes to the actor's timbre (Chatterbox); `dub.py generate` runs it itself for the `"american"` voice |
 | `register.py report\|build\|route\|check\|drop` | Optional calm or raised reference for a character's lines that can't use their own original |
+| `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
+| `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
+| `core.py` | Not a tool: paths, voices, line ids, takes and length prediction shared by the scripts |

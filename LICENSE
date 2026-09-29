@@ -22,6 +22,6 @@ SOFTWARE.
 
 ---
 
-voicestudio-local-fixes.patch modifies VoiceStudio
+patches/voicestudio-local-fixes.patch modifies VoiceStudio
 (https://github.com/debpalash/VoiceStudio) and is licensed under the
 GNU Affero General Public License v3.0, like VoiceStudio itself.

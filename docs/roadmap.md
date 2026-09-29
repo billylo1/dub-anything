@@ -80,7 +80,7 @@ Next, roughly by expected payoff:
 7. **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
    source and English target.
 8. **Upstream to VoiceStudio:**
-   - the fixes in `voicestudio-local-fixes.patch`, the `echo` and `pa`
+   - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
      presets, and per-segment voice and emotion references in dubs;
    - a Roformer separator as an option next to htdemucs (dubrama swaps the
      stems in the job folder with `separate.py`);
