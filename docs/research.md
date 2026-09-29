@@ -14,7 +14,9 @@ a small overflow allowance if needed, then `lineqa.py` re-rolls. Variants were
 rendered twice where it mattered, because two renders of the same settings
 differ. A listener then compared the parts by ear, and their verdict decided.
 
-The instruments, all run against the actor's own original line:
+The instruments, all run against the actor's own original line
+(`eval/score.py` for delivery, likeness, quality and accent; `eval/timing.py`
+for timing):
 
 | What | How |
 |---|---|
