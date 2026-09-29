@@ -52,7 +52,7 @@ def main():
         job = load_json(WORK / name / "segments.json")["job_id"]
         audio = draft.decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=draft.SR)
         for i, line in enumerate(load_json(WORK / name / "draft.json")["lines"]):
-            if line["end"] - line["start"] >= args.min and not line.get("suspect"):
+            if line["end"] - line["start"] >= args.min and not line.get("suspect") and not line.get("song"):
                 v = embed(audio[int(line["start"] * draft.SR):int(line["end"] * draft.SR)])
                 items.append((name, i, line, v))
     if not items:

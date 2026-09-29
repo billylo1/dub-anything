@@ -16,6 +16,10 @@ Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
 4. Speech already in English is found by Whisper's language detection and
    re-transcribed in English (forced Japanese, Whisper silently *translates*
    it). Such lines are tagged [English]: keep the original, caption it.
+6. When subs.py has read the video's burned-in captions (work/<name>/subs.json),
+   each phrase is shown with the captions on screen during it: the
+   broadcaster's own text, often with the speaker's name or colour. Phrases
+   during a song (♪ captions) are marked to keep the original.
 5. A long phrase that is one of Whisper's stock hallucinations usually hides
    real speech, so it's re-transcribed one stretch of speech at a time, in
    Japanese or English, whichever Whisper is surer of.
@@ -205,6 +209,20 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
 cast_centroids.counts = {}
 
 
+def on_screen(subs, p):
+    """Captions (from subs.py) shown during a phrase; song markers left out."""
+    return [e for e in subs if e["text"] != "♪" and e["start"] < p["end"] + 0.3 and e["end"] > p["start"] - 0.3]
+
+
+def in_song(subs, p):
+    return any(e["text"] == "♪" and e["start"] < p["end"] and e["end"] > p["start"] for e in subs)
+
+
+def caption(e):
+    who = ("≪" if e["off"] else "") + (f"({e['name']})" if e["name"] else "")
+    return f"{who}{e['text']} [{e['color']}]"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("name")
@@ -272,6 +290,7 @@ def main():
         if len(ranked) > 1:
             p["alt"], p["alt_score"] = ranked[1][1], round(ranked[1][0], 2)
 
+    subs = load_json(work / "subs.json", {}).get("events", [])
     print("cast considered: " + (", ".join(f"{k} ({cast_centroids.counts[k]})" for k in cents)
                                  or "(none – no usable voices yet)"))
     for i, p in enumerate(phrases):
@@ -285,13 +304,27 @@ def main():
         if hallucination(p["ja"]):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
+        if in_song(subs, p):
+            # Lyrics stay in the original audio; don't copy them into the notes.
+            p["song"] = True
+            print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  [song: keep the original]")
+            continue
         print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  {who} {alt:18s} {p['ja']}{tag}")
+        if on_screen(subs, p):
+            p["cc"] = " / ".join(caption(e) for e in on_screen(subs, p))
+            print(f"{'':45s}cc: {p['cc']}")
+    shown = {id(e) for p in phrases for e in on_screen(subs, p)}
+    missed = [e for e in subs if e["text"] != "♪" and id(e) not in shown and not in_song(subs, e)]
+    if missed:
+        print("captions outside every line (missed speech, or a caption shown early/late):")
+        for e in missed:
+            print(f"    {e['start']:7.2f}-{e['end']:7.2f}  {caption(e)}")
     gaps = uncovered(phrases, spans)
     if gaps:
         print("speech not in any line (hums/laughs, or missed words):",
               " ".join(f"{a:.2f}-{b:.2f}" for a, b in gaps))
     lines = [{"start": p["start"], "end": p["end"], "voice": p.get("voice", ""), "ja": p["ja"], "text": "",
-              **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang") if k in p}}
+              **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang", "cc", "song") if k in p}}
              for p in phrases]
     (work / "draft.json").write_text(json.dumps({"lines": lines}, ensure_ascii=False, indent=1),
                                      encoding="utf-8")

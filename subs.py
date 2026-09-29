@@ -1,0 +1,264 @@
+"""Burned-in captions: read a clip's on-screen closed captions into timed text.
+
+Usage: subs.py <clip> [--fps 4] [--from T0] [--to T1]   (after `dub.py prep`; own environment, see AGENTS.md)
+
+Some recordings carry the broadcaster's closed captions burned into the picture:
+the exact dialogue, often the speaker's name in brackets, "≪" for a voice off
+screen, and a colour of its own for each main character. This reads them with
+PaddleOCR's PP-OCRv5 models (RapidOCR on onnxruntime, GPU when available):
+
+1. Frames are sampled over the whole picture (4 a second). A frame that barely
+   differs from the last one read reuses its reading.
+2. Text is detected and read. Only light text on a dark box counts as a
+   caption, so signs and other text in the scene are left out. Pieces of one
+   row (captions space phrases apart) are joined.
+3. Readings of one caption across frames become one event, with its start,
+   end, position and colour, and the reading seen most often.
+4. Song lyrics (captions with ♪) become bare music markers without their text,
+   one per song: songs stay in the original audio. A song can run on past
+   its last ♪ (under the credits, say): find its end by ear or VAD.
+
+Writes work/<clip>/subs.json ({"events": [{start, end, text, color, x, y,
+name, off}]}; x/y are the caption's centre as fractions of the picture) and
+prints the events. `name` is a bracketed speaker label, `off` marks "≪".
+draft.py shows the captions beside each phrase when subs.json exists.
+Caption times follow the broadcaster's display, not the speech: take windows
+from the VAD as usual.
+"""
+import argparse
+import collections
+import difflib
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+import numpy as np
+
+HERE = pathlib.Path(__file__).resolve().parent
+W, H = 960, 540      # positions are kept in these units, whatever the video's size
+OFF_MARKS = "≪≤《«<"
+# A speaker label; OCR sometimes drops its opening bracket.
+NAME = re.compile(r"^[(（]?([^()（）\s]{1,8})[)）]\s*")
+# The recogniser has no ♪ and reads it as 月.
+NOTE = re.compile(r"^[♪♫]|^月(\s|[～~]|$)")
+
+
+def engine():
+    import onnxruntime
+    onnxruntime.set_default_logger_severity(3)
+    try:
+        onnxruntime.preload_dlls()      # CUDA/cuDNN from the pip wheels, if installed
+    except Exception:
+        pass
+    from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
+    cuda = "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+    return RapidOCR(params={
+        "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
+        # PP-OCRv5's Chinese recogniser also reads Japanese kana.
+        "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.SERVER, "Rec.lang_type": LangRec.CH,
+        "Global.use_cls": False, "Global.log_level": "critical",
+        "EngineConfig.onnxruntime.use_cuda": cuda}), cuda
+
+
+def size(video):
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=width,height", "-of", "csv=p=0", str(video)], capture_output=True, text=True)
+    return tuple(int(v) for v in out.stdout.strip().split(",")[:2])
+
+
+def frames(video, fps, t0, t1, w, h):
+    """Full-size frames: captions read much better than from a downscaled picture."""
+    cmd = ["ffmpeg", "-v", "error"]
+    if t0:
+        cmd += ["-ss", str(t0)]
+    cmd += ["-i", str(video)]
+    if t1:
+        cmd += ["-t", str(t1 - (t0 or 0))]
+    cmd += ["-vf", f"fps={fps}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    k, n = 0, w * h * 3
+    while True:
+        buf = p.stdout.read(n)
+        if len(buf) < n:
+            break
+        yield (t0 or 0) + k / fps, np.frombuffer(buf, np.uint8).reshape(h, w, 3)
+        k += 1
+    p.wait()
+
+
+def changed(a, b):
+    """True unless every block of the two frames is nearly the same."""
+    if b is None:
+        return True
+    a, b = a[::2, ::2], b[::2, ::2]
+    h, w = a.shape[0] // 30 * 30, a.shape[1] // 30 * 30
+    d = np.abs(a.astype(np.int16) - b.astype(np.int16)).mean(axis=2)
+    blocks = d[:h, :w].reshape(h // 30, 30, w // 30, 30).mean(axis=(1, 3))
+    return blocks.max() > 2.0
+
+
+def color_of(rgb):
+    r, g, b = rgb
+    hi, lo = 150, 110
+    if r > hi and g > hi and b < lo:
+        return "yellow"
+    if g > hi and b > hi and r < lo:
+        return "cyan"
+    if g > hi and r < lo and b < lo:
+        return "green"
+    if r > hi and b > hi and g < lo:
+        return "magenta"
+    if r > hi and g < lo and b < lo:
+        return "red"
+    return "white"
+
+
+def caption_box(img, box):
+    """(is a caption, colour): light text on a dark box, unlike text in the scene."""
+    xs, ys = [p[0] for p in box], [p[1] for p in box]
+    x0, x1 = max(int(min(xs)) - 2, 0), int(max(xs)) + 3
+    y0, y1 = max(int(min(ys)) - 2, 0), int(max(ys)) + 3
+    crop = img[y0:y1, x0:x1].reshape(-1, 3).astype(np.float32)
+    if len(crop) < 20:
+        return False, None
+    lum = crop @ np.array([0.299, 0.587, 0.114], np.float32)
+    text_lum, back_lum = np.percentile(lum, 90), np.percentile(lum, 40)
+    ok = text_lum >= 150 and back_lum <= 100 and text_lum - back_lum >= 80
+    return ok, color_of(crop[lum >= np.percentile(lum, 90)].mean(axis=0))
+
+
+def read_frame(ocr, img):
+    """Caption rows in one frame: [(text, colour, x0, y0, x1, y1)]."""
+    r = ocr(np.ascontiguousarray(img[:, :, ::-1]))
+    if r.boxes is None:
+        return []
+    u = img.shape[1] / W
+    pieces = []
+    for box, text, score in zip(r.boxes, r.txts, r.scores):
+        ok, color = caption_box(img, box)
+        if ok and score >= 0.5 and text.strip():
+            xs, ys = [p[0] for p in box], [p[1] for p in box]
+            pieces.append([text.strip(), color, min(xs) / u, min(ys) / u, max(xs) / u, max(ys) / u])
+    pieces.sort(key=lambda p: (round((p[3] + p[5]) / 2 / 12), p[2]))
+    rows = []
+    for p in pieces:
+        last = rows[-1] if rows else None
+        if last and last[1] == p[1] and abs((last[3] + last[5]) - (p[3] + p[5])) / 2 < 10 and 0 <= p[2] - last[4] < 60:
+            last[0] += " " + p[0]
+            last[4], last[3], last[5] = p[4], min(last[3], p[3]), max(last[5], p[5])
+        else:
+            rows.append(p)
+    return [tuple(r) for r in rows]
+
+
+def normalize(text):
+    text = re.sub(r"\s+", " ", text.replace("~", "～").replace("(", "（").replace(")", "）")).strip()
+    return "♪" if NOTE.match(text) or "♪" in text else text
+
+
+def similar(a, b):
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.75
+
+
+def track(readings, step):
+    """Per-frame caption rows -> events: one per caption, over the frames that show it."""
+    open_, done = [], []
+    for t, rows in readings:
+        still = []
+        for row in rows:
+            text, color, x0, y0, x1, y1 = row
+            cx, cy = float(x0 + x1) / 2, float(y0 + y1) / 2
+            ev = next((e for e in open_ if e not in still and abs(e["cy"] - cy) < 15
+                       and (abs(e["cx"] - cx) < 40 or abs(e["x0"] - x0) < 20) and similar(e["texts"][-1], text)), None)
+            if ev is None:
+                ev = {"start": t, "texts": [], "colors": [], "cx": cx, "cy": cy, "x0": float(x0)}
+            ev["texts"].append(text)
+            ev["colors"].append(color)
+            ev["end"], ev["seen"] = t + step, t
+            still.append(ev)
+        for e in open_:
+            if e not in still:
+                # One missed reading doesn't end a caption.
+                (still if t - e["seen"] <= step * 1.5 else done).append(e)
+        open_ = still
+    done += open_
+    events = []
+    for e in sorted(done, key=lambda e: (e["start"], e["cy"])):
+        if len(e["texts"]) < 2 and e["end"] - e["start"] <= step:
+            continue    # a single glimpse: usually a misread piece of the scene
+        text = normalize(collections.Counter(e["texts"]).most_common(1)[0][0])
+        off = text[:1] in OFF_MARKS
+        text = text.lstrip(OFF_MARKS + " ")
+        m = NAME.match(text)
+        name, text = (m.group(1).strip(), text[m.end():]) if m else (None, text)
+        events.append({"start": round(e["start"], 2), "end": round(e["end"], 2), "text": text,
+                       "color": collections.Counter(e["colors"]).most_common(1)[0][0],
+                       "x": round(e["cx"] / W, 2), "y": round(e["cy"] / H, 2), "name": name, "off": off})
+    # A lyric's other rows may lack the ♪: anything shown alongside a ♪ caption is lyrics too.
+    songs = [e for e in events if e["text"] == "♪"]
+    for e in events:
+        if any(min(e["end"], s["end"]) - max(e["start"], s["start"]) > (e["end"] - e["start"]) / 2 for s in songs):
+            e.update(text="♪", name=None)
+    return merge_lines(events)
+
+
+def merge_lines(events):
+    """Join a caption's second row to its first: same times and colour, no speaker label or ≪ of its own."""
+    out = []
+    for e in events:
+        prev = next((p for p in reversed(out[-3:]) if abs(p["start"] - e["start"]) < 0.3
+                     and abs(p["end"] - e["end"]) < 0.3 and p["color"] == e["color"]
+                     and 0 < e["y"] - p["y"] < 0.12), None)
+        if prev and prev["text"] == e["text"] == "♪":
+            prev["end"] = max(prev["end"], e["end"])
+        elif prev and not e["name"] and not e["off"] and "♪" not in (prev["text"], e["text"]):
+            prev["text"] += " " + e["text"]
+            prev["y2"] = e["y"]
+        else:
+            out.append(e)
+    for e in out:
+        e.pop("y2", None)
+    # ♪ shows only now and then during a song: markers under 15 s apart are one song.
+    songs, rest = [], []
+    for e in out:
+        if e["text"] != "♪":
+            rest.append(e)
+        elif songs and e["start"] - songs[-1]["end"] <= 15:
+            songs[-1]["end"] = max(songs[-1]["end"], e["end"])
+        else:
+            songs.append({**e, "x": 0.5, "y": 0.5, "color": "white", "off": False})
+    return sorted(rest + songs, key=lambda e: (e["start"], e["y"]))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("clip")
+    ap.add_argument("--fps", type=float, default=4)
+    ap.add_argument("--from", dest="t0", type=float)
+    ap.add_argument("--to", dest="t1", type=float)
+    args = ap.parse_args()
+    sys.stdout.reconfigure(encoding="utf-8")
+    work = HERE / "work" / args.clip
+    video = json.loads((work / "segments.json").read_text(encoding="utf-8"))["video"]
+    video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else HERE / video
+    w, h = size(video)
+    ocr, cuda = engine()
+    print(f"reading captions in {video.name} ({'GPU' if cuda else 'CPU'}, {args.fps:g} frames/s)", file=sys.stderr)
+    readings, last, rows, n = [], None, [], 0
+    for t, img in frames(video, args.fps, args.t0, args.t1, w, h):
+        if changed(img, last):
+            rows, last, n = read_frame(ocr, img), img, n + 1
+        readings.append((t, rows))
+    events = track(readings, 1 / args.fps)
+    print(f"{len(readings)} frames, {n} read, {len(events)} captions", file=sys.stderr)
+    (work / "subs.json").write_text(json.dumps({"video": str(video), "fps": args.fps, "events": events},
+                                               ensure_ascii=False, indent=1), encoding="utf-8")
+    for e in events:
+        who = ("≪" if e["off"] else "") + (f"({e['name']})" if e["name"] else "")
+        print(f"{e['start']:7.2f}-{e['end']:7.2f}  {e['color']:7s} x{e['x']:.2f} y{e['y']:.2f}  {who}{e['text']}")
+
+
+if __name__ == "__main__":
+    main()
