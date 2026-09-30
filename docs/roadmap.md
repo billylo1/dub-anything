@@ -30,15 +30,20 @@ How each piece was chosen, and the measurements behind it, are in
    voice too, and write fuller English before the first render.
 2. **Steadier short lines.** Lines under about 1.5 s cause most overflows, fill
    re-renders and garbled takes; one-word lines and stutters are the worst,
-   and conversion makes them worse still. Render two or three takes of a short
-   line and keep the one that fits and transcribes cleanly, instead of
-   re-rolling round after round.
+   and conversion makes them worse still. A re-roll no longer loses a better
+   take (`lineqa.py --reroll` keeps each one and puts the best back). Next:
+   render two or three takes of a short line up front and keep the one that
+   fits and transcribes cleanly, instead of re-rolling round after round.
 3. **More lines on their own reference, and pauses inside lines.** In
-   overlapping dialogue many lines fall back to the character's reference. That
-   could be reduced by:
-   - snapping windows;
+   overlapping dialogue many lines fall back to the character's reference.
+   Cutting a reference at the dip between two voices (`dips`) and snapping
+   touching windows to it recovered about a third of the run-on lines in fast
+   argument, though in a blind listen the recovered lines sounded about the
+   same as on the character's reference (research.md, finding 14). So press on
+   only where fallbacks are frequent and heard. That could be reduced further by:
    - a transcript per voice clip, for long lines;
-   - a kana-aware window check.
+   - a kana-aware window check (katakana already reads as hiragana; kanji
+     against kana still fails a short line, and needs a reading dictionary).
 
    Fill aligns only where a line ends, so an actor who pauses mid-sentence
    still gets continuous English.

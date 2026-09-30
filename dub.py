@@ -285,19 +285,22 @@ def file_sha(path):
 
 def render_mode(work, script, args):
     """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
-    "predict_speed": .., "voice": "actor" | "american"}. A part without one gets the
-    defaults (per-line references and fill on) if it has never been rendered, and the
-    earlier behaviour (both off) if it has, so approved takes don't change under a new
-    default; the block is then written so later runs agree. The --[no-]line-ref,
-    --[no-]fill, --[no-]predict-speed and --voice flags override it for one run."""
+    "dips": .., "predict_speed": .., "voice": "actor" | "american"}. A part without one
+    gets the defaults (per-line references, fill, and references cut at a dip when
+    speech runs on past a window: core.unclean_windows) if it has never been
+    rendered, and the earlier behaviour (all off) if it has, so approved takes don't
+    change under a new default; the block is then written so later runs agree. The
+    --[no-]line-ref, --[no-]fill, --[no-]predict-speed and --voice flags override it
+    for one run."""
     mode = script.get("render")
-    if mode is None:
-        fresh = not load_json(work / "rendered.json")
-        mode = script["render"] = {"line_ref": fresh, "fill": fresh}
+    fresh = not load_json(work / "rendered.json")
+    if mode is None or "dips" not in mode:
+        # "dips" came after the others: a part rendered without it keeps its takes.
+        mode = script["render"] = {"line_ref": fresh, "fill": fresh, **(mode or {}), "dips": fresh}
         (work / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"  render mode written to script.json: {mode}"
-              + ("" if fresh else " (this part was rendered before they became the default)"))
-    mode = {"line_ref": False, "fill": False, "predict_speed": False, "voice": "actor", **mode}
+              + ("" if fresh else " (this part was rendered before some of these became the default)"))
+    mode = {"line_ref": False, "fill": False, "predict_speed": False, "voice": "actor", "dips": False, **mode}
     for key in ("line_ref", "fill", "predict_speed", "voice"):
         if getattr(args, key) is not None:
             mode[key] = getattr(args, key)
@@ -400,11 +403,13 @@ def cmd_generate(args):
                 seg["emo_audio"], seg["emo_alpha"] = emo[i]
                 settings[i]["emo_alpha"] = emo[i][1]
         # Per-line references: the voice's clips plus the line's own original.
-        refs = line_refs(work, job_id, script["lines"], ids, verbose=first) if mode["line_ref"] else {}
+        refs = line_refs(work, job_id, script["lines"], ids, verbose=first, dips=mode["dips"]) \
+            if mode["line_ref"] else {}
         for seg, i in zip(segments, ids):
             if i in refs:
                 seg["ref_audio"], seg["ref_text"] = refs[i]
-                settings[i]["line_ref"] = f"{seg['start']:.2f}-{seg['end']:.2f}"
+                # The window, and where its original is cut when that isn't its end.
+                settings[i]["line_ref"] = pathlib.Path(refs[i][0]).stem.split("_", 1)[1]
         if mode["fill"]:
             # Re-time takes that stop well short of the actor or run past them:
             # render them at the speed that lands their end on the actor's last sound.

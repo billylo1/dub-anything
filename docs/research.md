@@ -14,6 +14,16 @@ a small overflow allowance if needed, then `lineqa.py` re-rolls. Variants were
 rendered twice where it mattered, because two renders of the same settings
 differ. A listener then compared the parts by ear, and their verdict decided.
 
+A change that touches only some lines is easier to judge line by line. A new
+VoiceStudio job synthesizes every line on its first render, even with the
+takes copied in, so the variant's other lines differ too. Splice instead:
+give the variant the part's stems, render it, then cut each changed line's
+window (plus the 0.3 s a take may run on) from the variant into the delivered
+mix. Inside a window only that line's take plays over the shared bed, so
+everything else in the clip stays as delivered. Outside the windows, two such
+mixes matched to within codec noise. Present each pair blind, with the
+original to compare against.
+
 The instruments, all run against the actor's own original line
 (`eval/score.py` for delivery, likeness, quality and accent; `eval/timing.py`
 for timing):
@@ -181,9 +191,28 @@ originals per part.
     the drama and chose conversion (Chatterbox) for the animation. It is now
     the `"american"` voice.
 
+14. **Most fallbacks in fast dialogue are a pause too short to see.** A line
+    keeps its own reference only when its window ends in a pause. On one
+    show's cache of window checks, 50 of 58 fallbacks were speech running on
+    past the window's end, and only 8 were Whisper hearing something else
+    (reading both sides as kana would have saved 4 of those). In a quick
+    family argument, 13 of 44 windows ran on. At 6 of them the voice still
+    dipped 20–32 dB below the line's level within 0.15 s of the end, too
+    briefly for speech detection's 50 ms pauses; at the rest it dipped only
+    5–18 dB, a real overlap. Cutting each reference at such a dip (`dips`)
+    and moving touching windows onto it gave 5 of the 13 their own reference.
+    On the earlier show's run-on ends the dip was always deep (37–70 dB): the
+    window had cut the actor's own tail, and the pause followed it.
+    Over a whole feature film, `dips` gave 61 of about 1,190 lines their own
+    reference (5%). In a blind A/B of all 61 against the takes the old rule
+    makes (the character's reference), the listener heard them as close, with
+    a preference that went either way line by line. The rule stays: it costs
+    nothing and keeps those lines on the actor's delivery, but on its own it
+    isn't an audible gain.
+
 ## What the pipeline does now
 
-`dub.py generate` renders new parts with per-line references and fill by
+`dub.py generate` renders new parts with per-line references, fill and `dips` by
 default, recorded in each script's `render` block (see
 [directing.md](directing.md#4-render)). `fit.py` predicts each line's length with
 OmniVoice's own rule before the first render. It flags `SHORT?` lines, whose

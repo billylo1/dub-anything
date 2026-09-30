@@ -20,6 +20,12 @@ the original after the English. A short tail that clearly belongs to the line
 50 ms to the next window. Longer ones are usually the next speaker, a laugh or
 a crowd, and are only noted.
 
+Where two windows touch (a turn change, or a line split without a pause), the
+voice often still dips to near silence for a moment near the boundary, too briefly
+for speech detection to call it a pause. When that dip (core.end_dip) isn't at the
+boundary, both windows move to it: it's where one line really ends and the next
+begins, and a per-line reference cut there ends cleanly.
+
 --apply writes the moves to script.json. It's timing only: the next
 `dub.py generate` re-mixes without re-synthesizing. An earlier start also
 starts the take a little earlier, closer to the actor's mouth.
@@ -30,7 +36,7 @@ import sys
 
 import numpy as np
 
-from core import JOBS, WORK, load_json
+from core import JOBS, WORK, end_dip, load_json
 from faster_whisper.audio import decode_audio
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -49,7 +55,7 @@ def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
     level; 'sounding' means within `below` dB of it."""
     k = int(t * SR / HOP)
     thresh = level - below
-    if k < 2 or max(db[k - 2:k]) < thresh:  # the 10 ms before the edge
+    if k < 2 or k > len(db) or max(db[k - 2:k]) < thresh:  # the 10 ms before the edge
         return None
     j = k - 1
     floor_k = int(floor_t * SR / HOP)
@@ -92,7 +98,7 @@ def check(name, apply=False, min_shift=0.015):
     audio = decode_audio(str(JOBS / load_json(WORK / name / "segments.json")["job_id"] / "vocals.wav"),
                          sampling_rate=SR)
     db = frames_db(audio)
-    moved, tails = [], []
+    moved, tails, joins = [], [], []
     for i, line in enumerate(lines):
         level = line_level(db, line["start"], line["end"])
         prev_end = lines[i - 1]["end"] if i else 0.0
@@ -106,6 +112,11 @@ def check(name, apply=False, min_shift=0.015):
                 line["start"] = round(onset, 2)
         nxt = lines[i + 1]["start"] if i + 1 < len(lines) else line["end"] + 1
         if nxt - line["end"] <= 0.05:
+            dip = end_dip(db, line["start"], line["end"])
+            if dip is not None and abs(dip - line["end"]) >= min_shift and dip < lines[i + 1]["end"] - 0.3:
+                joins.append((i, line["end"], round(dip, 2), line["text"]))
+                if apply:
+                    line["end"] = lines[i + 1]["start"] = round(dip, 2)
             continue
         ceil = nxt - 0.05
         release = voiced_release(db, line["end"], min(ceil, line["end"] + 0.3), level)
@@ -122,11 +133,13 @@ def check(name, apply=False, min_shift=0.015):
     for i, old, new, text, cut, fix in tails:
         what = f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later," if fix else             f"   voice sounds {(new - old) * 1000:3.0f}+ ms on," if new >= old + 0.3 - 1e-6 else             f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
         print(f"  {'FIX ' if fix else 'note'} L{i:02d} end   {old:7.2f} {what} voice {cut:+5.1f} dB at the cut)  {text[:36]}")
+    for i, old, new, text in joins:
+        print(f"  FIX  L{i:02d}/L{i + 1:02d} boundary {old:7.2f} -> {new:7.2f}  (the voice dips there)  {text[:36]}")
     fixes = sum(m[5] for m in moved)
     end_fixes = sum(t[5] for t in tails)
-    print(f"{name}: {fixes} starts and {end_fixes} ends to move{' (applied)' if apply else ''}, "
-          f"{len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone")
-    if apply and (fixes or end_fixes):
+    print(f"{name}: {fixes} starts, {end_fixes} ends and {len(joins)} shared boundaries to move"
+          f"{' (applied)' if apply else ''}, {len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone")
+    if apply and (fixes or end_fixes or joins):
         # One entry per line, keeping every other top-level key (captions, notes).
         parts = []
         for key, val in {**script, "lines": lines}.items():

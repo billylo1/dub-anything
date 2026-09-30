@@ -102,12 +102,18 @@ def check(clip, spans, recs, script, show_all):
     flagged = 0
     for i, line in enumerate(lines):
         a, b = max(0.0, line["start"] - PAD), line["end"] + PAD
+        clip_audio = x[int(a * SR):int(b * SR)]
+        if len(clip_audio) < 0.1 * SR:  # a draft line at (or past) the clip's very end
+            continue
         got = {}
         for name, rec in recs.items():
             s = rec.create_stream()
-            s.accept_waveform(SR, x[int(a * SR):int(b * SR)])
-            rec.decode_stream(s)
-            got[name] = s.result.text.strip()
+            s.accept_waveform(SR, clip_audio)
+            try:
+                rec.decode_stream(s)
+                got[name] = s.result.text.strip()
+            except RuntimeError:  # the model rejects an odd-shaped stretch; skip that opinion
+                got[name] = ""
         whisper = line.get("ja", "")
         agree = dist(got["reazon"], got["sensevoice"])
         gap = min(dist(whisper, got["reazon"]), dist(whisper, got["sensevoice"]))

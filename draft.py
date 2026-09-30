@@ -1,6 +1,6 @@
 """First draft of a clip's script: careful transcript, real timings, suggested cast.
 
-Usage: draft.py <name> [<name> ...] [--cast key,key,...]   (after `dub.py prep`)
+Usage: draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `dub.py prep`)
 
 1. Whisper large-v3 (beam 5, word timings) over the separated vocals.
 2. Silero VAD finds where speech really is. Whisper's times run ~0.4 s early,
@@ -23,6 +23,10 @@ Usage: draft.py <name> [<name> ...] [--cast key,key,...]   (after `dub.py prep`)
 5. A long phrase that is one of Whisper's stock hallucinations usually hides
    real speech, so it's re-transcribed one stretch of speech at a time, in
    Japanese or English, whichever Whisper is surer of.
+
+--recast keeps an existing draft.json's transcript and windows and only
+suggests the speakers again: for a new show, draft the first parts, build their
+voices (cast.py), then recast them without transcribing again.
 
 Prints the draft and writes work/<name>/draft.json ({"lines": [...]} with start,
 end, voice, ja, text="" plus score fields). The director still decides: fix
@@ -229,8 +233,11 @@ def main():
     ap.add_argument("--cast", help="comma-separated voice keys to consider (default: all usable)")
     ap.add_argument("--model", default="Systran/faster-whisper-large-v3",
                     help="Whisper model (default: large-v3)")
+    ap.add_argument("--recast", action="store_true",
+                    help="keep each clip's draft.json transcript and only suggest speakers again (after "
+                         "building voices for a new show's first drafts)")
     args = ap.parse_args()
-    model = WhisperModel(args.model, device="auto", compute_type="default")
+    model = None if args.recast else WhisperModel(args.model, device="auto", compute_type="default")
     loaded = []
 
     def embed_once():
@@ -249,6 +256,11 @@ def draft(name, cast, model, embed_once):
     job = load_json(work / "segments.json")["job_id"]
     audio = decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=SR)
     duration = len(audio) / SR
+    if model is None:
+        # --recast: the transcript and windows stay; only the speakers are suggested again.
+        phrases = [{k: v for k, v in line.items() if k not in ("voice", "score", "alt", "alt_score", "text")}
+                   for line in load_json(work / "draft.json")["lines"]]
+        return suggest(name, work, audio, phrases, vad_spans(audio), cast, embed_once)
 
     spans = vad_spans(audio)
     phrases = settle([snap(p, spans, duration) for p in transcribe(model, audio)])
@@ -290,7 +302,11 @@ def draft(name, cast, model, embed_once):
         if onset is not None and edges.MIN_SHIFT <= p["start"] - onset <= edges.MAX_SHIFT \
                 and max(db[k - 2:k]) - level >= edges.CUT_DB:
             p["start"] = round(onset, 2)
+    suggest(name, work, audio, phrases, spans, cast, embed_once)
 
+
+def suggest(name, work, audio, phrases, spans, cast, embed_once):
+    """Score each phrase against the cast, print the draft and write draft.json."""
     embed = embed_once()
     cents = cast_centroids(embed, set(cast.split(",")) if cast else None, exclude=name) \
         if embed else {}

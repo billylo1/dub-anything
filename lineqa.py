@@ -12,17 +12,23 @@ Both sides are normalized before comparing (numbers spelled out, contractions
 expanded, "Dr." = "doctor", compounds joined), so digits and spelling don't
 count as failures. --reroll writes the flagged lines to work/<name>/reroll.json;
 the next `dub.py generate` gives them fresh takes. That fixes random glitches,
-but a word a voice can't say needs rewording.
+but a word a voice can't say needs rewording. A fresh take can also come out
+worse, so each take a re-roll replaces is kept (work/<name>/takes/), and the
+next check puts the best one back if the new take transcribes worse; the next
+`generate` then re-mixes it without synthesizing anything.
 """
 import argparse
 import difflib
+import hashlib
 import json
+import pathlib
 import re
+import shutil
 import sys
 
 import soundfile as sf
 
-from core import JOBS, WORK, line_id, whisper_setup
+from core import JOBS, WORK, line_id, load_json, whisper_setup
 
 whisper_setup()
 from faster_whisper import WhisperModel  # noqa: E402
@@ -84,31 +90,81 @@ def compare(want, got):
     return notes, ratio
 
 
+def file_sha(path):
+    return hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:16]
+
+
+def better(a, b):
+    """Whether take a transcribes better than take b: no flags first, then the closer match."""
+    return (not a["notes"], a["ratio"]) > (not b["notes"], b["ratio"])
+
+
 def check(name, model, show_all, reroll):
     work = WORK / name
     job = json.loads((work / "segments.json").read_text(encoding="utf-8"))["job_id"]
     lines = json.loads((work / "script.json").read_text(encoding="utf-8"))["lines"]
-    flagged = []
+    # Takes re-rolled before, so a worse roll never replaces a better one: before a
+    # flagged line is re-rolled its take is kept in takes/, with the settings it was
+    # made with, and the best of them is put back if the fresh take is worse.
+    rendered = load_json(work / "rendered.json", {})
+    converted = load_json(work / "converted.json", {})  # "american": the take is a converted copy
+    kept_path = work / "takes" / "kept.json"
+    kept = load_json(kept_path, {})
+    flagged, restored = [], []
     for i, line in enumerate(lines):
         lid = line_id(line)
         wav = JOBS / job / f"seg_en_{lid}.wav"
+        src = JOBS / job / f"src_en_{lid}.wav"
         if not wav.exists():
             print(f"L{i:02d} {line['start']:7.2f}  (not rendered)  {line['text']}")
             continue
         segs, _ = model.transcribe(str(wav), language="en", beam_size=5, vad_filter=False,
                                    condition_on_previous_text=False)
         got = " ".join(s.text.strip() for s in segs)
-        notes, _ = compare(line["text"], got)
+        notes, ratio = compare(line["text"], got)
+        take = {"notes": notes, "ratio": round(ratio, 3), "got": got, "sha": file_sha(wav),
+                "settings": rendered.get(lid, {})}
+        # Only takes made the same way count (a moved window re-renders the line anyway).
+        same = lambda k: {**k["settings"], "speed": None} == {**take["settings"], "speed": None}  # noqa: E731
+        earlier = [k for k in kept.get(lid, []) if same(k) and k["sha"] != take["sha"]]
+        best = max(earlier, key=lambda k: (not k["notes"], k["ratio"]), default=None)
+        if best and better(best, take):
+            shutil.copy2(work / "takes" / best["file"], wav)
+            if best.get("src"):
+                shutil.copy2(work / "takes" / best["src"], src)
+                converted[lid] = file_sha(wav)
+            rendered[lid] = best["settings"]
+            restored.append(lid)
+            print(f"L{i:02d} {line['start']:7.2f} put back an earlier take (match {best['ratio']:.2f} "
+                  f"over {take['ratio']:.2f}: {got!r})")
+            take, notes, got = best, best["notes"], best["got"]
         if notes:
             flagged.append({"id": lid, "start": line["start"], "text": line["text"], "got": got})
+            if reroll and not any(k["sha"] == take["sha"] for k in kept.get(lid, [])):
+                (work / "takes").mkdir(exist_ok=True)
+                n = len(kept.get(lid, []))
+                take["file"] = f"{lid}_{n}.wav"
+                shutil.copy2(wav, work / "takes" / take["file"])
+                if lid in converted and src.exists():
+                    take["src"] = f"{lid}_{n}.src.wav"
+                    shutil.copy2(src, work / "takes" / take["src"])
+                kept.setdefault(lid, []).append(take)
         if notes or show_all:
             dur = sf.info(wav).duration
             print(f"L{i:02d} {line['start']:7.2f} {line['voice']:10s} {dur:4.2f}s  {'; '.join(notes) or 'ok'}\n"
                   f"      want: {line['text']}\n      got:  {got}")
     print(f"{len(flagged)} of {len(lines)} lines flagged")
+    if kept:
+        kept_path.write_text(json.dumps(kept, ensure_ascii=False, indent=1), encoding="utf-8")
+    if restored:
+        (work / "rendered.json").write_text(json.dumps(rendered, indent=1), encoding="utf-8")
+        if converted:
+            (work / "converted.json").write_text(json.dumps(converted, indent=1), encoding="utf-8")
+        print(f"put back {len(restored)} earlier takes: the next `dub.py generate {name}` re-mixes them")
     if reroll and flagged:
         (work / "reroll.json").write_text(json.dumps(flagged, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"queued {len(flagged)} for fresh takes on the next `dub.py generate {name}`")
+        print(f"queued {len(flagged)} for fresh takes on the next `dub.py generate {name}` "
+              f"(their current takes are kept, and put back if the fresh ones are worse)")
 
 
 def main():

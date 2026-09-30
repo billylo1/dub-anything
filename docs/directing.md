@@ -78,9 +78,9 @@ differs.
 - `line_ref` (optional): `false` keeps the character's reference for this line
   instead of its own original (see "Render").
 
-A top-level `"render": {"line_ref": true, "fill": true}` records how the part is
-rendered (see "Render"). `dub.py generate` writes it on the first run: both on
-for a part never rendered, both off for a part rendered before these became the
+A top-level `"render": {"line_ref": true, "fill": true, "dips": true}` records how
+the part is rendered (see "Render"). `dub.py generate` writes it on the first run:
+all on for a part never rendered, off for a part rendered before they became the
 default, so its approved takes don't change.
 
 With `concise` timing (the default), each line starts at the window start. With
@@ -92,6 +92,9 @@ original soundtrack plays.
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
 `assemble.py` uses its original audio. Such a part needs no `prep`.
+A trailer for the next film or episode, recorded with the show, is different: its
+dialogue is the same cast, so dub it like the show with the same voices. Its title
+cards and on-screen text stay as they are.
 
 A top-level `"captions": [{start, end, ja, text}]` list holds speech that stays in
 the original audio but still belongs in the subtitles. Examples: dialogue already in
@@ -118,6 +121,12 @@ part. Use it for a block that stays in the original (a run of songs, a
 commercial break) and at a splice between two recordings, such as a live
 stream that went off air and came back with another programme. Otherwise the
 ~3-minute cuts can land inside the block or straddle the splice.
+
+`split.py` prints the pause each cut found. `pause 0.00s` means it found none:
+music under the speech can hide every gap from its full-mix VAD, and the cut
+may then fall inside a phrase. Transcribe a few seconds around such a cut
+(`asr_words.py` on an extract of the video). If it splits a phrase, re-split
+with `--whole` bounds placed in a real pause.
 
 `prep` separates the voices and prints Whisper's rough transcript. It also
 switches VoiceStudio to pyannote when it's installed.
@@ -188,7 +197,8 @@ others. Decide each line's speaker from:
    across parts by voice, so each cluster is one person. The same person in a
    different register (a quiet monologue, a campy aside) can form a separate
    cluster, so check the nearest-cast hint. Name the clusters once, build their
-   voices, then re-run `draft.py`.
+   voices, then run `draft.py --recast` on those parts: it keeps their
+   transcripts and only suggests the speakers again.
 2. **Video frames** at the line's time: who is in close-up with their mouth open.
    On-screen names and role captions can help identify a speaker. Burned-in
    closed captions (`subs.py`) often give each main character a colour of
@@ -253,12 +263,16 @@ their own original (see "The reference sets the register").
   with `contour.py`. `onsets.py` gives a quicker energy-based check, but it hits
   its ±0.6 s search limit on noise.
 - **Split long lines at the actor's pauses** so the English lands where the lips
-  move.
+  move. Write each piece so it stands on its own. A take whose text starts
+  mid-sentence ("goes well with the rice") can come out with a subject added
+  ("It goes well...").
 - **End each window in a pause, with nobody else inside it.** A line whose
   window is clean gets the actor's own delivery (see "Render"). One where the
   next speaker starts before the window ends, or the actor is cut mid-sound,
   falls back to the character's reference. In overlapping dialogue, trimming a
-  window's end back to the actor's last pause is often enough.
+  window's end back to the actor's last pause is often enough. Where two lines
+  run straight into each other, the voice usually still dips for a moment
+  between them; `edges.py --apply` moves the shared boundary onto that dip.
 - **Size the text:** each clone follows its actor's pace, from about 8 to 16
   letters per second. Short lines cost more than their length suggests: even
   "Really?" takes 0.8–1.2 s. `fit.py <clip>` computes the length OmniVoice will
@@ -341,9 +355,17 @@ delivery of its line and ends where the actor stops:
   room effect (`echo`, `pa`; the original's room would be cloned), a window too
   long to fit OmniVoice's 20 s limit alongside the clips, or a window that isn't
   clean. A window isn't clean if speech runs on past its end: the reference would
-  end mid-sound, and OmniVoice finishes that sound at the start of the take. Nor
-  is it clean if Whisper hears something other than the line's `ja` (crosstalk),
-  or if the voice is nearer another character. `generate` prints each line that
+  end mid-sound, and OmniVoice finishes that sound at the start of the take.
+  With `dips` (the `render` block's third switch) that doesn't count where the
+  voice dips 20 dB below the line's level within 0.15 s of the end, too briefly
+  for the 50 ms pauses speech detection needs: a turn change in fast dialogue,
+  or the actor's own tail. The line's original is then cut at the dip. In a
+  quick family argument this gave 5 of 13 run-on lines their own reference;
+  the rest overlapped for real. Nor is a window clean if Whisper hears
+  something other than the line's `ja` (crosstalk), or if the voice is nearer
+  another character. The comparison reads katakana as hiragana, but a word
+  Whisper writes in kana where `ja` has kanji still counts against it: write
+  `ja` the way it is said when a short line falls back only for that. `generate` prints each line that
   falls back and why. A line whose window overlapped the next speaker came out
   as gibberish on every take until this check excluded it, so don't force
   one. Snap its window instead (see "Translate and time"). A take's reference
@@ -441,7 +463,10 @@ How these were chosen, and what else was tried, is in
   mangled first word) usually clears with a fresh take: `lineqa.py episode-01
   --reroll` queues the flagged lines, and the next `generate` re-rolls them.
   A word the voice can't say needs rewording. Every take is a new roll of the
-  dice, so re-check after each render. Judge each flag against the intended
+  dice, so re-check after each render. A fresh take can also come out worse
+  than the one it replaced: `--reroll` keeps each replaced take
+  (`work/<clip>/takes/`), and the next check puts the best one back when the
+  new take transcribes worse. The next `generate` then only re-mixes. Judge each flag against the intended
   text and the audio. Names and specialist vocabulary can confuse QA even when the take is
   correct; flag uncertain cases for the listener.
 - Listen. Machines can't judge acting.
@@ -501,6 +526,10 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   Window ends are the mirror image: a voice still sounding when the window
   closes plays a clipped tail of the original after the English. `edges.py`
   moves the end past short tails (same rule) and notes the rest for manual review.
+  Where two windows touch, it moves their shared boundary onto the dip between
+  the voices when there is one (see `dips` under "Render"). In a noisy room (a
+  bar, a crowd) the separated vocals keep some background chatter: long `skip`s
+  with a voice at or above the line's level there are the room, not the actor.
 - **Match reverberation to the source.** `tails.py <clip>` compares the
   original voice tail with the rendered take. Music or a following sound can
   look like reverb, so review the scene before choosing an effect. `echo`
@@ -591,7 +620,7 @@ The loop, in the order it runs:
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
 | `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
-| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones |
+| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule: `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |

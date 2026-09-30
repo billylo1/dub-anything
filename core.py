@@ -57,25 +57,54 @@ ROOM_EFFECTS = {"echo", "pa"}  # their original carries the room, which a refere
 # How far Whisper's hearing of a window may be from the line's `ja` (character error
 # rate). Kanji written as kana counts against it, so only gross mismatches fail.
 LINE_REF_CER = 0.5
+KANA = {c: c - 0x60 for c in range(0x30A1, 0x30F7)}  # katakana -> hiragana, for str.translate
+# Speech running on past a window's end still leaves a clean reference when the
+# voice dips to near silence (this far below the line's speech level) within
+# DIP_REACH of the end: a turn change, or the actor's tail, too quick for the
+# VAD's 50 ms pauses. The line's reference is then cut at the dip.
+DIP_DB = 20.0
+DIP_REACH = 0.15  # s either side of the window's end
 
 
-def unclean_windows(work, job_id, lines, ids):
-    """Why each line's window can't be its own reference, or None if it can: speech
-    running on past the window's end (the reference would end mid-sound, which
-    OmniVoice finishes at the start of the take), Whisper hearing something else
-    than the line's `ja` (crosstalk, another voice), or a voice nearer another of
-    the clip's characters. Cached in refs/clean.json by what the check reads (window,
-    voice and its clips, `ja`), not by the take: rewording the English keeps it."""
+def end_dip(db, start, end):
+    """The time of the deepest dip in the voice within DIP_REACH of a window's end
+    (5 ms frames of edges.frames_db, smoothed over 20 ms), if it is at least DIP_DB
+    below the line's speech level; else None."""
+    import edges
+    frame = edges.HOP / edges.SR
+    level = edges.line_level(db, start, end)
+    lo = max(int((end - DIP_REACH) / frame), int((start + 0.3) / frame))
+    hi = min(int((end + DIP_REACH) / frame), len(db))
+    if hi - lo < 4:
+        return None
+    smooth = np.convolve(db[lo:hi], np.ones(4) / 4, mode="same")
+    k = int(np.argmin(smooth))
+    return round((lo + k) * frame, 3) if smooth[k] - level <= -DIP_DB else None
+
+
+def unclean_windows(work, job_id, lines, ids, dips=False):
+    """Whether each line's window can be its own reference, as (why, cut) per line.
+    `why` says why it can't, or is None if it can: speech running on past the
+    window's end (the reference would end mid-sound, which OmniVoice finishes at
+    the start of the take), Whisper hearing something else than the line's `ja`
+    (crosstalk, another voice), or a voice nearer another of the clip's
+    characters. With `dips`, speech running on doesn't count where the voice dips
+    to near silence right at the end (end_dip); `cut` is then where the line's
+    reference ends, instead of the window's end. Cached in refs/clean.json by what
+    the check reads (window, voice and its clips, `ja`), not by the take:
+    rewording the English keeps it."""
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
     keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
             f"{line['voice']}|{voice_sig(line['voice'])}|{line['ja']}".encode()).hexdigest()[:12]
-            for line in lines]
+            + ("_dips" if dips else "") for line in lines]
     if any(k not in cache for k in keys):
         import draft
+        import edges
         from register import cer
         sr = draft.SR
         audio = draft.decode_audio(str(JOBS / job_id / "vocals.wav"), sampling_rate=sr)
+        db = edges.frames_db(audio)
         # 50 ms: a turn change in fast dialogue often leaves no longer pause, and a
         # longer minimum would merge the two speakers into one span.
         opts = draft.VadOptions(threshold=0.5, min_silence_duration_ms=50, speech_pad_ms=0)
@@ -86,16 +115,19 @@ def unclean_windows(work, job_id, lines, ids):
         who = lambda v: voices[v].get("register_of", v)  # noqa: E731
         cast = {v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
                 for v in {line["voice"] for line in lines}}
-        strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—]", "", t)  # noqa: E731
+        # Katakana as hiragana: Whisper writes a name or a word in either ("タロウ", "ナニ").
+        strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—]", "", t).translate(KANA)  # noqa: E731
         for line, key in zip(lines, keys):
             if key in cache:
                 continue
             a, b = line["start"], line["end"]
-            x = audio[int(a * sr):int(b * sr)]
-            why = None
+            why, cut = None, None
             if any(s < b - 0.05 and e > b + 0.05 for s, e in spans):
-                why = "speech runs on past the window's end"
-            else:
+                cut = end_dip(db, a, b) if dips else None
+                if cut is None:
+                    why = "speech runs on past the window's end"
+            x = audio[int(a * sr):int((cut or b) * sr)]
+            if why is None:
                 heard = "".join(p["ja"] for p in draft.transcribe(model, x))
                 err = cer(strip(line["ja"]), strip(heard))
                 if err > LINE_REF_CER:
@@ -105,25 +137,27 @@ def unclean_windows(work, job_id, lines, ids):
                     best = max(cast, key=lambda v: float(e @ cast[v]))
                     if who(best) != who(line["voice"]):
                         why = f"voice nearer {best}"
-            cache[key] = why
+            cache[key] = {"cut": cut} if cut and not why else why
         cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
-    return [cache[k] for k in keys]
+    return [(None, cache[k]["cut"]) if isinstance(cache[k], dict) else (cache[k], None) for k in keys]
 
 
-def line_refs(work, job_id, lines, ids, verbose=True):
+def line_refs(work, job_id, lines, ids, verbose=True, dips=False):
     """Per-line references: the voice's own clips (work/voices/<key>.wav), a 0.3 s
     pause, then this line's original from the job's separated vocals, with the
     line's `ja` after the voice's transcript. OmniVoice copies its reference's
     delivery, so the take follows the actor on this line while the clips hold the
     voice steady. Lines with a room effect or "line_ref": false keep the voice's
-    reference, as do lines whose window isn't clean (unclean_windows) and lines
-    too long to fit OmniVoice's limit with the clips.
-    Returns {id: (path, transcript)}."""
+    reference, as do lines whose window isn't clean (unclean_windows; with `dips`,
+    a window whose speech runs on into a near-silent dip is clean, and its
+    original is cut at the dip) and lines too long to fit OmniVoice's limit with
+    the clips. Returns {id: (path, transcript)}; the path's name ends with the
+    window (and the cut), which dub.py records as how the take was made."""
     voices = load_json(WORK / "voices.json", {})
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
     (work / "refs").mkdir(exist_ok=True)
     refs = {}
-    for line, i, why in zip(lines, ids, unclean_windows(work, job_id, lines, ids)):
+    for line, i, (why, cut) in zip(lines, ids, unclean_windows(work, job_id, lines, ids, dips)):
         if not line.get("line_ref", True) or line.get("effect") in ROOM_EFFECTS:
             continue
         if why:
@@ -132,7 +166,7 @@ def line_refs(work, job_id, lines, ids, verbose=True):
             continue
         base_path = WORK / "voices" / f"{line['voice']}.wav"
         base, base_sr = sf.read(base_path, dtype="float32")
-        own = vocals[int(line["start"] * sr):int(line["end"] * sr)]
+        own = vocals[int(line["start"] * sr):int((cut or line["end"]) * sr)]
         if base_sr != sr or base.shape[1:] != own.shape[1:]:
             print(f"  line ref skipped at {line['start']}: {base_path.name} isn't in the vocals' format")
             continue
@@ -140,7 +174,7 @@ def line_refs(work, job_id, lines, ids, verbose=True):
             if verbose:
                 print(f"  line ref skipped at {line['start']}: over {LINE_REF_MAX:.0f} s with the voice's clips")
             continue
-        path = work / "refs" / f"{i}_{line['start']:.2f}-{line['end']:.2f}.wav"
+        path = work / "refs" / f"{i}_{line['start']:.2f}-{line['end']:.2f}{f'_{cut:.2f}' if cut else ''}.wav"
         if not path.exists():
             gap = np.zeros((int(0.3 * sr),) + own.shape[1:], dtype="float32")
             sf.write(path, np.concatenate([base, gap, own]), sr)
@@ -318,7 +352,8 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
                 and "clips" in voices[lines[k]["voice"]]]
         base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
         if todo and mode.get("line_ref", not rendered):
-            own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo])
+            own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
+                            dips=mode.get("dips", not rendered))
     ends = actor_ends(job, lines) if short else [None] * len(lines)
     rows = []
     for i, (line, sid, end) in enumerate(zip(lines, ids, ends)):
