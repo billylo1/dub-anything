@@ -32,6 +32,17 @@ from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WO
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 
 
+def flush_gpu():
+    """Ask the backend to hand its cached GPU memory back (no model is unloaded).
+    After many renders PyTorch's cache can hold almost all the VRAM; renders then
+    crawl and long per-line references fail with "Generation failed", and tools
+    run beside the backend (Whisper in fit.py, lineqa.py) have no room."""
+    try:
+        requests.post(f"{API}/system/flush-memory", timeout=120)
+    except requests.RequestException:
+        pass
+
+
 def sse(resp):
     """Yield (event, data) pairs from a server-sent-events response."""
     resp.encoding = "utf-8"
@@ -576,7 +587,13 @@ def main():
                         "speed their predicted length asks for, instead of at natural pace first")
     b.set_defaults(fn=cmd_generate)
     args = p.parse_args()
-    args.fn(args)
+    if args.fn is not cmd_generate:
+        return args.fn(args)
+    flush_gpu()
+    try:
+        args.fn(args)
+    finally:
+        flush_gpu()
 
 
 if __name__ == "__main__":

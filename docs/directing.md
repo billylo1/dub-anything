@@ -91,7 +91,7 @@ original soundtrack plays.
 
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
-`assemble.py` uses its original audio.
+`assemble.py` uses its original audio. Such a part needs no `prep`.
 
 A top-level `"captions": [{start, end, ja, text}]` list holds speech that stays in
 the original audio but still belongs in the subtitles. Examples: dialogue already in
@@ -101,7 +101,9 @@ list to both subtitle tracks.
 ## Workflow
 
 For a new show, settle one thing with the user before the first part: the
-voice (see "Voice" under Render). Everything else has a default.
+voice (see "Voice" under Render). Everything else has a default. For a video
+split into parts, AGENTS.md ("Scheduling a split video") gives the order that
+overlaps the machine work with the directing.
 
 ### 1. Prep and draft
 
@@ -110,6 +112,12 @@ voice (see "Voice" under Render). Everything else has a default.
 & $py dub.py prep videos\episode-parts\episode-01.mp4
 & $py draft.py episode-01                  # after the cast exists: --cast key,key,...
 ```
+
+`split.py --whole A-B` cuts exactly at A and B and keeps that stretch as one
+part. Use it for a block that stays in the original (a run of songs, a
+commercial break) and at a splice between two recordings, such as a live
+stream that went off air and came back with another programme. Otherwise the
+~3-minute cuts can land inside the block or straddle the splice.
 
 `prep` separates the voices and prints Whisper's rough transcript. It also
 switches VoiceStudio to pyannote when it's installed.
@@ -202,6 +210,30 @@ speaker's line, skip that clip. For anyone with less than 3 s of clean speech
 (walk-ons, a single whisper), or for a line that's a name, keep the original
 audio and put the line in `captions`.
 
+When one performer voices every character (a storyteller acting out a
+dialogue, a narrator doing the voices), give them one voice and cast every
+line to it. Per-line references carry the change of voice from character to
+character, since each take follows the performer's own delivery of that
+line. Separate voices for the characters would only confuse the "voice is
+nearer another character" check. Build the reference from their plainest
+register; it is only used for lines that can't have their own reference. Such performers often switch
+characters without a pause, so many windows won't end in one: merge an
+exchange into one line where the speech runs straight on. Expect Whisper's
+check on each line's reference to reject more lines than usual in fast
+dialect speech. Those lines fall back to the performer's reference, which
+still sounds like them. Audience laughter separates mostly into the
+background stem, between lines, so windows kept tight to the speech leave it
+in the mix.
+
+Pick reference lines at the speaker's usual pace, too. Every line that falls
+back to the reference takes its pace, and the clips are also the first part of
+each per-line reference. A presenter's read-out intro or an excited burst can
+be a third faster than how that person talks, and every take on it then ends
+early (in one interview, two in three lines came out short until the clips
+were swapped). `fit.py` warns when a reference is more than 15% faster or
+slower than the speaker's lines in the show's scripts. Swap clips before the
+first render; afterwards a changed voice re-renders its lines.
+
 Pick reference lines in the character's usual register. Each line's own
 original normally sets its delivery (see "Render"). The character's reference
 holds the voice steady, and it alone sets the delivery of lines that can't use
@@ -244,7 +276,11 @@ their own original (see "The reference sets the register").
   fastest speed can recover. The estimate is least reliable for such one-word
   lines.
   For `SHORT?`: write fuller English, closer to everything the actor says.
-  Don't count on fill to slow a short line down (see "Render").
+  Don't count on fill to slow a short line down (see "Render"). Unscripted
+  talk (interviews, chat, a host's patter) is full of hedges, restarts and
+  restatements. English written as tight as its meaning comes out a third
+  short there, so write the first draft closer to all that was said, hedges
+  included, rather than fixing it after `fit.py`.
 - **Why the pace varies.** OmniVoice fixes a take's length before generating it:
   the reference's duration, times the English text's weight, divided by the
   weight of the reference's transcript. A kanji weighs 3, kana 2.2, a digit
@@ -517,6 +553,12 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   same video (an A/B copy, say) starts with Roformer stems, not htdemucs, even
   though VoiceStudio only runs htdemucs. Check `separator.json` in the new job
   folder, and use `separate.py --restore` or copy the stems you want.
+- **A long-running backend can fill the GPU.** After many renders (other engines
+  included), PyTorch's cache can hold almost all the VRAM while only OmniVoice
+  is loaded (`GET /model/loaded` shows the free memory). Renders then slow to
+  tens of seconds a line, and long per-line references fail with "Generation
+  failed". `POST /system/flush-memory` on the backend releases it without
+  unloading anything; `dub.py generate` calls it before and after each run.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
@@ -544,16 +586,16 @@ The loop, in the order it runs:
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
 | `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `subs.py <clip>` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment) |
-| `draft.py <name>` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
+| `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `second.py <clip> [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
+| `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones |
 | `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule: `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
-| `lineqa.py <name> [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
+| `lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
 
 Used now and then:

@@ -1,6 +1,6 @@
 """First draft of a clip's script: careful transcript, real timings, suggested cast.
 
-Usage: draft.py <name> [--cast key,key,...]   (after `dub.py prep`)
+Usage: draft.py <name> [<name> ...] [--cast key,key,...]   (after `dub.py prep`)
 
 1. Whisper large-v3 (beam 5, word timings) over the separated vocals.
 2. Silero VAD finds where speech really is. Whisper's times run ~0.4 s early,
@@ -225,17 +225,31 @@ def caption(e):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("name")
+    ap.add_argument("names", nargs="+", metavar="name", help="one or more prepped clips (the models load once)")
     ap.add_argument("--cast", help="comma-separated voice keys to consider (default: all usable)")
     ap.add_argument("--model", default="Systran/faster-whisper-large-v3",
                     help="Whisper model (default: large-v3)")
     args = ap.parse_args()
-    work = WORK / args.name
+    model = WhisperModel(args.model, device="auto", compute_type="default")
+    loaded = []
+
+    def embed_once():
+        if not loaded:
+            loaded.append(embedder())
+        return loaded[0]
+
+    for name in args.names:
+        if len(args.names) > 1:
+            print(f"=== {name}")
+        draft(name, args.cast, model, embed_once)
+
+
+def draft(name, cast, model, embed_once):
+    work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
     audio = decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=SR)
     duration = len(audio) / SR
 
-    model = WhisperModel(args.model, device="auto", compute_type="default")
     spans = vad_spans(audio)
     phrases = settle([snap(p, spans, duration) for p in transcribe(model, audio)])
     # Focused passes (with 1 s of context) over speech the full pass skipped;
@@ -265,7 +279,6 @@ def main():
         if p.get("lang") != "en" and p["end"] - p["start"] >= 1.0 and spoken_language(model, clip) == "en":
             p["lang"] = "en"
             p["ja"] = " ".join(q["ja"] for q in transcribe(model, clip, language="en")) or p["ja"]
-    del model
     # Start windows at the true attack. VAD misses soft onsets, and a window
     # that opens mid-sound chops the actor audibly (edges.py has the rule).
     db = edges.frames_db(audio)
@@ -278,8 +291,8 @@ def main():
                 and max(db[k - 2:k]) - level >= edges.CUT_DB:
             p["start"] = round(onset, 2)
 
-    embed = embedder()
-    cents = cast_centroids(embed, set(args.cast.split(",")) if args.cast else None, exclude=args.name) \
+    embed = embed_once()
+    cents = cast_centroids(embed, set(cast.split(",")) if cast else None, exclude=name) \
         if embed else {}
     for p in phrases:
         if not cents or p["end"] - p["start"] < 0.3:

@@ -1,6 +1,6 @@
 """Transcribe every rendered line on its own and flag the ones that don't match.
 
-Usage: lineqa.py <name> [--all] [--reroll]   (after `dub.py generate`)
+Usage: lineqa.py <name> [<name> ...] [--all] [--reroll]   (after `dub.py generate`)
 
 Full-mix QA (qa.py) hides problems that show up clearly per line:
   - extra words before the first expected one: voice-reference leakage
@@ -84,17 +84,10 @@ def compare(want, got):
     return notes, ratio
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("name")
-    ap.add_argument("--all", action="store_true", help="print every line, not just flagged ones")
-    ap.add_argument("--reroll", action="store_true", help="queue flagged lines for fresh takes")
-    args = ap.parse_args()
-    work = WORK / args.name
+def check(name, model, show_all, reroll):
+    work = WORK / name
     job = json.loads((work / "segments.json").read_text(encoding="utf-8"))["job_id"]
     lines = json.loads((work / "script.json").read_text(encoding="utf-8"))["lines"]
-    model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
-
     flagged = []
     for i, line in enumerate(lines):
         lid = line_id(line)
@@ -108,14 +101,27 @@ def main():
         notes, _ = compare(line["text"], got)
         if notes:
             flagged.append({"id": lid, "start": line["start"], "text": line["text"], "got": got})
-        if notes or args.all:
+        if notes or show_all:
             dur = sf.info(wav).duration
             print(f"L{i:02d} {line['start']:7.2f} {line['voice']:10s} {dur:4.2f}s  {'; '.join(notes) or 'ok'}\n"
                   f"      want: {line['text']}\n      got:  {got}")
     print(f"{len(flagged)} of {len(lines)} lines flagged")
-    if args.reroll and flagged:
+    if reroll and flagged:
         (work / "reroll.json").write_text(json.dumps(flagged, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"queued {len(flagged)} for fresh takes on the next `dub.py generate {args.name}`")
+        print(f"queued {len(flagged)} for fresh takes on the next `dub.py generate {name}`")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("names", nargs="+", metavar="name", help="one or more rendered parts (Whisper loads once)")
+    ap.add_argument("--all", action="store_true", help="print every line, not just flagged ones")
+    ap.add_argument("--reroll", action="store_true", help="queue flagged lines for fresh takes")
+    args = ap.parse_args()
+    model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
+    for name in args.names:
+        if len(args.names) > 1:
+            print(f"=== {name}")
+        check(name, model, args.all, args.reroll)
 
 
 if __name__ == "__main__":

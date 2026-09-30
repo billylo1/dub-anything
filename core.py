@@ -64,10 +64,13 @@ def unclean_windows(work, job_id, lines, ids):
     running on past the window's end (the reference would end mid-sound, which
     OmniVoice finishes at the start of the take), Whisper hearing something else
     than the line's `ja` (crosstalk, another voice), or a voice nearer another of
-    the clip's characters. Cached per window in refs/clean.json."""
+    the clip's characters. Cached in refs/clean.json by what the check reads (window,
+    voice and its clips, `ja`), not by the take: rewording the English keeps it."""
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
-    keys = [f"{i}_{line['start']:.2f}-{line['end']:.2f}" for line, i in zip(lines, ids)]
+    keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
+            f"{line['voice']}|{voice_sig(line['voice'])}|{line['ja']}".encode()).hexdigest()[:12]
+            for line in lines]
     if any(k not in cache for k in keys):
         import draft
         from register import cer

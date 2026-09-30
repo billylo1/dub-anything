@@ -53,7 +53,7 @@ cloned or shared are final.
   `uv run --no-project --python 3.12 --with librosa --with soundfile python <script>`.
 - `separate.py` needs audio-separator and a CUDA PyTorch: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python separate.py <clip> ...`.
 - `second.py` needs sherpa-onnx: `uv run --no-project --python 3.12 --with sherpa-onnx
-  --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip>`.
+  --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip> [<clip> ...]`.
 - `subs.py` (burned-in captions) needs RapidOCR: `uv run --no-project --python 3.12
   --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python subs.py <clip>`.
 - `vc.py` (the `"american"` voice) has its own environment, which `dub.py generate`
@@ -79,6 +79,31 @@ character's reference, and fix every line it reports as not fitting →
 `lineqa.py --reroll`: reword what a voice can't say, re-roll glitches, repeat until
 clean → `assemble.py`. Only when many of a character's fallback lines sound
 wrong: `register.py report`, `build`, `route --apply`, `check`.
+
+## Scheduling a split video
+
+The machine work is long (prep about 70 s a part, rendering 2-3 min), and so is
+your directing. Overlap the two. Never overlap two GPU jobs: they share one card,
+and a render beside another model crawls or fails with "Generation failed".
+
+- GPU: `dub.py prep` and `generate`, `separate.py`, `subs.py`, `draft.py`,
+  `lineqa.py`, `asr_words.py`, `register.py`, and `fit.py` the first time it
+  checks a window (after that the check is cached, even when the English changes).
+- CPU: `second.py`, `edges.py`, `tails.py`, `split.py`, `assemble.py`.
+
+1. Split, then prep and separate part 01 alone. Build the voices from it and
+   check `fit.py`'s pace warning before writing any English. Draft part 01.
+2. Start one background chain for the rest: `dub.py prep` for each remaining
+   part, then one `separate.py` over them all, then one `draft.py` over them all
+   (both take several parts and load their models once). Once the drafts
+   exist, run `second.py` over all parts on the CPU, beside anything else.
+3. Direct part 01 while the chain runs. When a part's script is written and the
+   GPU is free: `edges.py --apply`, `fit.py`, fix its flags, then start
+   `dub.py generate <part> --match-level` followed by `lineqa.py <part>` in the
+   background, and direct the next part meanwhile. `generate` hands the
+   backend's cached GPU memory back before and after each run.
+4. Triage each part's QA as it lands, and queue its re-render behind the next
+   part's render. Assemble when every part is clean.
 
 ## Ground rules
 

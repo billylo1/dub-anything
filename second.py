@@ -2,8 +2,9 @@
 
 Usage (needs sherpa-onnx, so run it in its own env):
   uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy
-      --with pykakasi --with huggingface_hub python second.py <clip> [--script] [--all]
+      --with pykakasi --with huggingface_hub python second.py <clip> [<clip> ...] [--script] [--all]
   ... second.py <clip> <t0>:<t1> [<t0>:<t1> ...]      any stretches of the clip
+It runs on the CPU, so it can run beside GPU work (drafting, rendering).
 
 Runs ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice over each line of
 work/<clip>/draft.json (or script.json with --script) on the separated vocals,
@@ -75,20 +76,29 @@ def dist(a, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("clip")
-    ap.add_argument("spans", nargs="*", help="t0:t1 stretches instead of the clip's lines")
+    ap.add_argument("targets", nargs="+", metavar="clip",
+                    help="one or more clips (the models load once), or one clip followed by t0:t1 stretches")
     ap.add_argument("--script", action="store_true", help="check script.json instead of draft.json")
     ap.add_argument("--all", action="store_true", help="print every line, not just flagged ones")
     args = ap.parse_args()
-    job = json.loads((WORK / args.clip / "segments.json").read_text(encoding="utf-8"))["job_id"]
+    clips = [t for t in args.targets if ":" not in t]
+    spans = [t for t in args.targets if ":" in t]
+    if spans and len(clips) != 1:
+        ap.error("t0:t1 stretches need exactly one clip")
+    recs = recognisers()
+    for clip in clips:
+        check(clip, spans, recs, args.script, args.all)
+
+
+def check(clip, spans, recs, script, show_all):
+    job = json.loads((WORK / clip / "segments.json").read_text(encoding="utf-8"))["job_id"]
     x, sr = sf.read(JOBS / job / "vocals.wav", dtype="float32")
     x = resample_poly(x.mean(1) if x.ndim > 1 else x, SR, sr).astype(np.float32)
-    if args.spans:
-        lines = [dict(zip(("start", "end"), map(float, s.split(":"))), ja="") for s in args.spans]
+    if spans:
+        lines = [dict(zip(("start", "end"), map(float, s.split(":"))), ja="") for s in spans]
     else:
-        name = "script.json" if args.script else "draft.json"
-        lines = json.loads((WORK / args.clip / name).read_text(encoding="utf-8"))["lines"]
-    recs = recognisers()
+        name = "script.json" if script else "draft.json"
+        lines = json.loads((WORK / clip / name).read_text(encoding="utf-8"))["lines"]
     flagged = 0
     for i, line in enumerate(lines):
         a, b = max(0.0, line["start"] - PAD), line["end"] + PAD
@@ -103,11 +113,11 @@ def main():
         gap = min(dist(whisper, got["reazon"]), dist(whisper, got["sensevoice"]))
         flag = bool(whisper) and gap >= FLAG and agree < gap
         flagged += flag
-        if flag or args.all or args.spans:
+        if flag or show_all or spans:
             print(f"{'FLAG' if flag else '    '} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f}  {whisper}")
             print(f"{'':25s}reazon: {got['reazon']}   sensevoice: {got['sensevoice']}")
-    if not args.spans:
-        print(f"{args.clip}: {flagged} of {len(lines)} lines where the other two agree against the transcript")
+    if not spans:
+        print(f"{clip}: {flagged} of {len(lines)} lines where the other two agree against the transcript")
 
 
 if __name__ == "__main__":

@@ -10,15 +10,44 @@ No render is needed, so it works for a new show's first part. They're flagged
 ends well before the actor stops: write fuller text for it (slowing a take adds
 little). `dub.py generate` prints the same table for the failing lines when a
 line overflows.
+It first warns about any voice whose reference is much faster or slower than
+its speaker's lines: lines on that reference inherit its pace.
 """
 import argparse
+import statistics
 
-from core import fit_rows
+from core import WORK, _omnivoice, fit_rows, load_json, voice_clips
 
 ap = argparse.ArgumentParser()
 ap.add_argument("name")
 ap.add_argument("--only-flags", action="store_true", help="print only lines that don't fit or are at risk")
 args = ap.parse_args()
+
+
+def pace_check(name, tolerance=0.15):
+    """A voice's reference sets the pace of every line that falls back to it, and
+    part of every per-line reference. A clip said faster than the speaker usually
+    talks (a read-out intro, an excited burst) makes those takes run short."""
+    weight = _omnivoice()[0].calculate_total_weight
+    voices = load_json(WORK / "voices.json", {})
+    scripts = [load_json(p) for p in WORK.glob("*/script.json")]
+    for key in sorted({ln["voice"] for ln in load_json(WORK / name / "script.json")["lines"]}):
+        spec = voices.get(key)
+        if not spec:
+            continue
+        ref = weight(spec["ref_text"]) / sum(b - a for _, a, b in voice_clips(spec))
+        rates = [weight(ln["ja"]) / (ln["end"] - ln["start"]) for s in scripts for ln in s["lines"]
+                 if ln.get("voice") == key and ln.get("ja") and ln["end"] - ln["start"] >= 1.5]
+        if len(rates) < 5:
+            continue
+        typical = statistics.median(rates)
+        if abs(ref / typical - 1) > tolerance:
+            print(f"pace: {key}'s reference says {ref:.1f} units/s, its {len(rates)} lines {typical:.1f} "
+                  f"({ref / typical - 1:+.0%}); lines on the reference will run "
+                  f"{'short' if ref > typical else 'long'}. Pick clips nearer the lines' pace.")
+
+
+pace_check(args.name)
 total_chars = total_secs = 0.0
 for row in fit_rows(args.name, predict=True, short=True):
     if args.only_flags and not row["flag"]:

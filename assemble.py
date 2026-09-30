@@ -71,7 +71,8 @@ def main():
 
     dubs, en, ja = [], [], []
     for p in parts:
-        doc = load_json(WORK / p["name"] / "segments.json")
+        # A part left as it is needs no prep: its own file stands in for the job's.
+        doc = load_json(WORK / p["name"] / "segments.json") or {"video": p.get("file", source)}
         mp4 = out_dir(doc) / f"{p['name']}.en.mp4"
         script = load_json(WORK / p["name"] / "script.json")
         if not mp4.exists() and script is not None and not script["lines"] and p.get("file"):
@@ -89,7 +90,7 @@ def main():
             if line.get("ja"):
                 ja.append((line["start"] + off, line["end"] + off, line["ja"]))
 
-    first_doc = load_json(WORK / parts[0]["name"] / "segments.json")
+    first_doc = load_json(WORK / parts[0]["name"] / "segments.json") or {"video": parts[0].get("file", source)}
     dest = out_dir(first_doc)
     suffix = f".p{args.parts}" if args.parts else ""
     out = pathlib.Path(args.out) if args.out else dest / f"{args.stem}.dubbed{suffix}.mp4"

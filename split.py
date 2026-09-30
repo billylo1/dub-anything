@@ -1,13 +1,16 @@
 """Cut a long video into ~N-minute parts at pauses in speech, to dub part by part.
 
-Usage: split.py <video> [--minutes 3] [--out DIR] [--encoder auto|h264_nvenc|libx264]
+Usage: split.py <video> [--minutes 3] [--whole A-B ...] [--out DIR] [--encoder auto|h264_nvenc|libx264]
 Silero VAD over the full mix finds the gaps between speech; near each N-minute
 mark (+-30 s) the longest gap wins and the cut goes in its middle, so no line
-is split. Parts are re-encoded so cuts are frame-accurate and dubbed parts can
+is split. --whole A-B (seconds, repeatable) cuts exactly at A and B and keeps
+that stretch as one part: a block of songs, a commercial break, a splice
+between two recordings. Parts are re-encoded so cuts are frame-accurate and dubbed parts can
 be joined back without drift. Writes <out>/<stem>-NN.mp4 and <out>/parts.json
 (default out: <stem>-parts beside the video).
 """
 import argparse
+import itertools
 import json
 import pathlib
 import subprocess
@@ -22,6 +25,8 @@ SR = 16000
 p = argparse.ArgumentParser()
 p.add_argument("video")
 p.add_argument("--minutes", type=float, default=3)
+p.add_argument("--whole", action="append", default=[], metavar="A-B",
+               help="keep A-B (seconds) as one part, cut exactly at its ends (repeatable)")
 p.add_argument("--out")
 # auto: NVENC when it works (current FFmpeg builds need NVIDIA driver >= 610), else x264.
 p.add_argument("--encoder", default="auto")
@@ -47,13 +52,24 @@ duration = len(audio) / SR
 speech = get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=300, speech_pad_ms=100))
 gaps = [(a["end"] / SR, b["start"] / SR) for a, b in zip(speech, speech[1:])]
 
-step, cuts, t = args.minutes * 60, [0.0], args.minutes * 60
-while t < duration - step / 2:
-    near = [g for g in gaps if abs((g[0] + g[1]) / 2 - t) <= 30]
-    a, b = max(near, key=lambda g: g[1] - g[0]) if near else (t, t)
-    cuts.append(round(round((a + b) / 2 / FRAME) * FRAME, 3))
-    print(f"  cut {cuts[-1]:7.2f}s  (pause {b - a:4.2f}s, target {t:.0f}s)")
-    t = cuts[-1] + step
+def snap(t):
+    return round(round(t / FRAME) * FRAME, 3)
+
+
+whole = [tuple(min(snap(max(float(x), 0)), duration) for x in w.split("-")) for w in args.whole]
+bounds = sorted({0.0, duration, *(t for w in whole for t in w)})
+step, cuts = args.minutes * 60, [0.0]
+for lo, hi in itertools.pairwise(bounds):
+    t = lo + step
+    while (lo, hi) not in whole and t < hi - step / 2:
+        near = [g for g in gaps if abs((g[0] + g[1]) / 2 - t) <= 30 and lo < (g[0] + g[1]) / 2 < hi]
+        a, b = max(near, key=lambda g: g[1] - g[0]) if near else (t, t)
+        cuts.append(snap((a + b) / 2))
+        print(f"  cut {cuts[-1]:7.2f}s  (pause {b - a:4.2f}s, target {t:.0f}s)")
+        t = cuts[-1] + step
+    if hi < duration:
+        cuts.append(hi)
+        print(f"  cut {hi:7.2f}s  (--whole)")
 cuts.append(duration)
 
 parts = []
