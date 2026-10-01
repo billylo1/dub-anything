@@ -67,7 +67,14 @@ def spell_pairs(n):
     return f"{spell(hi)} " + ("hundred" if lo == 0 else f"oh {spell(lo)}" if lo < 10 else spell(lo))
 
 
-def words(text, pairs=False):
+COLLOQUIAL = {"wanna": "want to", "gonna": "going to", "gotta": "got to", "gimme": "give me", "lemme": "let me",
+              "kinda": "kind of", "sorta": "sort of", "dunno": "do not know"}
+
+
+def words(text, reading="plain"):
+    """Normalized words. Numbers read "plain" (1979 "one thousand nine hundred seventy
+    nine"), in "pairs" (years, model numbers: "nineteen seventy nine") or as "digits"
+    (phone numbers: "zero three three zero ...")."""
     t = text.lower().replace("’", "'")
     t = re.sub(r"(\d+)\s*%", r"\1 percent", t)
     t = re.sub(r"\bno\.\s*(?=\d)", "number ", t)  # "No.1" is "number one", not a negation
@@ -75,14 +82,17 @@ def words(text, pairs=False):
     t = re.sub(r"(\d)\.(\d)", r"\1 point \2", t)
     t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t)  # "a2.5cm" -> "a 2.5 cm"
     t = re.sub(r"\bnevermind\b", "never mind", t)  # one word or two, same meaning
+    t = re.sub(r"\b(" + "|".join(COLLOQUIAL) + r")\b", lambda m: COLLOQUIAL[m.group(1)], t)
     for a, b in (("won't", "will not"), ("can't", "can not"), ("n't", " not"), ("'re", " are"),
                  ("'ve", " have"), ("'ll", " will"), ("'m", " am"), ("'d", " would"), ("'s", " is")):
         t = t.replace(a, b)
     out = []
     for w in re.findall(r"[a-z0-9]+", t):
-        if w.isdigit() and len(w) < 13:
+        if w.isdigit() and reading == "digits":
+            out += ["zero" if d == "0" else spell(int(d)) for d in w]
+        elif w.isdigit() and len(w) < 13:
             n = int(w)
-            out += (spell_pairs(n) if pairs and 1000 < n < 10000 and n % 1000 else spell(n)).split()
+            out += (spell_pairs(n) if reading == "pairs" and 1000 < n < 10000 and n % 1000 else spell(n)).split()
         else:
             out.append(ABBREV.get(w, w))
     return out
@@ -90,8 +100,9 @@ def words(text, pairs=False):
 
 def compare(want, got):
     """(notes, similarity): leading junk, and the better of word- or letter-level match.
-    Four-digit numbers count in either reading ("1979" is "nineteen seventy nine")."""
-    want_w, got_w = max(((words(want, a), words(got, b)) for a in (False, True) for b in (False, True)),
+    Numbers count in any reading ("1979" is "nineteen seventy nine", "03" "zero three")."""
+    readings = ("plain", "pairs", "digits")
+    want_w, got_w = max(((words(want, a), words(got, b)) for a in readings for b in readings),
                         key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio())
     notes = []
     if want_w and want_w[0] in got_w[:4] and got_w.index(want_w[0]) > 0:
