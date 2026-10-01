@@ -33,6 +33,8 @@ import time
 import numpy as np
 import soundfile as sf
 
+from gpulock import hold_gpu
+
 HERE = pathlib.Path(__file__).resolve().parent
 # The environment it runs in (dub.py prepends this to "python vc.py ...").
 UV_RUN = ["uv", "run", "--no-project", "--python", "3.11",
@@ -119,6 +121,7 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     pairs = json.loads(pathlib.Path(args.pairs).read_text(encoding="utf-8"))
     t0 = time.time()
+    hold_gpu()  # shared with dub.py when it starts this
     model = Chatterbox()
     print(f"  voice conversion: Chatterbox loaded in {time.time() - t0:.0f} s, {len(pairs)} takes", flush=True)
     for p in pairs:

@@ -36,6 +36,8 @@ import sys
 
 import numpy as np
 
+from gpulock import hold_gpu
+
 HERE = pathlib.Path(__file__).resolve().parent
 W, H = 960, 540      # positions are kept in these units, whatever the video's size
 OFF_MARKS = "≪≤《«<"
@@ -53,6 +55,7 @@ def engine():
     except Exception:
         pass
     from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
+    hold_gpu()
     cuda = "CUDAExecutionProvider" in onnxruntime.get_available_providers()
     return RapidOCR(params={
         "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,

@@ -13,9 +13,15 @@ dubrama dubs Japanese video into English end to end:
   IndexTTS converted to the actor's timbre. Either way, each take is re-timed
   to end where the actor stops (fill), and `fit.py` predicts each voice's
   lengths before the first render.
-- **Checks and packaging.** Every line is transcribed back and checked. Parts
-  are assembled into one video with the dub, the original audio, and English
-  and Japanese subtitles.
+- **Checks and packaging.** Every line is transcribed back and checked, with up
+  to three rounds of fresh takes for what fails. The dubs go into the source
+  file itself, renamed "(dubbed)": one English track per voice, the original
+  audio, and English and Japanese subtitles.
+- **Running it.** `dubrama.py` runs a whole dub around the agent's directing:
+  the machine steps in order, each part rendered as soon as its script is
+  ready, one GPU job at a time, delivery and a report of what to listen for.
+  The agent directs; on a long video, helper agents can direct batches of
+  parts against the show's notes.
 
 How each piece was chosen, and the measurements behind it, are in
 [research.md](research.md). The tools are listed in

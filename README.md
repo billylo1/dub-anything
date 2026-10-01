@@ -22,14 +22,14 @@ and `AGENTS.md` tells it how:
 In practice:
 
 1. Set up once: [docs/setup.md](docs/setup.md).
-2. Put the video in `videos\` and ask, for example: *"Dub the first 10 minutes
-   of videos\my-show.mkv."*
-3. Answer one question: which voice (below).
-4. Listen to what the agent sends and to the moments it asks you to check, and
-   say what to change.
-5. Watch the result: `videos\<show>-parts\dubbed\<show>.dubbed.p1-4.mp4`, with
-   the dub as the default audio track, the original as a second track, and
-   English and Japanese subtitles.
+2. Ask, for example: *"Dub D:\movies\my-show.mkv."*
+3. Answer one question: which voice, or both (below).
+4. Wait. The agent tells you if something needs you, and at the end gives you
+   a list of moments to listen to. Say what to change.
+5. Watch the result: your file itself, renamed `my-show (dubbed).mkv`. The
+   English dub plays by default (the actor's voice when you chose both), the
+   original audio is the last track, and English and Japanese subtitles are
+   included.
 
 ## The one choice: the voice
 
@@ -37,10 +37,11 @@ In practice:
 |---|---|---|
 | Sounds like | The actor speaking English, with their own accent | Native American English, converted towards each actor's voice |
 | Best for | Live action | Anime and animation |
-| Trade-off | Accented English | Looser timing and a little less of the acting; about 4× slower to render |
+| Trade-off | Accented English | Less like the actors on live action, and a little less of the acting; about 4× slower to render |
 
-Not sure? The agent can render one short part both ways first. Everything else
-(separation, timing, voice processing) has defaults chosen by ear.
+Not sure? Ask for both: each gets its own audio track, and you switch between
+them in the player. Everything else (separation, timing, voice processing) has
+defaults chosen by ear.
 
 ## How it works
 
@@ -68,8 +69,18 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Doing it by hand
 
-The agent's loop can be run by hand with VoiceStudio's Python
-(`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`) and the backend running:
+With VoiceStudio's Python (`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`),
+`dubrama.py` runs the machine work of a whole dub; you write the scripts:
+
+```powershell
+& $py dubrama.py new D:\movies\my-show.mkv --voices both   # a job named my_show
+& $py dubrama.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
+# write work\my_show-NN\script.json for each part, then:
+& $py dubrama.py ready my_show 01
+& $py dubrama.py status my_show
+```
+
+Or step by step, with the backend running (`backend.py start`):
 
 ```powershell
 & $py split.py videos\episode.mkv                     # long video -> parts at pauses
@@ -79,6 +90,7 @@ The agent's loop can be run by hand with VoiceStudio's Python
 & $py dub.py generate episode-01 --match-level       # clone, time, mix, export
 & $py lineqa.py episode-01                           # check each rendered line
 & $py assemble.py episode --parts 1-4                # one video with both audio tracks
+& $py deliver.py D:\movies\episode.mkv actor=videos\episode-parts\dubbed\episode.dubbed.mp4
 ```
 
 Some steps need their own environments (`separate.py`, `subs.py`, `second.py`;

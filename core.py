@@ -109,6 +109,8 @@ def unclean_windows(work, job_id, lines, ids, dips=False):
         # longer minimum would merge the two speakers into one span.
         opts = draft.VadOptions(threshold=0.5, min_silence_duration_ms=50, speech_pad_ms=0)
         spans = [(s["start"] / sr, s["end"] / sr) for s in draft.get_speech_timestamps(audio, opts)]
+        from gpulock import hold_gpu
+        hold_gpu("window check")
         model = draft.WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
         embed = draft.embedder()
         voices = load_json(WORK / "voices.json", {})
@@ -359,7 +361,7 @@ def indextts_length(text, actor, speed=1.0):
 SHORT_BY = 0.5  # s of the actor's speech left uncovered that makes a line "SHORT"
 
 
-def fit_rows(name, overflow=0.3, predict=False, short=False):
+def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
     """Each rendered clip's length vs its window, and the room concise timing
     allows: VoiceStudio's own rule (dub_generate.py) of the window, plus up to
     0.25 s of the gap before the next line (less a 0.05 s buffer), plus the
@@ -379,13 +381,21 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
     A part in the "american" voice is estimated with IndexTTS's length
     (indextts_length) instead. Its duration factor scales a take exactly, so
     there fill's slowest speed is credited, and "SHORT?" means even that ends
-    SHORT_BY early."""
+    SHORT_BY early. `voice` estimates the part in another voice than its own
+    renders (the director's script in the American voice, with each line's
+    "text_us"): its takes are ignored and every line is estimated."""
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
     script = load_json(work / "script.json")
     lines = script["lines"]
     rendered = load_json(work / "rendered.json", {})
     mode = script.get("render", {})
+    other = voice is not None and voice != mode.get("voice", "actor")
+    if other:
+        # Another voice's render: nothing of this one's applies, and it renders with fill.
+        rendered, mode = {}, {"fill": True, "voice": voice}
+        if voice == "american":
+            lines = [{**line, "text": line.get("text_us", line["text"])} for line in lines]
     fill = mode.get("fill", not rendered)
     fastest = FILL_SPEED[1] if fill else 1.0
     american = mode.get("voice") == "american"
@@ -405,6 +415,8 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
     rows = []
     for i, (line, sid, span) in enumerate(zip(lines, ids, spans)):
         wav = JOBS / job / f"seg_en_{sid}.wav"
+        if other:
+            wav = JOBS / job / "none"
         end = span and span[1] if short else None
         row = {"i": i, "start": line["start"], "text": line["text"], "window": line["end"] - line["start"],
                "actor": end}
@@ -426,10 +438,23 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
             if length:
                 row["flag"] = "OVER?" if at_speed(length, fastest, exponent) > row["room"] else (
                     "risk" if at_speed(length, fastest, exponent) > row["room"] - 0.3 else "")
-        if short and end and length and not row["flag"] and                 (at_speed(length, slowest, exponent) if row["speech"] is None else length) < end - SHORT_BY:
+        # A take as rendered; an estimate as slow as fill can make it (American: exact).
+        ends_at = at_speed(length, slowest, exponent) if length and row["speech"] is None else length
+        if short and end and length and not row["flag"] and ends_at < end - SHORT_BY:
             row["flag"] = "SHORT" if row["speech"] is not None else "SHORT?"
         rows.append(row)
     return rows
+
+
+# A part's work folder per voice: <show>-NN for the actor's voice (the director's
+# script lives there), <show>-NN.us for the American voice, whose script dubrama.py
+# derives from it (a line's "text_us" replaces its text for that voice only).
+VOICE_SUFFIX = {"actor": "", "american": ".us"}
+VOICE_LABEL = {"actor": "actor's voice", "american": "American"}
+
+
+def voice_part(name, voice):
+    return name + VOICE_SUFFIX[voice]
 
 
 def line_id(line):

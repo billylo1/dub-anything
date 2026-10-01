@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from core import JOBS, WORK, load_json, whisper_setup
+from gpulock import hold_gpu
 
 whisper_setup()  # VoiceStudio's downloaded Whisper + cuDNN 8
 from faster_whisper import WhisperModel  # noqa: E402
@@ -38,6 +39,7 @@ if seg_doc.exists():
 else:
     source, offset = args.source, (args.times[0] if args.times else 0.0)
 
+hold_gpu()
 model = WhisperModel(args.model, device="auto", compute_type="default")
 segs, _ = model.transcribe(source, language=args.lang, beam_size=5, vad_filter=False,
                            condition_on_previous_text=False, word_timestamps=True)

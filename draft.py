@@ -42,6 +42,7 @@ import numpy as np
 
 import edges
 from core import HF_CACHE, JOBS, WORK, load_json, voice_clips, whisper_setup
+from gpulock import hold_gpu
 
 whisper_setup()
 import torch  # noqa: E402
@@ -153,6 +154,7 @@ def uncovered(phrases, spans, min_len=0.3):
 
 
 def embedder():
+    hold_gpu()
     from pyannote.audio import Inference, Model
     from pyannote.audio.core.task import Problem, Resolution, Specifications
     # pyannote 3.4's from_pretrained breaks on huggingface_hub 1.x: load the file.
@@ -237,6 +239,7 @@ def main():
                     help="keep each clip's draft.json transcript and only suggest speakers again (after "
                          "building voices for a new show's first drafts)")
     args = ap.parse_args()
+    hold_gpu()
     model = None if args.recast else WhisperModel(args.model, device="auto", compute_type="default")
     loaded = []
 

@@ -13,6 +13,8 @@ import argparse
 import sys
 
 import numpy as np
+from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.spatial.distance import squareform
 
 import draft
 from core import JOBS, WORK, load_json
@@ -21,19 +23,16 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def cluster(sim, threshold):
-    groups = [[k] for k in range(len(sim))]
-    while len(groups) > 1:
-        best, pair = -1.0, None
-        for i in range(len(groups)):
-            for j in range(i + 1, len(groups)):
-                s = sim[np.ix_(groups[i], groups[j])].mean()
-                if s > best:
-                    best, pair = s, (i, j)
-        if best < threshold:
-            break
-        i, j = pair
-        groups[i] += groups.pop(j)
-    return sorted(groups, key=len, reverse=True)
+    """Average linkage: merge while two clusters' mean similarity is at least threshold."""
+    if len(sim) < 2:
+        return [list(range(len(sim)))]
+    dist = np.clip(1 - sim, 0, 2)
+    np.fill_diagonal(dist, 0)
+    labels = fcluster(linkage(squareform(dist, checks=False), "average"), 1 - threshold, "distance")
+    groups = {}
+    for k, label in enumerate(labels):
+        groups.setdefault(label, []).append(k)
+    return sorted(groups.values(), key=len, reverse=True)
 
 
 def main():

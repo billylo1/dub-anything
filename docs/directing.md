@@ -77,6 +77,14 @@ differs.
   word in it.
 - `line_ref` (optional): `false` keeps the character's reference for this line
   instead of its own original (see "Render").
+- `text_us` (optional): the English for the American voice when it needs to
+  differ, usually fuller text for a line `fit.py --voice american` calls `SHORT?`.
+  `dubrama.py` renders that voice from a copy of the script in `<part>.us`.
+- `listen` (optional): why the user should check this line (a casting guess, a
+  misheard word); `dubrama.py` puts it in the report with the film time.
+
+A top-level `"ready": true` tells `dubrama.py` the part is directed
+(`dubrama.py ready <slug> <NN>`); it renders nothing before that.
 
 A top-level `"render": {"line_ref": true, "fill": true, "dips": true}` records how
 the part is rendered (see "Render"). `dub.py generate` writes it on the first run:
@@ -104,9 +112,10 @@ list to both subtitle tracks.
 ## Workflow
 
 For a new show, settle one thing with the user before the first part: the
-voice (see "Voice" under Render). Everything else has a default. For a video
-split into parts, AGENTS.md ("Scheduling a split video") gives the order that
-overlaps the machine work with the directing.
+voice, or both (see "Voice" under Render). Everything else has a default.
+`dubrama.py` runs the machine steps below for a whole video, around your
+directing (AGENTS.md, "A dub, start to finish"); this section is what each step
+does and how to direct it.
 
 ### 1. Prep and draft
 
@@ -421,11 +430,12 @@ above has a default.
   some of the intonation, a little lower in pitch. Per-line references don't
   apply.
 
-Recommend one by genre, and offer to render one short part both ways before
-committing. In trials, `"american"` came out closer to the actors than the
-clones on an animated series. On a live-action drama it stayed less like the
-actors than the clones, and conversion cost some of the native accent. Record
-the choice in `work/NOTES.md` and in each part's `render` block, so later parts
+Recommend one by genre, or both: `dubrama.py new --voices both` renders every
+part in each voice and delivers both tracks, the actor's playing by default. In
+trials, `"american"` came out closer to the actors than the clones on an
+animated series. On a live-action drama it stayed less like the actors than the
+clones, and conversion cost some of the native accent. Record the choice in
+`work/NOTES.md`; the job and each part's `render` block keep it, so later parts
 follow it and approved parts don't change. Two things that look like options
 aren't. OmniVoice's `american accent` instruct tag doesn't change the accent
 while the reference carries the actor's, which per-line references always do.
@@ -497,6 +507,19 @@ soundtrack. The subtitles are English (the dub's text) and Japanese (the
 corrected original), both including `captions`. Any text subtitle tracks already
 in the source are kept, and `--sub file.srt:lang[:title]` adds more (for example
 official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
+`--voice american` assembles the American renders instead.
+
+```powershell
+& $py deliver.py <source video> actor=<actor assembled.mp4> american=<american assembled.mp4>
+```
+
+`deliver.py` puts the dubs into the source file itself: each voice's English
+track first (the default voice's plays; with both, the actor's), then the
+source's own audio and subtitles untouched, with English subtitles per voice and
+the Japanese transcript. Every copied stream is checked against its input before
+the new file replaces the source, renamed `<name> (dubbed)`. Delivering again
+replaces the dub tracks a "(dubbed)" file already has. `dubrama.py` does both
+steps when every part is done.
 
 ## Gotchas
 
@@ -602,6 +625,11 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
   tens of seconds a line, and long per-line references fail with "Generation
   failed". `POST /system/flush-memory` on the backend releases it without
   unloading anything; `dub.py generate` calls it before and after each run.
+  Prepping a whole video fills it too: transcription, diarisation and
+  separation stay cached, and the first render then fails with "out of memory",
+  even in the flush itself. Only a restart (`backend.py restart`) frees that;
+  `dubrama.py` restarts the backend after prep and when a render runs out of
+  memory.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
@@ -625,6 +653,7 @@ The loop, in the order it runs:
 
 | Script | Does |
 |---|---|
+| `dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
 | `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
@@ -636,10 +665,11 @@ The loop, in the order it runs:
 | `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
-| `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
+| `fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
 | `lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
+| `assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
+| `deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` |
 
 Used now and then:
 
@@ -650,4 +680,5 @@ Used now and then:
 | `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 | `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
-| `core.py` | Not a tool: paths, voices, line ids, takes and length prediction shared by the scripts |
+| `backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
+| `core.py`, `gpulock.py` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping |

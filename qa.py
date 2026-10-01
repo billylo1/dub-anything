@@ -9,6 +9,7 @@ import sys
 import tempfile
 
 from core import WORK, out_dir, whisper_setup
+from gpulock import hold_gpu
 
 whisper_setup()  # VoiceStudio's downloaded Whisper + cuDNN 8
 from faster_whisper import WhisperModel  # noqa: E402
@@ -22,6 +23,7 @@ script = json.loads((WORK / name / "script.json").read_text(encoding="utf-8"))
 
 wav = pathlib.Path(tempfile.gettempdir()) / f"qa-{name}.wav"
 subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(mp4), "-ac", "1", "-ar", "16000", str(wav)], check=True)
+hold_gpu()
 model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
 heard = []
 for lang in ("en", None):

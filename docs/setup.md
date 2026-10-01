@@ -64,14 +64,22 @@ IndexTTS 2.5 is optional (about 12 GB). Install it through the running backend:
 
 ## 4. Start the backend
 
-Leave this running in its own terminal:
+From this repo, with VoiceStudio's Python:
+
+```powershell
+& C:\git\VoiceStudio\.venv\Scripts\python.exe backend.py start
+```
+
+It starts the backend detached (it keeps running after the terminal or the
+agent's session closes), logs to `backend.log` beside the data folder, and
+waits until `http://127.0.0.1:3900/health` returns
+`{"status":"ok","device":"cuda (...)"}`. `backend.py status`, `stop` and
+`restart` do what they say; `dubrama.py run` starts it when it's down. Or run it
+yourself in a terminal you leave open:
 
 ```powershell
 cd C:\git\VoiceStudio; uv run --no-sync uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900
 ```
-
-It's ready when `http://127.0.0.1:3900/health` returns
-`{"status":"ok","device":"cuda (...)"}`.
 
 Restart it after an NVIDIA driver update. A backend that was running across the
 update reports "CUDA out of memory" on an empty GPU and falls back to the CPU,

@@ -34,6 +34,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import draft  # noqa: E402
 import register as R  # noqa: E402
 from core import JOBS, WORK, line_id, load_json, speech_length  # noqa: E402
+from gpulock import hold_gpu  # noqa: E402
 from faster_whisper.audio import decode_audio  # noqa: E402
 
 SR = 16000
@@ -89,6 +90,7 @@ def main():
     chars = [b for b in cent if b in show.norm and sum(1 for k in keep if orig[k][0] == b and orig[k][1]) >= 5]
 
     from torchaudio.pipelines import SQUIM_OBJECTIVE
+    hold_gpu()
     squim = SQUIM_OBJECTIVE.get_model().to("cuda").eval()
     whisper = draft.WhisperModel("Systran/faster-whisper-large-v3", device="cuda", compute_type="float16")
 

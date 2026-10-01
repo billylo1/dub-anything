@@ -56,7 +56,9 @@ def snap(t):
     return round(round(t / FRAME) * FRAME, 3)
 
 
-whole = [tuple(min(snap(max(float(x), 0)), duration) for x in w.split("-")) for w in args.whole]
+# A --whole end within a frame of the video's end is the end (no sliver of a part after it).
+whole = [tuple(duration if duration - t < FRAME else t for t in (min(snap(max(float(x), 0)), duration)
+                                                                 for x in w.split("-"))) for w in args.whole]
 bounds = sorted({0.0, duration, *(t for w in whole for t in w)})
 step, cuts = args.minutes * 60, [0.0]
 for lo, hi in itertools.pairwise(bounds):

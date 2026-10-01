@@ -33,6 +33,7 @@ import sys
 import soundfile as sf
 
 from core import JOBS, WORK, line_id, load_json, whisper_setup
+from gpulock import hold_gpu
 
 whisper_setup()
 from faster_whisper import WhisperModel  # noqa: E402
@@ -59,7 +60,14 @@ def spell(n):
             return f"{spell(q)} {name}" + ("" if r == 0 else f" {spell(r)}")
 
 
-def words(text):
+def spell_pairs(n):
+    """A four-digit number read in pairs, as years and model numbers are:
+    1979 "nineteen seventy nine", 5410 "fifty four ten", 3400 "thirty four hundred"."""
+    hi, lo = divmod(n, 100)
+    return f"{spell(hi)} " + ("hundred" if lo == 0 else f"oh {spell(lo)}" if lo < 10 else spell(lo))
+
+
+def words(text, pairs=False):
     t = text.lower().replace("’", "'")
     t = re.sub(r"(\d+)\s*%", r"\1 percent", t)
     t = re.sub(r"\bno\.\s*(?=\d)", "number ", t)  # "No.1" is "number one", not a negation
@@ -72,13 +80,19 @@ def words(text):
         t = t.replace(a, b)
     out = []
     for w in re.findall(r"[a-z0-9]+", t):
-        out += spell(int(w)).split() if w.isdigit() and len(w) < 13 else [ABBREV.get(w, w)]
+        if w.isdigit() and len(w) < 13:
+            n = int(w)
+            out += (spell_pairs(n) if pairs and 1000 < n < 10000 and n % 1000 else spell(n)).split()
+        else:
+            out.append(ABBREV.get(w, w))
     return out
 
 
 def compare(want, got):
-    """(notes, similarity): leading junk, and the better of word- or letter-level match."""
-    want_w, got_w = words(want), words(got)
+    """(notes, similarity): leading junk, and the better of word- or letter-level match.
+    Four-digit numbers count in either reading ("1979" is "nineteen seventy nine")."""
+    want_w, got_w = max(((words(want, a), words(got, b)) for a in (False, True) for b in (False, True)),
+                        key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio())
     notes = []
     if want_w and want_w[0] in got_w[:4] and got_w.index(want_w[0]) > 0:
         notes.append(f"leading extra: '{' '.join(got_w[:got_w.index(want_w[0])])}'")
@@ -198,6 +212,7 @@ def main():
     ap.add_argument("--all", action="store_true", help="print every line, not just flagged ones")
     ap.add_argument("--reroll", action="store_true", help="queue flagged lines for fresh takes")
     args = ap.parse_args()
+    hold_gpu()
     model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
     for name in args.names:
         if len(args.names) > 1:

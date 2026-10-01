@@ -23,6 +23,8 @@ import shutil
 import sys
 import tempfile
 
+from gpulock import hold_gpu
+
 HERE = pathlib.Path(__file__).resolve().parent
 WORK = HERE / "work"
 # Same resolution as core.py / VoiceStudio's backend/core/config.py.
@@ -65,6 +67,7 @@ def main():
 
     from audio_separator.separator import Separator
 
+    hold_gpu()
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="separate-"))
     sep = Separator(model_file_dir=str(MODELS), output_dir=str(tmp), output_format="WAV")
     sep.load_model(model_filename=args.model)

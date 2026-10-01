@@ -29,6 +29,7 @@ import soundfile as sf
 from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_spans, fit_rows,
                   indextts_length, line_id, line_refs, load_json, out_dir, speech_length, srt_time, take_length,
                   voice_sig, voice_wav)
+from gpulock import hold_gpu
 
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 
@@ -615,6 +616,7 @@ def main():
                         "speed their predicted length asks for, instead of at natural pace first")
     b.set_defaults(fn=cmd_generate)
     args = p.parse_args()
+    hold_gpu()  # both ask the backend to run models: transcription, or synthesis
     if args.fn is not cmd_generate:
         return args.fn(args)
     flush_gpu()

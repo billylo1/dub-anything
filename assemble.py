@@ -1,9 +1,10 @@
 """Package dubbed clips as one video: dub + original audio, subtitles in both languages.
 
-Usage: assemble.py <stem> [--parts 1-4] [--out FILE] [--sub FILE.srt:lang[:title]] ...
+Usage: assemble.py <stem> [--voice actor|american] [--parts 1-4] [--out FILE] [--sub FILE.srt:lang[:title]] ...
 
 <stem> is a split video (videos/<stem>-parts/parts.json from split.py) or a
-single prepped clip (work/<stem>). The result has:
+single prepped clip (work/<stem>). --voice american assembles the parts' American
+renders (work/<part>.us, see core.voice_part). The result has:
   - the source video (stream-copied when starting at 0, so no seams at part cuts)
   - audio 1: the dub (default), audio 2: the original soundtrack
   - soft subtitles: the dub's text and the corrected original from script.json
@@ -19,7 +20,7 @@ import re
 import subprocess
 import sys
 
-from core import HERE, WORK, load_json, out_dir, srt_time
+from core import HERE, VOICE_LABEL, WORK, load_json, out_dir, srt_time, voice_part
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu"}
@@ -50,6 +51,8 @@ def write_srt(path, cues):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("stem")
+    ap.add_argument("--voice", choices=list(VOICE_LABEL), default="actor",
+                    help="which voice's renders to assemble (default: the actor's voice)")
     ap.add_argument("--parts", help="range of split parts, e.g. 1-4 (default: all)")
     ap.add_argument("--out")
     ap.add_argument("--sub", action="append", default=[],
@@ -67,6 +70,7 @@ def main():
         source = pathlib.Path(doc["video"])
         parts = [{"name": args.stem, "start": 0.0,
                   "end": float(probe(source)["format"]["duration"])}]
+    parts = [{**p, "name": voice_part(p["name"], args.voice)} for p in parts]
     t0, t1 = parts[0]["start"], parts[-1]["end"]
 
     dubs, en, ja = [], [], []
@@ -93,7 +97,8 @@ def main():
     first_doc = load_json(WORK / parts[0]["name"] / "segments.json") or {"video": parts[0].get("file", source)}
     dest = out_dir(first_doc)
     suffix = f".p{args.parts}" if args.parts else ""
-    out = pathlib.Path(args.out) if args.out else dest / f"{args.stem}.dubbed{suffix}.mp4"
+    variant = "" if args.voice == "actor" else f".{args.voice}"
+    out = pathlib.Path(args.out) if args.out else dest / f"{args.stem}{variant}.dubbed{suffix}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
     subs = []
     for lang, cues in (("en", en), ("ja", ja)):
@@ -139,7 +144,7 @@ def main():
         # MP4 players show handler_name as the track name; title for everyone else.
         return [f"-metadata:s:{spec}", f"language={lang}"] + (
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else [])
-    cmd += label("a:0", "eng", "English (dub)") + label("a:1", "jpn", "日本語 (original)")
+    cmd += label("a:0", "eng", f"English dub ({VOICE_LABEL[args.voice]})") + label("a:1", "jpn", "日本語 (original)")
     sub_meta = [((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs]
     sub_meta += [(lang, title) for _, lang, title, _ in subs]
     for k, (lang, title) in enumerate(sub_meta):
