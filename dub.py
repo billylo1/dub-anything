@@ -17,6 +17,7 @@ import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -25,9 +26,9 @@ import numpy as np
 import requests
 import soundfile as sf
 
-from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_ends, fit_rows,
-                  line_id, line_refs, load_json, out_dir, speech_length, srt_time, take_length, voice_sig,
-                  voice_wav)
+from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_spans, fit_rows,
+                  indextts_length, line_id, line_refs, load_json, out_dir, speech_length, srt_time, take_length,
+                  voice_sig, voice_wav)
 
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 
@@ -330,9 +331,13 @@ def cmd_generate(args):
     converted = load_json(converted_path, {})
     rendered_path = work / "rendered.json"  # synthesis settings each cached line was made with
     rendered = load_json(rendered_path, {})
-    # Takes lineqa.py --reroll flagged: synthesized again (on the first pass) for a fresh roll.
-    reroll = {r["id"] for r in load_json(work / "reroll.json", [])} if script else set()
-    ends = actor_ends(job_id, script["lines"]) if mode["fill"] else None
+    # Takes lineqa.py --reroll flagged: synthesized again (on the first pass) for a fresh roll,
+    # or, when only the voice conversion garbled them, converted again.
+    queued = load_json(work / "reroll.json", []) if script else []
+    reroll = {r["id"] for r in queued if not r.get("reconvert")}
+    reconvert = {r["id"] for r in queued if r.get("reconvert")}
+    spans = actor_spans(job_id, script["lines"]) if mode["fill"] else None
+    ends = [span and span[1] for span in spans] if spans else None
     for line in script["lines"] if script else []:
         if re.search(r"(\.\.\.|…)\s*$", line["text"]):
             print(f"  warning {line['start']}: ends in '…'; the last word tends to get swallowed")
@@ -346,14 +351,18 @@ def cmd_generate(args):
         return seg
 
     def convert(ids):
-        """Give every take not converted yet the actor's timbre (vc.py, its own environment)."""
+        """Give every take not converted yet the actor's timbre (vc.py, its own environment),
+        and convert the engine take of each line queued for it again."""
         import vc
         todo = []
         for line, i in zip(script["lines"], ids):
             seg, src = JOBS / job_id / f"seg_en_{i}.wav", JOBS / job_id / f"src_en_{i}.wav"
-            if not seg.exists() or converted.get(i) == file_sha(seg):
+            if not seg.exists():
                 continue
-            shutil.copy2(seg, src)
+            if converted.get(i) != file_sha(seg):
+                shutil.copy2(seg, src)
+            elif i not in reconvert or not src.exists():
+                continue
             todo.append({"in": str(src), "target": str(voice_wav(line["voice"])), "out": str(seg), "id": i})
         if not todo:
             return False
@@ -414,14 +423,17 @@ def cmd_generate(args):
             # Re-time takes that stop well short of the actor or run past them:
             # render them at the speed that lands their end on the actor's last sound.
             # With predict_speed, a line with no take yet starts at the speed its
-            # predicted length (take_length) asks for, and every correction follows
-            # at_speed rather than assuming length changes in proportion to speed.
-            power = 1 / SPEED_EXPONENT if mode["predict_speed"] else 1.0
-            for seg, i, end, line in zip(segments, ids, ends, script["lines"]):
+            # predicted length (take_length, or indextts_length) asks for, and every
+            # correction follows at_speed rather than assuming length changes in
+            # proportion to speed. IndexTTS's duration factor is exact: it does.
+            power = 1 / SPEED_EXPONENT if mode["predict_speed"] and not american else 1.0
+            for seg, i, end, line, span in zip(segments, ids, ends, script["lines"], spans):
                 prev = rendered.get(i, {}).get("speed")
                 speed, wav = prev, engine_take(i)
                 length = speech_length(wav) if wav.exists() else None
-                if length is None and end and mode["predict_speed"] and (i in refs or "clips" in voices[line["voice"]]):
+                if length is None and end and mode["predict_speed"] and american:
+                    length, prev, speed = indextts_length(line["text"], span[1] - span[0]), None, None
+                elif length is None and end and mode["predict_speed"] and (i in refs or "clips" in voices[line["voice"]]):
                     ref = refs.get(i) or (voice_wav(line["voice"]), voices[line["voice"]].get("ref_text", ""))
                     # The prediction is at natural pace, whatever speed a lost take had.
                     length, prev, speed = take_length(*ref, line["text"]), None, None
@@ -435,6 +447,17 @@ def cmd_generate(args):
         if mode["fill"] and not first:
             stuck = {ids[row["i"]] for row in fit_rows(args.name, args.overflow) if row["flag"] == "OVER"
                      and rendered.get(ids[row["i"]], {}).get("speed") == settings[ids[row["i"]]].get("speed") == FILL_SPEED[1]}
+        if args.engine == "indextts2":
+            # Seeded takes: fill re-times a line without changing its performance
+            # (IndexTTS's duration factor stretches the same take); only a re-roll
+            # draws a new one.
+            for seg, i in zip(segments, ids):
+                seed = rendered.get(i, {}).get("seed")
+                if (first and i in reroll) or i in stuck:
+                    seed = secrets.randbelow(2 ** 31)
+                elif seed is None:
+                    seed = int(i[1:], 16) % 2 ** 31
+                seg["seed"] = settings[i]["seed"] = seed
         if args.full and first:
             return segments, ids, settings, None
         # Missing clips, clips made with other settings, or queued re-rolls;
@@ -526,7 +549,7 @@ def cmd_generate(args):
         if prev_engine and prev_engine != args.engine:
             use_tts_engine(prev_engine)
     (work / "generate-result.json").write_text(json.dumps(done, ensure_ascii=False, indent=2), encoding="utf-8")
-    if script and reroll:
+    if script and queued:
         (work / "reroll.json").unlink(missing_ok=True)
 
     out = out_dir(doc)

@@ -13,7 +13,10 @@ take's. The library's inaudible Perth watermark is applied.
 
 Each output keeps the input's sample rate, channel count and exact length (the
 model runs up to about 1% long; the tail is trimmed) and is level-matched to the
-input (RMS over its louder frames), with a peak guard at -0.1 dBFS.
+input (RMS over its louder frames), with a peak guard at -0.1 dBFS. It is silent
+outside the input's own speech (as VoiceStudio trims takes): the model now and
+then turns the silence around a take into sound, a stray "and" before the line,
+which made the take longer than its window.
 
 Setup: a clone of github.com/resemble-ai/chatterbox in vendor/chatterbox (or set
 CHATTERBOX_SRC). Only its voice converter is imported: the package's own
@@ -48,6 +51,23 @@ def resample(x, sr, to):
     import scipy.signal as ss
     g = gcd(int(sr), int(to))
     return ss.resample_poly(x, int(to) // g, int(sr) // g).astype("float32")
+
+
+def gate(y, x, sr, floor_db=-50.0, margin=0.05, fade=0.01):
+    """Silence `y` outside `x`'s speech: its first to last sample above -50 dBFS
+    plus 50 ms (VoiceStudio's trim_speech_padding), with 10 ms fades, so a
+    converted take is never longer than the take it was made from."""
+    voiced = np.nonzero(np.abs(x) > 10 ** (floor_db / 20))[0]
+    if not len(voiced):
+        return y
+    a, b = max(0, voiced[0] - int(margin * sr)), min(len(y), voiced[-1] + 1 + int(margin * sr))
+    w = np.zeros(len(y), "float32")
+    w[a:b] = 1.0
+    n = min(int(fade * sr), (b - a) // 2)
+    if n:
+        w[a:a + n] = np.linspace(0, 1, n)
+        w[b - n:b] = np.linspace(1, 0, n)
+    return y * w
 
 
 def active_rms(x, sr):
@@ -108,7 +128,7 @@ def main():
         y = resample(y, ysr, sr)
         n = len(x)
         y = y[:n] if len(y) >= n else np.concatenate([y, np.zeros(n - len(y), "float32")])
-        y = y * (active_rms(x, sr) / max(active_rms(y, sr), 1e-6))
+        y = gate(y * (active_rms(x, sr) / max(active_rms(y, sr), 1e-6)), x, sr)
         peak = float(np.abs(y).max())
         if peak > 0.989:
             y = y * (0.989 / peak)

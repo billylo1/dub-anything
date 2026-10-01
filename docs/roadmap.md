@@ -11,7 +11,8 @@ dubrama dubs Japanese video into English end to end:
 - **Voice and timing.** The actor's own voice: OmniVoice clones each actor,
   prompted with their delivery of each line (per-line references). Or American:
   IndexTTS converted to the actor's timbre. Either way, each take is re-timed
-  to end where the actor stops (fill).
+  to end where the actor stops (fill), and `fit.py` predicts each voice's
+  lengths before the first render.
 - **Checks and packaging.** Every line is transcribed back and checked. Parts
   are assembled into one video with the dub, the original audio, and English
   and Japanese subtitles.
@@ -22,19 +23,13 @@ How each piece was chosen, and the measurements behind it, are in
 
 ## Next, by payoff for what the listener hears
 
-1. **American-voice timing.** IndexTTS speaks faster than the clones, so
-   English written at the clones' pace ends early. On an animated series,
-   over a third of the lines sat at fill's slowest speed, and three times as
-   many ended early as with the clones. `fit.py` predicts only OmniVoice's
-   lengths. Teach it IndexTTS's pace, so `SHORT?` and `OVER?` work for that
-   voice too, and write fuller English before the first render.
-2. **Steadier short lines.** Lines under about 1.5 s cause most overflows, fill
+1. **Steadier short lines.** Lines under about 1.5 s cause most overflows, fill
    re-renders and garbled takes; one-word lines and stutters are the worst,
    and conversion makes them worse still. A re-roll no longer loses a better
    take (`lineqa.py --reroll` keeps each one and puts the best back). Next:
    render two or three takes of a short line up front and keep the one that
    fits and transcribes cleanly, instead of re-rolling round after round.
-3. **More lines on their own reference, and pauses inside lines.** In
+2. **More lines on their own reference, and pauses inside lines.** In
    overlapping dialogue many lines fall back to the character's reference.
    Cutting a reference at the dip between two voices (`dips`) and snapping
    touching windows to it recovered about a third of the run-on lines in fast
@@ -47,14 +42,17 @@ How each piece was chosen, and the measurements behind it, are in
 
    Fill aligns only where a line ends, so an actor who pauses mid-sentence
    still gets continuous English.
-4. **Captions, second pass.** A Japanese-trained OCR model, which would misread
+3. **Captions, second pass.** A Japanese-trained OCR model, which would misread
    fewer kana and kanji. Turn caption colours and bracketed names into speaker
    suggestions in `draft.py`.
-5. **Keep the intonation through conversion.** The American voice's converter
-   re-generates part of the pitch contour. A converter that kept it while still
-   gaining likeness would keep IndexTTS's acting; Seed-VC's pitch-preserving
-   model kept the contour but gained no likeness.
-6. **By ear, as listeners flag them:**
+4. **Keep the words and the intonation through conversion.** The American
+   voice's converter garbles about one line in twelve that IndexTTS said
+   right; converting again fixes about half, and the rest need fresh takes
+   (research.md, finding 15). It also re-generates part of the pitch contour.
+   A converter that kept both while still gaining likeness would keep
+   IndexTTS's acting; Seed-VC's pitch-preserving model kept the contour but
+   gained no likeness.
+5. **By ear, as listeners flag them:**
    - line edges: fragments `edges.py` skips, and VoiceStudio's 10 ms
      crossfade;
    - room acoustics per scene, starting from `tails.py` and the `echo` and

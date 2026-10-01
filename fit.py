@@ -5,13 +5,15 @@ Usage: fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job
 Lines not rendered yet get an estimate (~): the length OmniVoice itself will give
 them, computed with its own rule from the reference the render will use (the
 line's own original, or the voice's clips for the lines listed as falling back).
+A part in the "american" voice is estimated with IndexTTS's length instead, from
+the English and how long the actor speaks in the window (core.indextts_length).
 No render is needed, so it works for a new show's first part. They're flagged
 "OVER?" or "risk", to fix before rendering. "SHORT" / "SHORT?" marks English that
 ends well before the actor stops: write fuller text for it (slowing a take adds
 little). `dub.py generate` prints the same table for the failing lines when a
 line overflows.
 It first warns about any voice whose reference is much faster or slower than
-its speaker's lines: lines on that reference inherit its pace.
+its speaker's lines: lines on that reference inherit its pace (OmniVoice only).
 """
 import argparse
 import statistics
@@ -47,7 +49,8 @@ def pace_check(name, tolerance=0.15):
                   f"{'short' if ref > typical else 'long'}. Pick clips nearer the lines' pace.")
 
 
-pace_check(args.name)
+if load_json(WORK / args.name / "script.json").get("render", {}).get("voice") != "american":
+    pace_check(args.name)
 total_chars = total_secs = 0.0
 for row in fit_rows(args.name, predict=True, short=True):
     if args.only_flags and not row["flag"]:

@@ -109,6 +109,7 @@ and a render beside another model crawls or fails with "Generation failed".
 
 - `videos/` and `work/` are never committed: they hold copyrighted source,
   transcripts and references to real people's voices.
+- Commit directly to `main`; no feature branches.
 - You can't listen, so verify with every tool you have: careful ASR, VAD,
   speaker embeddings, frames, `fit.py`, `qa.py`, and per-line transcription of
   the rendered clips. Then tell the user what to listen for.

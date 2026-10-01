@@ -290,7 +290,11 @@ their own original (see "The reference sets the register").
   fastest speed can recover. The estimate is least reliable for such one-word
   lines.
   For `SHORT?`: write fuller English, closer to everything the actor says.
-  Don't count on fill to slow a short line down (see "Render"). Unscripted
+  Don't count on fill to slow a short line down (see "Render"). In the
+  `"american"` voice, `fit.py` estimates IndexTTS's length instead, from the
+  English syllables and how long the actor speaks in the window (IndexTTS
+  follows the pace of its emotion reference). There fill does slow a take, so
+  `SHORT?` means the English ends early even at fill's slowest speed. Unscripted
   talk (interviews, chat, a host's patter) is full of hedges, restarts and
   restatements. English written as tight as its meaning comes out a third
   short there, so write the first draft closer to all that was said, hedges
@@ -385,7 +389,9 @@ delivery of its line and ends where the actor stops:
   overflows, which otherwise stop the render and each need a reword or a wider
   window. A take that still overflows at 1.25 gets a fresh take on the next
   pass, since takes of one line differ by a few tenths of a second. If it
-  overflows after the last pass, `generate` stops and lists it.
+  overflows after the last pass, `generate` stops and lists it. In the
+  `"american"` voice a slowed take really is slower (see "Voice"), so there
+  fill can make up for English somewhat short of the actor.
   `"predict_speed": true` in the `render` block (or `--predict-speed`) renders
   each new line at the speed `fit.py`'s prediction asks for instead of at
   natural pace first. That halves the re-renders but gave the same timing
@@ -407,9 +413,12 @@ above has a default.
   every take to the actor's timbre with Chatterbox's voice converter.
   `generate` does both. Fill judges timing on IndexTTS's own takes (kept as
   `src_en_<id>.wav` in the job); once the timing has settled, the new takes
-  are converted and the part re-mixed. It is slower (about 8 s a line), its
-  takes end short of the actor more often, and conversion re-generates some
-  of the intonation, a little lower in pitch. Per-line references don't
+  are converted and the part re-mixed. Fill is exact here: speed reaches
+  IndexTTS as its duration factor, which stretches a take without changing
+  its pitch, and each take keeps its seed, so a re-timed take is the same
+  performance and one pass lands it on the actor (with the local patch). It
+  is slower (about 5 s a line, plus conversion), and conversion re-generates
+  some of the intonation, a little lower in pitch. Per-line references don't
   apply.
 
 Recommend one by genre, and offer to render one short part both ways before
@@ -466,7 +475,12 @@ How these were chosen, and what else was tried, is in
   dice, so re-check after each render. A fresh take can also come out worse
   than the one it replaced: `--reroll` keeps each replaced take
   (`work/<clip>/takes/`), and the next check puts the best one back when the
-  new take transcribes worse. The next `generate` then only re-mixes. Judge each flag against the intended
+  new take transcribes worse. The next `generate` then only re-mixes. In the
+  `"american"` voice most flags come from the conversion rather than from
+  IndexTTS, so when IndexTTS's own take of a flagged line says it right,
+  `--reroll` queues that take to be converted again instead (conversion is
+  random too), keeping its performance and timing; after two failed
+  conversions it gets a fresh take. Judge each flag against the intended
   text and the audio. Names and specialist vocabulary can confuse QA even when the take is
   correct; flag uncertain cases for the listener.
 - Listen. Machines can't judge acting.
@@ -622,7 +636,7 @@ The loop, in the order it runs:
 | `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
 | `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
-| `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule: `OVER?`, `risk`, `SHORT?` |
+| `fit.py <name>` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
 | `lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `assemble.py <stem> [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |

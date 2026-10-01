@@ -210,6 +210,38 @@ originals per part.
     nothing and keeps those lines on the actor's delivery, but on its own it
     isn't an audible gain.
 
+15. **The American voice's loose timing was a dropped setting.** VoiceStudio
+    passed fill's speed to OmniVoice but not to IndexTTS, so a take fill asked
+    to slow down came back at natural pace: on the animated series, takes
+    asked for at 0.8 spoke no more slowly per character than takes at 1.0,
+    and only 55% of lines ended within 0.25 s of the actor. IndexTTS 2.5 has
+    its own control, a duration factor that sets the length of the take's
+    acoustic stage, so a take stretches exactly while its words and pitch stay
+    put. Speed now goes there, and each take carries a seed, so re-timing a
+    line keeps its performance instead of drawing a new one. On a feature
+    film rendered both ways from the same script (about 1,200 lines), one
+    fill pass then put 92% of the American takes within 0.25 s of where the
+    actor stops, against 80% for the clones (median distance 0.09 against
+    0.13 s), with half the overrun.
+    IndexTTS has no length rule to read, but its takes follow the pace of
+    the emotion reference: a take's length is about 0.33 s, plus 0.10 s per
+    English syllable, plus 0.44 s per second the actor speaks in the window.
+    Fitted on about 780 takes from two shows, that is typically within
+    0.2 s and nine in ten within 0.5 s, and a fit on either show predicts the
+    other about as well; the English alone predicts it worse (0.26 s, 0.68
+    s). With fill able to slow a take, `fit.py` flagged only 3 lines of the
+    film as too short for the American voice.
+    Most of the American voice's QA flags come from the conversion, not from
+    IndexTTS: on the film, 133 of 1,240 lines were flagged on the first
+    pass, and IndexTTS's own take said three in four of them correctly.
+    Converting the same take again fixed about half of those within three
+    tries (conversion samples noise, but the speech units it starts from are
+    fixed, so some garbles repeat); fresh takes and the odd accepted name
+    left 1% flagged after four rounds. The converter also now and then turns
+    the silence around a take into sound, a stray "and" before the line,
+    which once made a take longer than its window, so converted takes are now
+    silenced outside the original take's speech.
+
 ## What the pipeline does now
 
 `dub.py generate` renders new parts with per-line references, fill and `dips` by
@@ -221,7 +253,10 @@ writes fuller text before rendering. `register.py`'s calm/raised
 references are now a fallback for characters whose lines can't use their own
 original. A show can instead take the `"american"` voice: IndexTTS with the
 emotion reference and fill, then `vc.py` converts each settled take to the
-actor's timbre.
+actor's timbre. Fill re-times its seeded takes exactly through IndexTTS's
+duration factor, `fit.py` predicts their length from the English and the
+actor's speech, and `lineqa.py` converts a take again when only the
+conversion garbled it.
 
 ## Open questions
 

@@ -186,19 +186,27 @@ FILL_TOL = 0.25           # s; a take ending this close to the actor's last soun
 FILL_SPEED = (0.8, 1.25)  # OmniVoice speeds allowed when re-timing a take (judge by ear)
 
 
-def actor_ends(job_id, lines):
-    """Seconds from each window's start to the actor's last sound in it (Silero VAD
-    on the separated vocals, as draft.py uses), or None where it hears nothing."""
+def actor_spans(job_id, lines):
+    """Seconds from each window's start to the actor's first and last sound in it
+    (Silero VAD on the separated vocals, as draft.py uses), or None where it hears
+    nothing."""
     from faster_whisper.audio import decode_audio
     from faster_whisper.vad import VadOptions, get_speech_timestamps
     audio = decode_audio(str(JOBS / job_id / "vocals.wav"), sampling_rate=16000)
     opts = VadOptions(threshold=0.5, min_silence_duration_ms=120, speech_pad_ms=30)
     spans = [(s["start"] / 16000, s["end"] / 16000) for s in get_speech_timestamps(audio, opts)]
-    ends = []
+    out = []
     for line in lines:
-        inside = [min(b, line["end"]) for a, b in spans if b > line["start"] and a < line["end"]]
-        ends.append(max(inside) - line["start"] if inside else None)
-    return ends
+        inside = [(max(a, line["start"]), min(b, line["end"])) for a, b in spans
+                  if b > line["start"] and a < line["end"]]
+        out.append((min(a for a, _ in inside) - line["start"], max(b for _, b in inside) - line["start"])
+                   if inside else None)
+    return out
+
+
+def actor_ends(job_id, lines):
+    """Seconds from each window's start to the actor's last sound in it, or None."""
+    return [span and span[1] for span in actor_spans(job_id, lines)]
 
 
 def load_json(path, default=None):
@@ -258,12 +266,12 @@ STRETCH_USED = 0.5    # share of OmniVoice's stretch of short lines that a take 
 SPEED_EXPONENT = 0.7  # a take asked for at speed s changes length by 1/s**0.7, not 1/s
 
 
-def at_speed(natural, speed):
+def at_speed(natural, speed, exponent=SPEED_EXPONENT):
     """A take's length at `speed`, from its length at natural pace. It changes
     less than the speed asks: slowed, OmniVoice often says the words at its own
     pace and leaves the extra time silent, which is trimmed; sped up, it
-    shortens less too."""
-    return natural / speed ** SPEED_EXPONENT
+    shortens less too. (IndexTTS's duration factor is exact: exponent 1.)"""
+    return natural / speed ** exponent
 
 
 @functools.lru_cache(maxsize=1)
@@ -317,6 +325,37 @@ def take_length(ref_audio, ref_text, text, speed=1.0):
     return at_speed((stretched - STRETCH_USED * (stretched - plain)) / OMNIVOICE_FPS, speed)
 
 
+# The "american" voice's engine, IndexTTS 2.5, fixes no length before it speaks. Following
+# each line's original as its emotion reference, it keeps much of the actor's pace, so
+# its takes follow both the English and how long the actor speaks in the window. Fitted
+# on about 780 takes from an animated series and a live-action film: typically within
+# 0.2 s, nine in ten within 0.5 s, and a fit on either show predicts the other as well.
+IDX_LENGTH = (0.33, 0.10, 0.44)  # s: base, per English syllable, per second of the actor's speech
+
+
+def syllables(text):
+    """English syllables, counted by vowel groups (a number as two per digit)."""
+    n = 0
+    for word in re.findall(r"[A-Za-z']+|\d+", text):
+        if word.isdigit():
+            n += 2 * len(word)
+            continue
+        word = word.lower().replace("'", "")
+        count = len(re.findall(r"[aeiouy]+", word))
+        if word.endswith("e") and not word.endswith(("le", "ee", "ye")) and count > 1:
+            count -= 1  # a silent e
+        n += max(count, 1)
+    return n
+
+
+def indextts_length(text, actor, speed=1.0):
+    """How long an IndexTTS take of `text` will be, in seconds of trimmed speech,
+    when the actor speaks for `actor` seconds in the window. Its duration factor
+    (VoiceStudio's speed, with the local patch) scales a take exactly."""
+    base, per_syllable, per_actor = IDX_LENGTH
+    return (base + per_syllable * syllables(text) + per_actor * actor) / speed
+
+
 SHORT_BY = 0.5  # s of the actor's speech left uncovered that makes a line "SHORT"
 
 
@@ -336,17 +375,25 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
     actor stops is flagged "SHORT" (the take as rendered) or "SHORT?" (the
     estimate at natural pace), with the actor's end in "actor": it needs fuller
     text. Estimates get no credit for fill's slowing: slowed takes often come
-    out little longer, so the text has to fill the time by itself."""
+    out little longer, so the text has to fill the time by itself.
+    A part in the "american" voice is estimated with IndexTTS's length
+    (indextts_length) instead. Its duration factor scales a take exactly, so
+    there fill's slowest speed is credited, and "SHORT?" means even that ends
+    SHORT_BY early."""
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
     script = load_json(work / "script.json")
     lines = script["lines"]
     rendered = load_json(work / "rendered.json", {})
     mode = script.get("render", {})
-    fastest = FILL_SPEED[1] if mode.get("fill", not rendered) else 1.0
+    fill = mode.get("fill", not rendered)
+    fastest = FILL_SPEED[1] if fill else 1.0
+    american = mode.get("voice") == "american"
+    exponent = 1.0 if american else SPEED_EXPONENT
+    slowest = FILL_SPEED[0] if fill and american else 1.0
     ids = [line_id(line) for line in lines]
     own, base = {}, {}  # per-line references by line id, voices' references by key
-    if predict:
+    if predict and not american:
         voices = load_json(WORK / "voices.json", {})
         todo = [k for k, i in enumerate(ids) if not (JOBS / job / f"seg_en_{i}.wav").exists()
                 and "clips" in voices[lines[k]["voice"]]]
@@ -354,10 +401,11 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
         if todo and mode.get("line_ref", not rendered):
             own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
                             dips=mode.get("dips", not rendered))
-    ends = actor_ends(job, lines) if short else [None] * len(lines)
+    spans = actor_spans(job, lines) if short or (predict and american) else [None] * len(lines)
     rows = []
-    for i, (line, sid, end) in enumerate(zip(lines, ids, ends)):
+    for i, (line, sid, span) in enumerate(zip(lines, ids, spans)):
         wav = JOBS / job / f"seg_en_{sid}.wav"
+        end = span and span[1] if short else None
         row = {"i": i, "start": line["start"], "text": line["text"], "window": line["end"] - line["start"],
                "actor": end}
         gap = lines[i + 1]["start"] - line["end"] if i + 1 < len(lines) else 0.0
@@ -371,11 +419,14 @@ def fit_rows(name, overflow=0.3, predict=False, short=False):
         else:
             row["speech"], row["flag"] = None, ""
             ref = own.get(sid) or base.get(line["voice"])
-            if ref:
+            if american and predict:
+                length = row["est"] = indextts_length(line["text"], span[1] - span[0] if span else row["window"])
+            elif ref:
                 length = row["est"] = take_length(*ref, line["text"])
-                row["flag"] = "OVER?" if at_speed(length, fastest) > row["room"] else (
-                    "risk" if at_speed(length, fastest) > row["room"] - 0.3 else "")
-        if short and end and length and not row["flag"] and length < end - SHORT_BY:
+            if length:
+                row["flag"] = "OVER?" if at_speed(length, fastest, exponent) > row["room"] else (
+                    "risk" if at_speed(length, fastest, exponent) > row["room"] - 0.3 else "")
+        if short and end and length and not row["flag"] and                 (at_speed(length, slowest, exponent) if row["speech"] is None else length) < end - SHORT_BY:
             row["flag"] = "SHORT" if row["speech"] is not None else "SHORT?"
         rows.append(row)
     return rows

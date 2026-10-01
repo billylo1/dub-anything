@@ -16,6 +16,10 @@ but a word a voice can't say needs rewording. A fresh take can also come out
 worse, so each take a re-roll replaces is kept (work/<name>/takes/), and the
 next check puts the best one back if the new take transcribes worse; the next
 `generate` then re-mixes it without synthesizing anything.
+In the "american" voice most flags come from the conversion, not from IndexTTS:
+when IndexTTS's own take of a flagged line says it right, the line is queued to
+be converted again (conversion is random too), keeping the take; after
+RECONVERTS failed tries the take is re-rolled instead.
 """
 import argparse
 import difflib
@@ -118,14 +122,13 @@ def check(name, model, show_all, reroll):
         if not wav.exists():
             print(f"L{i:02d} {line['start']:7.2f}  (not rendered)  {line['text']}")
             continue
-        segs, _ = model.transcribe(str(wav), language="en", beam_size=5, vad_filter=False,
-                                   condition_on_previous_text=False)
-        got = " ".join(s.text.strip() for s in segs)
+        got = hear(model, wav)
         notes, ratio = compare(line["text"], got)
         take = {"notes": notes, "ratio": round(ratio, 3), "got": got, "sha": file_sha(wav),
                 "settings": rendered.get(lid, {})}
-        # Only takes made the same way count (a moved window re-renders the line anyway).
-        same = lambda k: {**k["settings"], "speed": None} == {**take["settings"], "speed": None}  # noqa: E731
+        # Only takes made the same way count (a moved window re-renders the line anyway);
+        # a seed only tells two rolls apart.
+        same = lambda k: {**k["settings"], "speed": None, "seed": None} ==             {**take["settings"], "speed": None, "seed": None}  # noqa: E731
         earlier = [k for k in kept.get(lid, []) if same(k) and k["sha"] != take["sha"]]
         best = max(earlier, key=lambda k: (not k["notes"], k["ratio"]), default=None)
         if best and better(best, take):
@@ -140,6 +143,13 @@ def check(name, model, show_all, reroll):
             take, notes, got = best, best["notes"], best["got"]
         if notes:
             flagged.append({"id": lid, "start": line["start"], "text": line["text"], "got": got})
+            seed = take["settings"].get("seed")
+            tries = sum(k.get("reconverted", 0) for k in kept.get(lid, []) if k["settings"].get("seed") == seed)
+            if reroll and lid in converted and src.exists() and tries < RECONVERTS:
+                engine_got = hear(model, src)
+                if not compare(line["text"], engine_got)[0]:
+                    flagged[-1]["reconvert"] = True
+                    notes = notes + [f"IndexTTS's take is fine ({engine_got!r}): converting it again"]
             if reroll and not any(k["sha"] == take["sha"] for k in kept.get(lid, [])):
                 (work / "takes").mkdir(exist_ok=True)
                 n = len(kept.get(lid, []))
@@ -149,6 +159,9 @@ def check(name, model, show_all, reroll):
                     take["src"] = f"{lid}_{n}.src.wav"
                     shutil.copy2(src, work / "takes" / take["src"])
                 kept.setdefault(lid, []).append(take)
+            if flagged[-1].get("reconvert"):
+                entry = next(k for k in kept[lid] if k["sha"] == take["sha"])
+                entry["reconverted"] = entry.get("reconverted", 0) + 1
         if notes or show_all:
             dur = sf.info(wav).duration
             print(f"L{i:02d} {line['start']:7.2f} {line['voice']:10s} {dur:4.2f}s  {'; '.join(notes) or 'ok'}\n"
@@ -163,8 +176,20 @@ def check(name, model, show_all, reroll):
         print(f"put back {len(restored)} earlier takes: the next `dub.py generate {name}` re-mixes them")
     if reroll and flagged:
         (work / "reroll.json").write_text(json.dumps(flagged, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"queued {len(flagged)} for fresh takes on the next `dub.py generate {name}` "
-              f"(their current takes are kept, and put back if the fresh ones are worse)")
+        again = sum(1 for f in flagged if f.get("reconvert"))
+        what = [f"{n} {kind}" for n, kind in ((len(flagged) - again, "for fresh takes"),
+                                              (again, "to be converted again")) if n]
+        print(f"queued {' and '.join(what)} on the next `dub.py generate {name}` "
+              f"(their current takes are kept, and put back if the new ones are worse)")
+
+
+RECONVERTS = 2  # conversions of one IndexTTS take tried again before it gets a fresh take
+
+
+def hear(model, wav):
+    segs, _ = model.transcribe(str(wav), language="en", beam_size=5, vad_filter=False,
+                               condition_on_previous_text=False)
+    return " ".join(s.text.strip() for s in segs)
 
 
 def main():
