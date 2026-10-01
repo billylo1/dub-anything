@@ -33,7 +33,7 @@ import sys
 import numpy as np
 
 import draft
-from core import JOBS, WORK, line_id, load_json, voice_clips
+from core import JOBS, WORK, line_id, load_json, update_voices, voice_clips
 from gpulock import hold_gpu
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -251,9 +251,7 @@ def cmd_build(args):
                          f"({nearest:+.1f}) to be a register of their own")
     spec = {"from": picked[0][0], "clips": [p[:3] for p in picked], "ref_text": " ".join(p[3] for p in picked),
             "register_of": base, "register": args.band}
-    voices = load_json(WORK / "voices.json")
-    voices[key] = spec
-    (WORK / "voices.json").write_text(json.dumps(voices, ensure_ascii=False, indent=1), encoding="utf-8")
+    update_voices(lambda voices: voices.update({key: spec}))
     print(f"{key}: {total:.1f} s from {len(picked)} lines at arousal {level:+.1f} (target {target:+.1f}; "
           f"the character's own reference is {refs[base]:+.1f}). Written to voices.json; "
           f"check work/voices/{key}.wav with asr_words.py after the first render.")
@@ -352,8 +350,7 @@ def cmd_drop(args):
         if n:
             path.write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
             print(f"{clip}: {n} lines back to {base}; run dub.py generate {clip}")
-    del voices[args.voice]
-    (WORK / "voices.json").write_text(json.dumps(voices, ensure_ascii=False, indent=1), encoding="utf-8")
+    update_voices(lambda voices: voices.pop(args.voice))
 
 
 def main():

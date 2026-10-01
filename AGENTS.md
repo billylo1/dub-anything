@@ -121,9 +121,11 @@ three parts yourself: cast every voice you can and write the show's notes in
 `work/NOTES.md` (characters, who calls whom what, word choices, running jokes,
 names a clone can't say). Then hand batches of parts to subagents with those
 notes and docs/directing.md, each writing its parts' `script.json` without
-marking them ready. Read their scripts for consistency (names, terms, a
-character's voice) before you mark each part ready, and keep the notes current
-as they report new characters or words.
+marking them ready. Give them the keys to use for characters you expect in
+several batches; they add any other voice with `voices.py add` only (it locks
+`voices.json` and refuses a key that exists). Read their scripts for consistency
+(names, terms, a character's voice) before you mark each part ready, and keep
+the notes current as they report new characters or words.
 
 **Alerting the user.** At once, by notification if your harness has one: the
 backend won't start, the source can't be split or prepped, the disk is

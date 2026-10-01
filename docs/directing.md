@@ -225,11 +225,23 @@ others. Decide each line's speaker from:
 
 For a new character, build a voice from 5–15 s of **clean, single-speaker**
 speech (see the reference-leakage gotcha below). 3–4 s works for a bit part.
-Pick only clips bounded by real pauses. Run `asr_words.py <clip> t0 t1` around a
-candidate: if one VAD speech span runs across the boundary into another
-speaker's line, skip that clip. For anyone with less than 3 s of clean speech
-(walk-ons, a single whisper), or for a line that's a name, keep the original
-audio and put the line in `captions`.
+Pick only clips bounded by real pauses. `voices.py spans <clip> a-b ...` shows
+the VAD's speech spans around each candidate (CPU, instant): if one runs across
+the boundary into another speaker's line, skip that clip. `voices.py add <key>
+<clip> '<clips>' '<ref_text>'` writes the entry and builds the joined reference,
+and `voices.py check <key>` transcribes it clip by clip. For anyone with less
+than 3 s of clean speech (walk-ons, a single whisper), or for a line that's a
+name, keep the original audio and put the line in `captions`. Voices over a
+phone are often too quiet and filtered for the VAD to hear: keep them original
+and caption them too.
+
+`voices.json` holds every show's cast, and `draft.py` only scores a show's lines
+against the voices built from its own parts. A key another show already uses
+(a common surname, `wife`, `boy`) is taken: `voices.py add` refuses it, so pick
+another. When directors working in parallel each build a voice for what may be
+the same character, `voices.py sim <key> <key>` compares the references: the
+same person scores well above unrelated voices (0.5 against 0.1-0.3 in one
+film). Keep one, so the other doesn't pull in other people's lines.
 
 When one performer voices every character (a storyteller acting out a
 dialogue, a narrator doing the voices), give them one voice and cast every
@@ -268,6 +280,9 @@ their own original (see "The reference sets the register").
 - **Windows must cover all of the original speech.** Anything outside a window
   plays in the original language. Leave pure hums, laughs and eating noises
   (うーん, んー) uncovered: they're language-neutral and the actor's own.
+  Sung lines stay original too, captioned if the words matter: an announcement
+  over a PA can turn into a sung jingle halfway through, and a clone would
+  speak it. Slow lines whose pitch holds steady notes give it away.
 - **Snap windows to real speech, not Whisper's timestamps.** Whisper's word times
   run about 0.4 s early. Find true onsets with Silero VAD on `vocals.wav`
   (`faster_whisper.vad.get_speech_timestamps`, `min_silence_duration_ms≈120`) or
@@ -662,6 +677,7 @@ The loop, in the order it runs:
 | `subs.py <clip>` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment) |
 | `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
+| `voices.py spans\|add\|check\|sim` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
 | `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |

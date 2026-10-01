@@ -12,6 +12,7 @@ import os
 import pathlib
 import re
 import sys
+import time
 
 import numpy as np
 import soundfile as sf
@@ -213,6 +214,32 @@ def actor_ends(job_id, lines):
 
 def load_json(path, default=None):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+
+
+def update_voices(change):
+    """Apply change(voices) to work/voices.json under a lock and write it back:
+    directors working on a show in parallel may add voices at the same time."""
+    path = WORK / "voices.json"
+    with open(path.with_suffix(".lock"), "a+") as lock:
+        while True:
+            try:
+                lock.seek(0)
+                if sys.platform == "win32":
+                    import msvcrt
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                time.sleep(0.2)
+        voices = load_json(path, {})
+        result = change(voices)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(voices, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(path)
+        # Closing the file releases the lock.
+    return result
 
 
 def voice_sig(key):
