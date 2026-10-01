@@ -197,7 +197,9 @@ Automatic diarisation is only a hint. It merges similar voices and splits
 others. Decide each line's speaker from:
 
 1. **Speaker embeddings.** They're the most reliable signal. `draft.py` scores each
-   phrase against the cast using WeSpeaker, which ships with pyannote. Each
+   phrase against the cast using WeSpeaker, which ships with pyannote: the
+   voices built from the show's own parts, or every voice while the show has
+   none yet (`--cast` picks them by hand). Each
    character is represented by its voice clips plus up to 30 lines already cast
    to it in the show's other scripts, so casting gets surer with every directed
    part. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2 or

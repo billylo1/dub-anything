@@ -8,8 +8,10 @@ Usage: draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `du
    to the true attack when the VAD missed a soft onset (see edges.py). Speech
    that no phrase covers is re-transcribed on its own, which recovers lines
    the full pass skips.
-3. Each phrase is scored against every cast voice in work/voices.json (WeSpeaker
-   embeddings, the model that ships with pyannote). A voice is represented by
+3. Each phrase is scored against the show's cast in work/voices.json (WeSpeaker
+   embeddings, the model that ships with pyannote): the voices built from the
+   show's own parts (<show>-NN), or every voice while the show has none yet;
+   --cast picks them by hand. A voice is represented by
    its reference clips plus every line already cast to it in the show's other
    scripts, so casting gets surer with each directed part. The best match and
    runner-up are shown, and weak or short matches are flagged with '?'.
@@ -36,6 +38,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -215,6 +218,17 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
 cast_centroids.counts = {}
 
 
+def show_of(name):
+    return re.sub(r"-\d+$", "", name)
+
+
+def show_cast(name):
+    """The voices built from this show's own parts: a new show's drafts shouldn't be
+    scored against every other show's cast once it has a cast of its own."""
+    return {k for k, s in load_json(WORK / "voices.json", {}).items()
+            if s.get("from") and show_of(s["from"]) == show_of(name)}
+
+
 def on_screen(subs, p):
     """Captions (from subs.py) shown during a phrase; song markers left out."""
     return [e for e in subs if e["text"] != "♪" and e["start"] < p["end"] + 0.3 and e["end"] > p["start"] - 0.3]
@@ -232,7 +246,8 @@ def caption(e):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="+", metavar="name", help="one or more prepped clips (the models load once)")
-    ap.add_argument("--cast", help="comma-separated voice keys to consider (default: all usable)")
+    ap.add_argument("--cast", help="comma-separated voice keys to consider (default: the show's own voices, "
+                                   "or all while it has none)")
     ap.add_argument("--model", default="Systran/faster-whisper-large-v3",
                     help="Whisper model (default: large-v3)")
     ap.add_argument("--recast", action="store_true",
