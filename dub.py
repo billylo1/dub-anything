@@ -1,7 +1,9 @@
 """Drive VoiceStudio's dubbing backend (http://127.0.0.1:3900) headlessly.
 
   prep <video> [--speakers N]   upload, separate vocals, transcribe + diarize;
-                                writes work/<name>/segments.json and prints the transcript
+                                writes work/<name>/segments.json and prints the transcript.
+                                A voice variant (<part>.us) is the same audio as its
+                                prepped part: only uploaded, with the part's transcript
   generate <name>               reads work/<name>/script.json (hand-directed lines:
                                 start/end/voice/text, optional instruct/effect;
                                 voices from work/voices.json) or else en.json
@@ -27,8 +29,8 @@ import requests
 import soundfile as sf
 
 from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_spans, fit_rows,
-                  indextts_length, line_id, line_refs, load_json, out_dir, speech_length, srt_time, take_length,
-                  voice_sig, voice_wav)
+                  VOICE_SUFFIX, indextts_length, line_id, line_refs, load_json, out_dir, speech_length, srt_time,
+                  take_length, voice_sig, voice_wav)
 from gpulock import hold_gpu
 
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
@@ -151,6 +153,17 @@ def cmd_prep(args):
     job_id = job["job_id"]
     print(f"  job {job_id}")
     wait_task(job["task_id"], {"ready"})
+
+    base = next((video.stem[:-len(sfx)] for sfx in VOICE_SUFFIX.values() if sfx and video.stem.endswith(sfx)), None)
+    if base and (WORK / base / "segments.json").exists():
+        # Another voice of a prepped part: same audio, so its transcript (the renders
+        # send their own lines) instead of transcribing and diarizing again.
+        doc = {**load_json(WORK / base / "segments.json"), "job_id": job_id, "video": str(video)}
+        (work / "segments.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        if (WORK / base / "ja.srt").exists():
+            shutil.copy2(WORK / base / "ja.srt", work / "ja.srt")
+        print(f"  transcript from {base} ({len(doc['segments'])} segments)")
+        return
 
     print("transcribe + diarize")
     ensure_diarizer()
