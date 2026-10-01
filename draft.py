@@ -326,7 +326,7 @@ def draft(name, cast, model, embed_once):
 def suggest(name, work, audio, phrases, spans, cast, embed_once):
     """Score each phrase against the cast, print the draft and write draft.json."""
     embed = embed_once()
-    cents = cast_centroids(embed, set(cast.split(",")) if cast else None, exclude=name) \
+    cents = cast_centroids(embed, set(cast.split(",")) if cast else show_cast(name) or None, exclude=name) \
         if embed else {}
     for p in phrases:
         if not cents or p["end"] - p["start"] < 0.3:
