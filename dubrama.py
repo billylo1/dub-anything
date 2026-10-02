@@ -311,6 +311,16 @@ def script_sha(script):
                                    ensure_ascii=False).encode()).hexdigest()[:12]
 
 
+def finished(p, voice):
+    """Part p is final in this voice for its current script: a script edited after
+    its part's turn in a pass still needs that part rendered again."""
+    script = load_json(WORK / p["name"] / "script.json")
+    if not script["lines"]:
+        return True
+    st = load_json(WORK / voice_part(p["name"], voice) / "state.json", {})
+    return st.get("stage") == "final" and st.get("script") == script_sha(derived_script(script, voice))
+
+
 def advance(job, name):
     """One step for a part in one voice: 'busy' (did something), 'final', or 'blocked'."""
     work = WORK / name
@@ -610,9 +620,7 @@ def cmd_run(args):
             if step == "failed":
                 return 2
             busy = step == "busy"
-        final = all(ready(p) and all(load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("stage") == "final"
-                                     or not load_json(WORK / p["name"] / "script.json")["lines"]
-                                     for v in job["voices"]) for p in ps)
+        final = all(ready(p) and all(finished(p, v) for v in job["voices"]) for p in ps)
         if final:
             if SECOND_RUN.get(job["slug"]):
                 SECOND_RUN[job["slug"]][0].wait()
