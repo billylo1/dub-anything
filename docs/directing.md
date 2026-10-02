@@ -203,7 +203,10 @@ film's own translation, so use them for the captions' `ja`; for the English,
 read Whisper's transcript of the speech as well, which keeps puns and names
 the Japanese subtitle drops. A short line Whisper doesn't tag (under 1 s, or
 detected without confidence) can still be in that language: the subtitle on
-screen gives it away.
+screen gives it away. Reading them costs about as much GPU time as preparing the
+part, more than drafting it, and `--subtitles` reads every part. For a film
+with only a few scenes in another language, leave `--subtitles` off and run
+`subs.py --open` by hand on the parts whose draft tags that language.
 
 ### 2. Cast
 
@@ -528,7 +531,12 @@ How these were chosen, and what else was tried, is in
   random too), keeping its performance and timing; after two failed
   conversions it gets a fresh take. Judge each flag against the intended
   text and the audio. Names and specialist vocabulary can confuse QA even when the take is
-  correct; flag uncertain cases for the listener.
+  correct; flag uncertain cases for the listener. On a feature film, the first
+  round cleared the real glitches; later rounds mostly re-rolled names and
+  dropped fillers ("Hmm", "huh") that ended up accepted anyway. So reword a line
+  that fails twice rather than waiting on another roll: a one-word line
+  misheard on every take ("Fine." heard as "Find.") usually clears with one
+  more word of context ("That's fine."). Leave names to the listener.
 - Listen. Machines can't judge acting.
 
 ### 6. Package
