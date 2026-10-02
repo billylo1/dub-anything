@@ -5,6 +5,7 @@ Usage:
   voices.py add <key> <from-clip> '<clips>' '<ref_text>' [--replace]
   voices.py check <key> [<key> ...]            transcribe each clip of a voice's joined reference (GPU)
   voices.py sim <key> <key> [<key> ...]        speaker-embedding similarity between voices' references (GPU)
+  voices.py score <clip> <a-b> [<a-b> ...]     who each stretch sounds like, against the show's cast (GPU)
 
 spans: a reference clip must start and end in a pause. Each candidate a-b (seconds in
 the clip's separated vocals) is shown with the speech spans around it: OK when none
@@ -22,6 +23,10 @@ what is said (see "Voice-reference leakage" in docs/directing.md).
 
 sim: two references of the same person score well above unrelated voices (in one
 film, 0.5 against 0.1-0.3), e.g. when two directors built the same character.
+
+score: the speaker scores draft.py gives a line, for any stretch of a clip's vocals
+(half of a line, a window you're about to draw), against the show's own voices and the
+lines already cast to them in its other parts, best three first.
 """
 import json
 import sys
@@ -98,6 +103,22 @@ def sim(keys):
         print(f"{a:{width}s}" + "".join(f" {float(vecs[a] @ vecs[b]):>{max(6, len(b))}.2f}" for b in keys))
 
 
+def score(clip, ranges):
+    import draft
+    embed = draft.embedder()
+    if embed is None:
+        raise SystemExit("no WeSpeaker model in the cache (see draft.py)")
+    cents = draft.cast_centroids(embed, draft.show_cast(clip) or None, exclude=clip)
+    seg = load_json(WORK / clip / "segments.json")
+    audio = draft.decode_audio(str(JOBS / seg["job_id"] / "vocals.wav"), sampling_rate=SR)
+    for rng in ranges:
+        a, b = (float(x) for x in rng.split("-"))
+        v = embed(audio[int(a * SR):int(b * SR)])
+        ranked = sorted(((float(v @ c), k) for k, c in cents.items()), reverse=True)[:3]
+        print(f"{clip} {a:.2f}-{b:.2f}  " + "  ".join(f"{k} {s:.2f}" for s, k in ranked)
+              + ("  (under 0.6 s: unreliable)" if b - a < 0.6 else ""))
+
+
 def main():
     args = sys.argv[1:]
     cmd = args[0] if args else ""
@@ -109,6 +130,8 @@ def main():
         check(args[1:])
     elif cmd == "sim" and len(args) >= 3:
         sim(args[1:])
+    elif cmd == "score" and len(args) >= 3:
+        score(args[1], args[2:])
     else:
         raise SystemExit(__doc__)
 

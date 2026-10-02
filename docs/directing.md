@@ -99,7 +99,9 @@ original soundtrack plays.
 
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
-`assemble.py` uses its original audio. Such a part needs no `prep`. A scene
+`assemble.py` uses its original audio. Such a part needs no `prep`; a part
+without any speech (a silent channel card) gets one from `dubrama.py` itself
+when VoiceStudio finds nothing to transcribe. A scene
 entirely in a third language is the same, with its `captions` (below) still in
 the subtitles.
 A trailer for the next film or episode, recorded with the show, is different: its
@@ -220,7 +222,9 @@ others. Decide each line's speaker from:
    character is represented by its voice clips plus up to 30 lines already cast
    to it in the show's other scripts, so casting gets surer with every directed
    part. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2 or
-   more. Lines under ~0.6 s are unreliable. For a new show or a batch of new
+   more. Lines under ~0.6 s are unreliable. `voices.py score <clip> a-b ...`
+   scores any stretch the same way: half of a line that two people may share,
+   or a window you are about to draw. For a new show or a batch of new
    characters, run `cast.py part-05 part-06 ...` first: it clusters every line
    across parts by voice, so each cluster is one person. The same person in a
    different register (a quiet monologue, a campy aside) can form a separate
@@ -704,7 +708,7 @@ The loop, in the order it runs:
 | `subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
-| `voices.py spans\|add\|check\|sim` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references |
+| `voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
 | `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
 | `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |

@@ -167,6 +167,12 @@ def prepare_step(job, ps):
     for p in chunk:
         if not (WORK / p["name"] / "segments.json").exists():
             ok, out = tool(job, f"prep {p['name']}", [PY, "dub.py", "prep", p["file"]], f"prep-{p['name']}")
+            if not ok and "produced no segments" in out:
+                # No speech at all (a silent channel card): nothing to dub, so it stays original.
+                (WORK / p["name"]).mkdir(exist_ok=True)
+                write_json(WORK / p["name"] / "script.json", {"lines": []})
+                log(f"{p['name']}: no speech, left original")
+                return "busy"
             if not ok:
                 problem(job, f"prep {p['name']} failed: {last_error(out)}")
                 return "failed"
