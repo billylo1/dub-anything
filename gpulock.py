@@ -95,7 +95,10 @@ def hold_gpu(what=None):
     finally:
         _unlock(t)
         t.close()
-        ticket.unlink(missing_ok=True)
+        try:
+            ticket.unlink(missing_ok=True)
+        except OSError:  # another waiter is checking it (Windows won't delete an open file); it removes it
+            pass
     _held = f
     os.environ["DUBRAMA_GPU"] = "held"
     what = what or pathlib.Path(sys.argv[0]).name
