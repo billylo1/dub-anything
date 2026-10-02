@@ -99,7 +99,9 @@ original soundtrack plays.
 
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
-`assemble.py` uses its original audio. Such a part needs no `prep`.
+`assemble.py` uses its original audio. Such a part needs no `prep`. A scene
+entirely in a third language is the same, with its `captions` (below) still in
+the subtitles.
 A trailer for the next film or episode, recorded with the show, is different: its
 dialogue is the same cast, so dub it like the show with the same voices. Its title
 cards and on-screen text stay as they are.
