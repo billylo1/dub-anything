@@ -128,7 +128,11 @@ marking them ready. Give them the keys to use for characters you expect in
 several batches; they add any other voice with `voices.py add` only (it locks
 `voices.json` and refuses a key that exists). Read their scripts for consistency
 (names, terms, a character's voice) before you mark each part ready, and keep
-the notes current as they report new characters or words.
+the notes current as they report new characters or words. Hold the ready marks
+until the last parts are drafted: a ready part renders before any more prep, so
+early ready marks starve the directors still waiting for drafts, while the GPU
+stays just as busy either way. Spawn the later parts' directors early; they
+wait for their drafts.
 
 **Alerting the user.** At once, by notification if your harness has one: the
 backend won't start, the source can't be split or prepped, the disk is
