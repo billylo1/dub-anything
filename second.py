@@ -103,8 +103,8 @@ def check(clip, spans, recs, script, show_all):
     for i, line in enumerate(lines):
         a, b = max(0.0, line["start"] - PAD), line["end"] + PAD
         clip_audio = x[int(a * SR):int(b * SR)]
-        if len(clip_audio) < 0.1 * SR:  # a draft line at (or past) the clip's very end
-            continue
+        if len(clip_audio) < 0.1 * SR or line.get("lang"):
+            continue  # a draft line at (or past) the clip's very end, or not in Japanese
         got = {}
         for name, rec in recs.items():
             s = rec.create_stream()

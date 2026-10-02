@@ -72,8 +72,10 @@ you direct.
    "Voice"). With both, the actor's voice plays by default. Look at the video's
    length and skim it for blocks that stay in the original (a channel card,
    commercial breaks, credits) so they can be split off whole.
-   `dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions]`
-   (`--captions` when the picture carries burned-in closed captions). Record the
+   `dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles]`
+   (`--captions` when the picture carries burned-in closed captions,
+   `--subtitles` when a film subtitles its foreign-language speech in the
+   picture). Record the
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
    `dubrama.py run <slug> --watch`. It splits; preps, separates and drafts the

@@ -1,6 +1,6 @@
 """Burned-in captions: read a clip's on-screen closed captions into timed text.
 
-Usage: subs.py <clip> [--fps 4] [--from T0] [--to T1]   (after `dub.py prep`; own environment, see AGENTS.md)
+Usage: subs.py <clip> [--open] [--fps 4] [--from T0] [--to T1]   (after `dub.py prep`; own environment, see AGENTS.md)
 
 Some recordings carry the broadcaster's closed captions burned into the picture:
 the exact dialogue, often the speaker's name in brackets, "≪" for a voice off
@@ -17,6 +17,11 @@ PaddleOCR's PP-OCRv5 models (RapidOCR on onnxruntime, GPU when available):
 4. Song lyrics (captions with ♪) become bare music markers without their text,
    one per song: songs stay in the original audio. A song can run on past
    its last ♪ (under the credits, say): find its end by ear or VAD.
+
+--open reads a film's own subtitles instead: the translation of speech in a
+third language (Finnish in a film set in Finland), drawn as white text with a
+dark outline over the bottom of the picture, without a box. Only that band is
+read, 2 frames a second.
 
 Writes work/<clip>/subs.json ({"events": [{start, end, text, color, x, y,
 name, off}]}; x/y are the caption's centre as fractions of the picture) and
@@ -71,15 +76,18 @@ def size(video):
     return tuple(int(v) for v in out.stdout.strip().split(",")[:2])
 
 
-def frames(video, fps, t0, t1, w, h):
-    """Full-size frames: captions read much better than from a downscaled picture."""
+def frames(video, fps, t0, t1, w, h, top=0):
+    """Full-size frames: captions read much better than from a downscaled picture.
+    With `top`, only the picture below that row."""
     cmd = ["ffmpeg", "-v", "error"]
     if t0:
         cmd += ["-ss", str(t0)]
     cmd += ["-i", str(video)]
     if t1:
         cmd += ["-t", str(t1 - (t0 or 0))]
-    cmd += ["-vf", f"fps={fps}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    crop = f",crop={w}:{h - top}:0:{top}" if top else ""
+    h -= top
+    cmd += ["-vf", f"fps={fps}{crop}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     k, n = 0, w * h * 3
     while True:
@@ -132,18 +140,47 @@ def caption_box(img, box):
     return ok, color_of(crop[lum >= np.percentile(lum, 90)].mean(axis=0))
 
 
-def read_frame(ocr, img):
-    """Caption rows in one frame: [(text, colour, x0, y0, x1, y1)]."""
+def subtitle_text(img, box):
+    """(is a subtitle, colour): white text with a dark outline over the scene, as a
+    film's own subtitles for foreign-language speech are drawn (no box behind)."""
+    xs, ys = [p[0] for p in box], [p[1] for p in box]
+    x0, x1 = max(int(min(xs)) - 2, 0), int(max(xs)) + 3
+    y0, y1 = max(int(min(ys)) - 2, 0), int(max(ys)) + 3
+    crop = img[y0:y1, x0:x1].reshape(-1, 3).astype(np.float32)
+    if len(crop) < 20:
+        return False, None
+    lum = crop @ np.array([0.299, 0.587, 0.114], np.float32)
+    text = crop[lum >= np.percentile(lum, 95)]
+    neutral = np.ptp(text.mean(axis=0)) <= 40     # white, not a coloured sign
+    return bool(np.percentile(lum, 95) >= 200 and np.percentile(lum, 5) <= 60 and neutral), "white"
+
+
+def read_frame(ocr, img, top=0, test=caption_box):
+    """Caption rows in one frame: [(text, colour, x0, y0, x1, y1)]; `top` is the
+    row of the full picture the image starts at."""
     r = ocr(np.ascontiguousarray(img[:, :, ::-1]))
     if r.boxes is None:
         return []
     u = img.shape[1] / W
     pieces = []
     for box, text, score in zip(r.boxes, r.txts, r.scores):
-        ok, color = caption_box(img, box)
+        ok, color = test(img, box)
         if ok and score >= 0.5 and text.strip():
-            xs, ys = [p[0] for p in box], [p[1] for p in box]
+            xs, ys = [p[0] for p in box], [p[1] + top for p in box]
             pieces.append([text.strip(), color, min(xs) / u, min(ys) / u, max(xs) / u, max(ys) / u])
+    if test is subtitle_text and pieces:
+        # A film shows one subtitle at a time, spaced into phrases and often over two
+        # rows, which the detector splits differently from frame to frame: read the
+        # band as one text, row by row, so the frames of one subtitle agree.
+        lines = []
+        for p in sorted(pieces, key=lambda p: p[3] + p[5]):
+            if lines and abs((lines[-1][-1][3] + lines[-1][-1][5]) - (p[3] + p[5])) / 2 < 10:
+                lines[-1].append(p)
+            else:
+                lines.append([p])
+        text = " ".join(p[0] for line in lines for p in sorted(line, key=lambda p: p[2]))
+        return [(text, "white", min(p[2] for p in pieces), min(p[3] for p in pieces),
+                 max(p[4] for p in pieces), max(p[5] for p in pieces))]
     pieces.sort(key=lambda p: (round((p[3] + p[5]) / 2 / 12), p[2]))
     rows = []
     for p in pieces:
@@ -165,16 +202,18 @@ def similar(a, b):
     return difflib.SequenceMatcher(None, a, b).ratio() >= 0.75
 
 
-def track(readings, step):
-    """Per-frame caption rows -> events: one per caption, over the frames that show it."""
+def track(readings, step, anywhere=False):
+    """Per-frame caption rows -> events: one per caption, over the frames that show it.
+    `anywhere`: one caption at a time (subtitles), so a reading continues the
+    last one by its text alone, wherever the detector placed it."""
     open_, done = [], []
     for t, rows in readings:
         still = []
         for row in rows:
             text, color, x0, y0, x1, y1 = row
             cx, cy = float(x0 + x1) / 2, float(y0 + y1) / 2
-            ev = next((e for e in open_ if e not in still and abs(e["cy"] - cy) < 15
-                       and (abs(e["cx"] - cx) < 40 or abs(e["x0"] - x0) < 20) and similar(e["texts"][-1], text)), None)
+            ev = next((e for e in open_ if e not in still and (anywhere or abs(e["cy"] - cy) < 15
+                       and (abs(e["cx"] - cx) < 40 or abs(e["x0"] - x0) < 20)) and similar(e["texts"][-1], text)), None)
             if ev is None:
                 ev = {"start": t, "texts": [], "colors": [], "cx": cx, "cy": cy, "x0": float(x0)}
             ev["texts"].append(text)
@@ -238,23 +277,32 @@ def merge_lines(events):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("clip")
-    ap.add_argument("--fps", type=float, default=4)
+    ap.add_argument("--fps", type=float, help="frames read a second (default 4, or 2 with --open)")
     ap.add_argument("--from", dest="t0", type=float)
     ap.add_argument("--to", dest="t1", type=float)
+    ap.add_argument("--open", action="store_true",
+                    help="the film's own subtitles for foreign-language speech (white, outlined, at the "
+                         "bottom) instead of closed captions on a dark box")
     args = ap.parse_args()
+    args.fps = args.fps or (2 if args.open else 4)
     sys.stdout.reconfigure(encoding="utf-8")
     work = HERE / "work" / args.clip
     video = json.loads((work / "segments.json").read_text(encoding="utf-8"))["video"]
     video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else HERE / video
     w, h = size(video)
+    # Open subtitles sit in the bottom of the picture: reading only that band is
+    # faster, and keeps signs and other text in the scene out.
+    top = int(h * 0.68) // 2 * 2 if args.open else 0
+    test = subtitle_text if args.open else caption_box
     ocr, cuda = engine()
-    print(f"reading captions in {video.name} ({'GPU' if cuda else 'CPU'}, {args.fps:g} frames/s)", file=sys.stderr)
+    print(f"reading {'subtitles' if args.open else 'captions'} in {video.name} ({'GPU' if cuda else 'CPU'}, "
+          f"{args.fps:g} frames/s)", file=sys.stderr)
     readings, last, rows, n = [], None, [], 0
-    for t, img in frames(video, args.fps, args.t0, args.t1, w, h):
+    for t, img in frames(video, args.fps, args.t0, args.t1, w, h, top):
         if changed(img, last):
-            rows, last, n = read_frame(ocr, img), img, n + 1
+            rows, last, n = read_frame(ocr, img, top, test), img, n + 1
         readings.append((t, rows))
-    events = track(readings, 1 / args.fps)
+    events = track(readings, 1 / args.fps, anywhere=args.open)
     print(f"{len(readings)} frames, {n} read, {len(events)} captions", file=sys.stderr)
     (work / "subs.json").write_text(json.dumps({"video": str(video), "fps": args.fps, "events": events},
                                                ensure_ascii=False, indent=1), encoding="utf-8")

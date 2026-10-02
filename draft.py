@@ -17,7 +17,9 @@ Usage: draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `du
    runner-up are shown, and weak or short matches are flagged with '?'.
 4. Speech already in English is found by Whisper's language detection and
    re-transcribed in English (forced Japanese, Whisper silently *translates*
-   it). Such lines are tagged [English]: keep the original, caption it.
+   it). Such lines are tagged [English]: keep the original, caption it. So is
+   speech in a third language (Finnish in a film set in Finland), when Whisper
+   is also surer of it in that language than in Japanese.
 6. When subs.py has read the video's burned-in captions (work/<name>/subs.json),
    each phrase is shown with the captions on screen during it: the
    broadcaster's own text, often with the speaker's name or colour. Phrases
@@ -58,6 +60,8 @@ SR = 16000
 EARLY = 0.35  # typical Whisper lead when no VAD span is near
 # Whisper's stock hallucinations on hums, music and silence.
 HALLUCINATIONS = ("ご視聴ありがとうございました", "チャンネル登録", "ご覧いただき", "字幕")
+LANGUAGES = {"en": "English", "fi": "Finnish", "sv": "Swedish", "de": "German", "fr": "French", "it": "Italian",
+             "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ko": "Korean"}
 
 
 def vad_spans(audio):
@@ -102,15 +106,22 @@ def transcribe(model, audio, offset=0.0, language="ja"):
     return out
 
 
+def confidence(found):
+    """Whisper's mean log-probability over transcribed phrases, weighted by length."""
+    chars = sum(len(p["ja"]) for p in found)
+    return sum(p["logprob"] * len(p["ja"]) for p in found) / chars if chars else -9.0
+
+
 def surer(model, clip, offset):
-    """Transcribe in Japanese and in English and keep the language Whisper is
-    surer of, as (language, phrases). Its language detection calls heavily
+    """Transcribe in Japanese, in English and in any third language Whisper
+    detects, and keep the language Whisper is surer of, as (language, phrases). Its language detection calls heavily
     accented English Korean or Breton; its confidence doesn't lie that way."""
     best = None
-    for lang in ("ja", "en"):
+    # A third language competes too, or Whisper translates it into English.
+    other = spoken_language(model, clip)
+    for lang in ("ja", "en") + ((other,) if other and other not in ("ja", "en") else ()):
         found = transcribe(model, clip, offset, language=lang)
-        chars = sum(len(p["ja"]) for p in found)
-        score = sum(p["logprob"] * len(p["ja"]) for p in found) / chars if chars else -9.0
+        score = confidence(found)
         if best is None or score > best[0]:
             best = (score, lang, found)
     return best[1], best[2]
@@ -301,14 +312,25 @@ def draft(name, cast, model, embed_once):
             for q in found:
                 if not hallucination(q["ja"]):
                     phrases.append({**snap(q, spans, duration), "recovered": True,
-                                    **({"lang": "en"} if lang == "en" else {})})
+                                    **({"lang": lang} if lang != "ja" else {})})
     phrases = settle(phrases)
-    # Speech already in English: forced Japanese, Whisper translates it.
+    # Speech already in English, or in a third language (a film set abroad):
+    # forced Japanese, Whisper translates it.
     for p in phrases:
+        if p.get("lang") or p["end"] - p["start"] < 1.0:
+            continue
         clip = audio[int(p["start"] * SR):int(p["end"] * SR)]
-        if p.get("lang") != "en" and p["end"] - p["start"] >= 1.0 and spoken_language(model, clip) == "en":
+        lang = spoken_language(model, clip)
+        if lang == "en":
             p["lang"] = "en"
             p["ja"] = " ".join(q["ja"] for q in transcribe(model, clip, language="en")) or p["ja"]
+        elif lang and lang != "ja":
+            # Less common languages get a second opinion: kept only when Whisper
+            # transcribes the phrase more surely in that language than in Japanese.
+            found = transcribe(model, clip, language=lang)
+            if found and confidence(found) > confidence(transcribe(model, clip)):
+                p["lang"] = lang
+                p["ja"] = " ".join(q["ja"] for q in found)
     # Start windows at the true attack. VAD misses soft onsets, and a window
     # that opens mid-sound chops the actor audibly (edges.py has the rule).
     db = edges.frames_db(audio)
@@ -346,8 +368,8 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
         who = f"{p.get('voice', '-'):>10s} {p.get('score', 0):4.2f}{' ' if sure else '?'}"
         alt = f"({p['alt']} {p['alt_score']:.2f})" if "alt" in p else ""
         tag = " [recovered]" if p.get("recovered") else ""
-        if p.get("lang") == "en":
-            tag += " [English: keep the original, caption it]"
+        if p.get("lang"):
+            tag += f" [{LANGUAGES.get(p['lang'], p['lang'])}: keep the original, caption it]"
         if hallucination(p["ja"]):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"

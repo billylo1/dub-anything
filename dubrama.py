@@ -1,7 +1,7 @@
 """Run a dub from source video to the delivered file: the machine work, around the director's.
 
 Usage:
-  dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions]
+  dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles]
   dubrama.py run <slug> [--watch]       do every step that can run now (see below)
   dubrama.py status <slug>              where each part stands, and what blocks it
   dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
@@ -13,7 +13,7 @@ A job (work/jobs/<slug>/job.json) is one source video and the voices to dub it i
 videos/<slug>.<ext> so the split keeps working after delivery renames it.
 
 run does, in order and only what isn't done yet: split; dub.py prep, then
-separate.py, subs.py (with --captions) and draft.py, first over the first part to
+separate.py, subs.py (with --captions or --subtitles) and draft.py, first over the first part to
 dub (so the director can start on it) and then PREP_CHUNK parts at a time in film
 order, so drafts keep coming; second.py over them in the background (CPU). For
 each part whose script the director has marked ready (or left with "lines": []),
@@ -182,7 +182,8 @@ def prepare_step(job, ps):
         return "busy"
     for n in names:
         if job.get("captions") and not (WORK / n / "subs.json").exists():
-            if not tool(job, f"subs {n}", SUBS + [n], f"subs-{n}")[0]:
+            extra = ["--open"] if job["captions"] == "open" else []
+            if not tool(job, f"subs {n}", SUBS + [n] + extra, f"subs-{n}")[0]:
                 problem(job, f"subs.py failed on {n}")
                 return "failed"
             return "busy"
@@ -506,7 +507,7 @@ def cmd_new(args):
             print(f"(can't hard-link across drives: copying the source to {link})")
             shutil.copy2(src, link)
     job = {"slug": slug, "title": src.stem, "source": str(src), "video": str(link), "voices": voices,
-           "default": voices[0], "split": {"minutes": args.minutes, "whole": args.whole}, "captions": args.captions,
+           "default": voices[0], "split": {"minutes": args.minutes, "whole": args.whole}, "captions": "open" if args.subtitles else args.captions,
            "created": time.strftime("%Y-%m-%d %H:%M")}
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
@@ -680,6 +681,8 @@ def main():
     a.add_argument("--minutes", type=float, default=3)
     a.add_argument("--whole", action="append", default=[], metavar="A-B")
     a.add_argument("--captions", action="store_true", help="the picture carries captions: run subs.py")
+    a.add_argument("--subtitles", action="store_true",
+                   help="the film subtitles its foreign-language speech in the picture: run subs.py --open")
     a.set_defaults(fn=cmd_new)
     for name, fn in (("run", cmd_run), ("status", cmd_status), ("report", cmd_report), ("cleanup", cmd_cleanup)):
         b = sub.add_parser(name)

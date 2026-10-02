@@ -157,7 +157,9 @@ approved takes also changes their background and level measurements.
 - speech already in English, found by Whisper's language detection and
   transcribed in English. Forced to Japanese, Whisper silently *translates*
   English speech, so without this a scene in English reads like Japanese
-  dialogue;
+  dialogue. Speech in a third language (Finnish in a film set in Finland) is
+  found the same way and transcribed in that language, when Whisper is also
+  surer of it there than in Japanese;
 - long hallucinations re-transcribed. A stock phrase ("ご視聴ありがとうございました")
   stretched over many seconds can hide real speech. Each speech stretch is
   re-transcribed in Japanese and English; review the result in context.
@@ -190,6 +192,16 @@ Caption times follow the display, not the speech, so windows still come from
 the VAD. The OCR misreads a character now and then (a kana for its katakana
 twin, a rare kanji), so weigh it against Whisper and the context. Song lyrics
 become bare `♪` markers: songs stay in the original audio.
+
+A film set abroad subtitles its foreign-language speech in the picture
+itself: white text with a dark outline at the bottom, no box. `subs.py <clip>
+--open` reads those instead (only the bottom band, 2 frames a second), and
+`dubrama.py new --subtitles` runs it on every part. The subtitles are the
+film's own translation, so use them for the captions' `ja`; for the English,
+read Whisper's transcript of the speech as well, which keeps puns and names
+the Japanese subtitle drops. A short line Whisper doesn't tag (under 1 s, or
+detected without confidence) can still be in that language: the subtitle on
+screen gives it away.
 
 ### 2. Cast
 
@@ -338,6 +350,11 @@ their own original (see "The reference sets the register").
   the original, leave it and caption it. `draft.py` tags such lines
   `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
   video has burned-in Japanese subtitles there, use them for the captions' `ja`.
+- **Keep a third language too.** Speech in neither Japanese nor English (the
+  locals in a film set abroad) stays in the original audio with English
+  captions, as an English-language film would subtitle it. `draft.py` tags it
+  with its language (`[Finnish]`); `asr_words.py ... --lang fi` re-listens.
+  A Japanese character speaking that language keeps their own voice there too.
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
   narration fragments into full sentences. Short sentence fragments can be
   harder to synthesize clearly.
@@ -674,7 +691,7 @@ The loop, in the order it runs:
 | `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
 | `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
-| `subs.py <clip>` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment) |
+| `subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `voices.py spans\|add\|check\|sim` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references |
