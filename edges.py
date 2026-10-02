@@ -41,6 +41,7 @@ from faster_whisper.audio import decode_audio
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR, HOP = 16000, 80  # 5 ms frames
+GAP = 4  # frames: the voice has stopped once it stays under the threshold this long (20 ms)
 
 
 def frames_db(audio):
@@ -59,7 +60,10 @@ def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
         return None
     j = k - 1
     floor_k = int(floor_t * SR / HOP)
-    while j - 1 >= floor_k and db[j - 1] >= thresh:
+    # Walk back over the sound and any dip shorter than GAP: a soft line over low noise
+    # flickers around the threshold, and stopping at the first quiet frame put each
+    # --apply run's cut just before another flicker, a little earlier every time.
+    while j - 1 >= floor_k and max(db[max(floor_k, j - GAP):j]) >= thresh:
         j -= 1
     return max(floor_t, j * HOP / SR - lead)
 
@@ -73,7 +77,7 @@ def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
         return None
     j = k
     ceil_k = min(len(db) - 1, int(ceil_t * SR / HOP))
-    while j + 1 <= ceil_k and db[j + 1] >= thresh:
+    while j + 1 <= ceil_k and max(db[j + 1:min(ceil_k, j + GAP) + 1]) >= thresh:
         j += 1
     return min(ceil_t, (j + 1) * HOP / SR + lag)
 
