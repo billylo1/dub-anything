@@ -14,18 +14,21 @@ videos/<slug>.<ext> so the split keeps working after delivery renames it.
 
 run does, in order and only what isn't done yet: split; dub.py prep, then
 separate.py, subs.py (with --captions) and draft.py, first over the first part to
-dub (so the director can start on it) and then over the rest; second.py
-over them in the background (CPU). Then, for each part whose script the director
-has marked ready (or left with "lines": []), in each voice: render, lineqa, and up
-to QA_ROUNDS rounds of fresh takes or conversions for the flagged lines; what is
-still flagged after that goes to the report (reroll-left.json). The American
+dub (so the director can start on it) and then PREP_CHUNK parts at a time in film
+order, so drafts keep coming; second.py over them in the background (CPU). For
+each part whose script the director has marked ready (or left with "lines": []),
+in each voice: render, lineqa, and up to QA_ROUNDS rounds of fresh takes or
+conversions for the flagged lines; what is still flagged after that goes to the
+report (reroll-left.json). A ready part goes first: preparation only runs, one
+step at a time (a part's prep, a chunk's separation or draft), while no ready
+part needs rendering, so the first parts render while the rest still prepares. The American
 voice renders in <part>.us, from a copy of the director's script (a line's
 "text_us" replaces its text there) and the actor job's stems. When every part is
 final in every voice: assemble.py per voice, deliver.py into the source (renamed
 "<name> (dubbed)"), and the report. A part that overflows is blocked until its
 script changes, and one whose render fails twice until run starts again; the
-others carry on. The backend is restarted after prep, and when a render runs out
-of GPU memory, since its cache keeps what it loaded. --watch
+others carry on. The backend is restarted before the first render after a prep,
+and when a render runs out of GPU memory, since its cache keeps what it loaded. --watch
 keeps waiting for scripts until delivery, and stops early when a part is blocked,
 so the agent can tell the user. Exit codes: 0 done or idle, 2 needs the director,
 1 error. Every GPU step waits for the GPU lock (gpulock.py); logs are in
@@ -50,6 +53,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 JOB_DIR = WORK / "jobs"
 VIDEOS = HERE / "videos"
 QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
+PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = sys.executable
 UV = ["uv", "run", "--no-project"]
 SEPARATE = UV + ["--python", "3.11", "--index", "https://download.pytorch.org/whl/cu128", "--index-strategy",
@@ -138,44 +142,66 @@ def original_only(p):
     return script is not None and not script["lines"]
 
 
-def prepare(job, ps):
-    """prep, separate, subs, draft: the first part to dub on its own first, so the
-    director can cast and direct it while the rest prepares; then the rest, each
-    step over every part that still needs it."""
-    prepped = []
-    first = [p for p in ps if not original_only(p)][:1]
-    if not (prepare_batch(job, first, prepped) and prepare_batch(job, ps, prepped)):
-        return False
-    if prepped:
-        # Prep loads transcription, diarisation and separation into the backend, and its
-        # cache keeps that memory: renders beside it run out of GPU memory.
-        log("restarting the backend to free the GPU memory prep used")
-        if not backend.restart():
-            return problem(job, "the backend won't restart (backend.py status)")
-    return True
+def drafted(p):
+    return (WORK / p["name"] / "draft.json").exists()
 
 
-def prepare_batch(job, ps, prepped):
-    for p in ps:
-        if not (WORK / p["name"] / "segments.json").exists() and not original_only(p):
+def prep_chunk(ps):
+    """The parts to prepare next: the first part to dub on its own, so the director
+    can start on it, then PREP_CHUNK at a time in film order. Each chunk is prepped,
+    separated and drafted before the next starts, so drafts keep coming while the
+    models still load once per chunk."""
+    todo = [p for p in ps if not original_only(p) and not drafted(p)]
+    return todo[:PREP_CHUNK if any(drafted(p) for p in ps) else 1]
+
+
+def prepare_step(job, ps):
+    """One unit of preparation, run whenever no part is ready to render: prep one
+    part of the current chunk, or separate, read the captions of or draft the
+    chunk. Returns 'busy', 'done' or 'failed'."""
+    chunk = prep_chunk(ps)
+    if not chunk:
+        return "done"
+    names = [p["name"] for p in chunk]
+    label = names[0] if len(names) == 1 else f"{names[0]}..{names[-1].rsplit('-', 1)[-1]}"
+    for p in chunk:
+        if not (WORK / p["name"] / "segments.json").exists():
             ok, out = tool(job, f"prep {p['name']}", [PY, "dub.py", "prep", p["file"]], f"prep-{p['name']}")
             if not ok:
-                return problem(job, f"prep {p['name']} failed: {last_error(out)}")
-            prepped.append(p["name"])
-    todo = [p["name"] for p in ps if job_dir_of(p["name"]) and not (job_dir_of(p["name"]) / "separator.json").exists()]
-    if todo and not tool(job, f"separate {', '.join(todo) if len(todo) == 1 else f'{len(todo)} parts'}",
-                         SEPARATE + todo, "separate" + (f"-{todo[0]}" if len(todo) == 1 else ""))[0]:
-        return problem(job, "separate.py failed (see its log)")
-    if job.get("captions"):
-        for p in ps:
-            if job_dir_of(p["name"]) and not (WORK / p["name"] / "subs.json").exists():
-                if not tool(job, f"subs {p['name']}", SUBS + [p["name"]], f"subs-{p['name']}")[0]:
-                    return problem(job, f"subs.py failed on {p['name']}")
-    todo = [p["name"] for p in ps if job_dir_of(p["name"]) and not (WORK / p["name"] / "draft.json").exists()]
-    if todo and not tool(job, f"draft {', '.join(todo) if len(todo) == 1 else f'{len(todo)} parts'}",
-                         [PY, "draft.py"] + todo, "draft" + (f"-{todo[0]}" if len(todo) == 1 else ""))[0]:
-        return problem(job, "draft.py failed (see its log)")
-    return True
+                problem(job, f"prep {p['name']} failed: {last_error(out)}")
+                return "failed"
+            # Prep loads transcription, diarisation and separation into the backend, and its
+            # cache keeps that memory: renders beside it run out of GPU memory.
+            BACKEND["dirty"] = True
+            return "busy"
+    todo = [n for n in names if not (job_dir_of(n) / "separator.json").exists()]
+    if todo:
+        if not tool(job, f"separate {label}", SEPARATE + todo, f"separate-{label}")[0]:
+            problem(job, "separate.py failed (see its log)")
+            return "failed"
+        return "busy"
+    for n in names:
+        if job.get("captions") and not (WORK / n / "subs.json").exists():
+            if not tool(job, f"subs {n}", SUBS + [n], f"subs-{n}")[0]:
+                problem(job, f"subs.py failed on {n}")
+                return "failed"
+            return "busy"
+    if not tool(job, f"draft {label}", [PY, "draft.py"] + names, f"draft-{label}")[0]:
+        problem(job, "draft.py failed (see its log)")
+        return "failed"
+    return "busy"
+
+
+BACKEND = {"dirty": False}  # prep has run since the backend last started
+
+
+def clean_backend(job):
+    """Restart the backend before a render if prep has used it since it started."""
+    if BACKEND["dirty"]:
+        log("restarting the backend to free the GPU memory prep used")
+        if not backend.restart():
+            raise SystemExit(problem(job, "the backend won't restart (backend.py status)") or 2)
+        BACKEND["dirty"] = False
 
 
 SECOND_RUN = {}
@@ -309,6 +335,7 @@ def advance(job, name):
     if stage == "final":
         return "final"
     if stage in ("render", "remix"):
+        clean_backend(job)
         what = {"render": "render" if not st["round"] else f"round {st['round']}", "remix": "re-mix"}[stage]
         ok, out = tool(job, f"{what} {name}", [PY, "dub.py", "generate", name, "--match-level"],
                        f"gen-{name}-{st['round']}{'-remix' if stage == 'remix' else ''}")
@@ -322,6 +349,7 @@ def advance(job, name):
             elif GPU_FULL.search(out):
                 log("the backend ran out of GPU memory: restarting it")
                 backend.restart()
+                BACKEND["dirty"] = False
             else:
                 backend.ensure()
             save()
@@ -542,8 +570,6 @@ def cmd_run(args):
     ps = parts(job)
     job.pop("problems", None)
     save_job(job)
-    if not prepare(job, ps):
-        return 2
     for p in ps:  # a new run retries what failed for reasons outside the script
         for v in job["voices"]:
             path = WORK / voice_part(p["name"], v) / "state.json"
@@ -560,7 +586,7 @@ def cmd_run(args):
         second(job, ps)
         busy = blocked = False
         for p in ps:
-            if not ready(p):
+            if not ready(p) or not (original_only(p) or drafted(p)):
                 continue
             for voice in job["voices"]:
                 name = variant(job, p, voice)
@@ -576,6 +602,13 @@ def cmd_run(args):
                         seen.add((name, st.get("problem")))
                         log(f"BLOCKED {name}: {st.get('problem')}")
                         new_block |= name not in known
+        if not busy:
+            # Preparation fills the time no ready part needs: renders never wait for
+            # the rest of the video to be prepped.
+            step = prepare_step(job, ps)
+            if step == "failed":
+                return 2
+            busy = step == "busy"
         final = all(ready(p) and all(load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("stage") == "final"
                                      or not load_json(WORK / p["name"] / "script.json")["lines"]
                                      for v in job["voices"]) for p in ps)
@@ -591,7 +624,7 @@ def cmd_run(args):
             log("waiting on the director: see dubrama.py status " + job["slug"])
             report(job, ps, quiet=True)
             return 2
-        if not args.watch:
+        if not args.watch and not busy:
             left = [p["name"] for p in ps if not ready(p)]
             log(f"nothing more to do now; scripts not ready: {', '.join(left) or 'none'}")
             return 0

@@ -77,10 +77,11 @@ you direct.
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
    `dubrama.py run <slug> --watch`. It splits; preps, separates and drafts the
-   first part (a few minutes: start casting and directing it), then every other
-   part; runs `second.py` on the CPU; then renders each part in each voice as
-   soon as you mark its script ready, with QA rounds; and delivers when every
-   part is done. Follow it with `dubrama.py status <slug>` and the logs in
+   first part (a few minutes: start casting and directing it), then the rest
+   four parts at a time, so drafts keep coming; runs `second.py` on the CPU;
+   renders each part in each voice as soon as you mark its script ready, with
+   QA rounds, ahead of any prep still to do; and delivers when every part is
+   done. Follow it with `dubrama.py status <slug>` and the logs in
    `work/jobs/<slug>/logs/`.
 3. **Direct, part by part** ([docs/directing.md](docs/directing.md)). Cast the
    voices (`cast.py`, `frames.py`, `work/voices.json`) from the first parts.

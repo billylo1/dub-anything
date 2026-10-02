@@ -645,8 +645,8 @@ steps when every part is done.
   Prepping a whole video fills it too: transcription, diarisation and
   separation stay cached, and the first render then fails with "out of memory",
   even in the flush itself. Only a restart (`backend.py restart`) frees that;
-  `dubrama.py` restarts the backend after prep and when a render runs out of
-  memory.
+  `dubrama.py` restarts the backend before the first render after a prep, and
+  when a render runs out of memory.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
