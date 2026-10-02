@@ -540,7 +540,13 @@ How these were chosen, and what else was tried, is in
   dropped fillers ("Hmm", "huh") that ended up accepted anyway. So reword a line
   that fails twice rather than waiting on another roll: a one-word line
   misheard on every take ("Fine." heard as "Find.") usually clears with one
-  more word of context ("That's fine."). Leave names to the listener.
+  more word of context ("That's fine."). Leave names to the listener. A
+  hesitation ("Um...", "Well...") or a one-word answer that fails twice goes
+  back to the original audio, with a caption if it says anything. A take that
+  starts with the line's own Japanese (QA's "leading extra" in Japanese, the
+  same on every take) is the per-line reference leaking: give the line
+  `"line_ref": false`. When the American voice's conversion keeps garbling a
+  line that IndexTTS said right, other words in `text_us` usually clear it.
 - Listen. Machines can't judge acting.
 
 ### 6. Package

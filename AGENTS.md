@@ -126,15 +126,18 @@ names a clone can't say). Then hand batches of parts to subagents with those
 notes and docs/directing.md, each writing its parts' `script.json` without
 marking them ready. Give them the keys to use for characters you expect in
 several batches; they add any other voice with `voices.py add` only (it locks
-`voices.json` and refuses a key that exists). Read their scripts for consistency
+`voices.json` and refuses a key that exists). Two directors whose batches share a
+scene can still build the same new character under two keys, minutes apart:
+compare new voices with `voices.py sim` and keep one. Read their scripts for consistency
 (names, terms, a character's voice) before you mark each part ready, and keep
 the notes current as they report new characters or words. Hold the ready marks
 until the last parts are drafted: a ready part renders before any more prep, so
 early ready marks starve the directors still waiting for drafts, while the GPU
 stays just as busy either way. Spawn the later parts' directors early; they
-wait for their drafts. Their `asr_words.py` and `fit.py` calls queue for the
-same GPU lock as the machine (seven directors at once doubled some of its
-steps), so have them re-listen to the stretches in doubt, not whole parts.
+wait for their drafts. Their `asr_words.py`, `fit.py` and `voices.py` calls
+queue for the same GPU lock as the machine (in one film, parts rendered at a
+third of their pace, 28 against 10 minutes a part, while seven directors
+worked), so have them re-listen to the stretches in doubt, not whole parts.
 
 Budget a feature film in both voices at about seven hours, nearly all of it GPU
 work: about half the American voice (some 2.5 times the actor's voice per
