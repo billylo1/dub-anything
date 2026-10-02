@@ -78,6 +78,19 @@ def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
     return min(ceil_t, (j + 1) * HOP / SR + lag)
 
 
+def level_at(db, t):
+    """The voice's level around time t, smoothed over 20 ms as end_dip smooths it."""
+    k = int(round(t * SR / HOP))
+    seg = db[max(0, k - 2):k + 2]
+    return float(seg.mean()) if len(seg) else -90.0
+
+
+# A shared boundary already in a dip within this many dB of the deepest one nearby
+# stays put: end_dip searches around the boundary itself, so each move would find a
+# slightly deeper frame further on and walk the boundary along on every re-run.
+DIP_SETTLED_DB = 3.0
+
+
 def line_level(db, a, b):
     seg = db[int(a * SR / HOP):int(b * SR / HOP)]
     return float(np.percentile(seg, 90)) if len(seg) else -90.0
@@ -113,7 +126,7 @@ def check(name, apply=False, min_shift=0.015):
         nxt = lines[i + 1]["start"] if i + 1 < len(lines) else line["end"] + 1
         if nxt - line["end"] <= 0.05:
             dip = end_dip(db, line["start"], line["end"])
-            if dip is not None and abs(dip - line["end"]) >= min_shift and dip < lines[i + 1]["end"] - 0.3:
+            if dip is not None and abs(dip - line["end"]) >= min_shift and dip < lines[i + 1]["end"] - 0.3                     and level_at(db, line["end"]) - level_at(db, dip) > DIP_SETTLED_DB:
                 joins.append((i, line["end"], round(dip, 2), line["text"]))
                 if apply:
                     line["end"] = lines[i + 1]["start"] = round(dip, 2)
