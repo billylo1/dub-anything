@@ -11,14 +11,17 @@ which is heard as a click just before the English starts. This finds every
 window start where the original voice is active and walks back to where that
 sound began. For a clear soft attack (see MIN_SHIFT/MAX_SHIFT/CUT_DB) it moves
 the window to start 20 ms before it, never before the previous window's end;
-the rest are listed as 'skip'.
+the rest are listed as 'skip'. The separator writes zeros (or nearly) where it
+hears no voice, and speech detection can miss the first 150-400 ms of a phrase
+that rises out of them: a sound that begins in that silence and runs unbroken
+into the line is the line's own start, so the window moves back up to 400 ms.
 
 Window ends are the mirror image: the original mix fades back in over the
 window's last 10 ms, so a voice still sounding there plays a clipped tail of
 the original after the English. A short tail that clearly belongs to the line
 (same rule) moves the end to 20 ms after the voice stops, never closer than
 50 ms to the next window. Longer ones are usually the next speaker, a laugh or
-a crowd, and are only noted.
+a crowd, and are only noted, unless the voice dies out into that silence.
 
 Where two windows touch (a turn change, or a line split without a pause), the
 voice often still dips to near silence for a moment near the boundary, too briefly
@@ -42,6 +45,7 @@ from faster_whisper.audio import decode_audio
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR, HOP = 16000, 80  # 5 ms frames
 GAP = 4  # frames: the voice has stopped once it stays under the threshold this long (20 ms)
+SILENT_DB = -70.0  # the separated vocals between phrases: exact zeros (-180 dB) or nearly
 
 
 def frames_db(audio):
@@ -50,10 +54,18 @@ def frames_db(audio):
     return 20 * np.log10(np.sqrt((x ** 2).mean(1)) + 1e-9)
 
 
+def silent(db, a, b):
+    """Some of the separated vocals' silence in frames a..b: the voice fades in
+    or out over a few faint frames on its way from it."""
+    seg = db[max(0, a):b]
+    return len(seg) > 0 and float(seg.min()) < SILENT_DB
+
+
 def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
-    """If the voice is sounding just before time t, the time it began (minus
-    `lead`), not earlier than floor_t; else None. `level` is the line's speech
-    level; 'sounding' means within `below` dB of it."""
+    """If the voice is sounding just before time t: the time it began (minus
+    `lead`, not earlier than floor_t) and whether it rose out of silence;
+    else None. `level` is the line's speech level; 'sounding' means within
+    `below` dB of it."""
     k = int(t * SR / HOP)
     thresh = level - below
     if k < 2 or k > len(db) or max(db[k - 2:k]) < thresh:  # the 10 ms before the edge
@@ -65,12 +77,13 @@ def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
     # --apply run's cut just before another flicker, a little earlier every time.
     while j - 1 >= floor_k and max(db[max(floor_k, j - GAP):j]) >= thresh:
         j -= 1
-    return max(floor_t, j * HOP / SR - lead)
+    return max(floor_t, j * HOP / SR - lead), j > floor_k and silent(db, j - 4 * GAP, j)
 
 
 def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
-    """If the voice is sounding just after time t, the time it stops (plus
-    `lag`), not later than ceil_t; else None. The mirror of voiced_onset."""
+    """If the voice is sounding just after time t: the time it stops (plus
+    `lag`, not later than ceil_t) and whether it dies into silence; else
+    None. The mirror of voiced_onset."""
     k = int(t * SR / HOP)
     thresh = level - below
     if k + 2 > len(db) or min(db[k:k + 2]) < thresh:  # the 10 ms after the edge
@@ -79,7 +92,7 @@ def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
     ceil_k = min(len(db) - 1, int(ceil_t * SR / HOP))
     while j + 1 <= ceil_k and max(db[j + 1:min(ceil_k, j + GAP) + 1]) >= thresh:
         j += 1
-    return min(ceil_t, (j + 1) * HOP / SR + lag)
+    return min(ceil_t, (j + 1) * HOP / SR + lag), j < ceil_k and silent(db, j + 1, j + 1 + 4 * GAP)
 
 
 def level_at(db, t):
@@ -106,6 +119,11 @@ def line_level(db, a, b):
 # flagged. Longer ones are usually someone else's sound (a tail, a laugh),
 # where moving the window would start the English too early.
 MIN_SHIFT, MAX_SHIFT, CUT_DB = 0.04, 0.15, -16.0
+# A sound rising out of the separated vocals' silence (or dying into it) and running
+# unbroken into the line is the line's own: speech detection missed 150-400 ms of such
+# attacks, at the line's full level, on many lines of one film.
+MAX_SHIFT_SILENT = 0.40
+SEARCH = 0.45  # how far past an edge to look for where the voice begins or ends
 
 
 def check(name, apply=False, min_shift=0.015):
@@ -119,11 +137,13 @@ def check(name, apply=False, min_shift=0.015):
     for i, line in enumerate(lines):
         level = line_level(db, line["start"], line["end"])
         prev_end = lines[i - 1]["end"] if i else 0.0
-        onset = voiced_onset(db, line["start"], max(prev_end, line["start"] - 0.3), level)
+        onset, from_silence = voiced_onset(db, line["start"], max(prev_end, line["start"] - SEARCH), level) \
+            or (None, False)
         if onset is not None and line["start"] - onset >= min_shift:
             k = int(line["start"] * SR / HOP)
             cut = float(max(db[k - 2:k])) - level  # how loud the voice is where it gets chopped
-            fix = MIN_SHIFT - 1e-6 <= line["start"] - onset <= MAX_SHIFT + 1e-6 and cut >= CUT_DB
+            limit = MAX_SHIFT_SILENT if from_silence else MAX_SHIFT
+            fix = MIN_SHIFT - 1e-6 <= line["start"] - onset <= limit + 1e-6 and cut >= CUT_DB
             moved.append((i, line["start"], round(onset, 2), line["text"], cut, fix))
             if apply and fix:
                 line["start"] = round(onset, 2)
@@ -136,11 +156,14 @@ def check(name, apply=False, min_shift=0.015):
                     line["end"] = lines[i + 1]["start"] = round(dip, 2)
             continue
         ceil = nxt - 0.05
-        release = voiced_release(db, line["end"], min(ceil, line["end"] + 0.3), level)
+        release, to_silence = voiced_release(db, line["end"], min(ceil, line["end"] + SEARCH), level) \
+            or (None, False)
         if release is not None:
             k = int(line["end"] * SR / HOP)
             cut = float(min(db[k:k + 2])) - level
-            fix = MIN_SHIFT - 1e-6 <= release - line["end"] <= MAX_SHIFT + 1e-6 and cut >= CUT_DB                 and release < min(ceil, line["end"] + 0.3)  # the voice really stopped
+            limit = MAX_SHIFT_SILENT if to_silence else MAX_SHIFT
+            fix = MIN_SHIFT - 1e-6 <= release - line["end"] <= limit + 1e-6 and cut >= CUT_DB \
+                and release < min(ceil, line["end"] + SEARCH)  # the voice really stopped
             tails.append((i, line["end"], round(release, 2), line["text"], cut, fix))
             if apply and fix:
                 line["end"] = round(release, 2)
@@ -148,7 +171,7 @@ def check(name, apply=False, min_shift=0.015):
         print(f"  {'FIX ' if fix else 'skip'} L{i:02d} start {old:7.2f} -> {new:7.2f}  ({(old - new) * 1000:3.0f} ms "
               f"earlier, voice {cut:+5.1f} dB at the cut)  {text[:40]}")
     for i, old, new, text, cut, fix in tails:
-        what = f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later," if fix else             f"   voice sounds {(new - old) * 1000:3.0f}+ ms on," if new >= old + 0.3 - 1e-6 else             f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
+        what = f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later," if fix else             f"   voice sounds {(new - old) * 1000:3.0f}+ ms on," if new >= old + SEARCH - 1e-6 else             f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
         print(f"  {'FIX ' if fix else 'note'} L{i:02d} end   {old:7.2f} {what} voice {cut:+5.1f} dB at the cut)  {text[:36]}")
     for i, old, new, text in joins:
         print(f"  FIX  L{i:02d}/L{i + 1:02d} boundary {old:7.2f} -> {new:7.2f}  (the voice dips there)  {text[:36]}")

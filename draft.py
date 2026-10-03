@@ -335,11 +335,12 @@ def draft(name, cast, model, embed_once):
     # that opens mid-sound chops the actor audibly (edges.py has the rule).
     db = edges.frames_db(audio)
     for i, p in enumerate(phrases):
-        floor_t = max(phrases[i - 1]["end"] if i else 0.0, p["start"] - 0.3)
+        floor_t = max(phrases[i - 1]["end"] if i else 0.0, p["start"] - edges.SEARCH)
         level = edges.line_level(db, p["start"], p["end"])
-        onset = edges.voiced_onset(db, p["start"], floor_t, level)
+        onset, from_silence = edges.voiced_onset(db, p["start"], floor_t, level) or (None, False)
         k = int(p["start"] * SR / edges.HOP)
-        if onset is not None and edges.MIN_SHIFT <= p["start"] - onset <= edges.MAX_SHIFT \
+        limit = edges.MAX_SHIFT_SILENT if from_silence else edges.MAX_SHIFT
+        if onset is not None and edges.MIN_SHIFT <= p["start"] - onset <= limit \
                 and max(db[k - 2:k]) - level >= edges.CUT_DB:
             p["start"] = round(onset, 2)
     suggest(name, work, audio, phrases, spans, cast, embed_once)

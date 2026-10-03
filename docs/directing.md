@@ -666,7 +666,12 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   `edges.py <clip> --apply` finds these and starts the window 20 ms before the
   true attack. It only moves clear cases: a voice within 16 dB of the line at
   the cut that began 20–130 ms before the window. Shorter fragments weren't
-  heard, and longer ones are usually someone else's sound. It's timing only, so
+  heard, and longer ones are usually someone else's sound, except where the
+  sound rises out of silence: the separated vocals hold zeros (or nearly)
+  between phrases, so a sound that begins there and runs unbroken into the
+  window is the line's own start, and `edges.py` moves the window up to 400 ms
+  then. In one film the drafts started 150–400 ms late on many lines this way,
+  the actor at full level at the cut. It's timing only, so
   the re-render is a re-mix and approved takes stay. `draft.py` applies the same
   rule to new drafts. Windows you set by hand bypass it, so run `edges.py`
   after writing a script. A `skip` with a long shift (150–300 ms) and a voice
@@ -676,7 +681,7 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   than the line itself. The fix is best checked by ear on the flagged lines.
   Window ends are the mirror image: a voice still sounding when the window
   closes plays a clipped tail of the original after the English. `edges.py`
-  moves the end past short tails (same rule) and notes the rest for manual review.
+  moves the end past short tails (same rule, so up to 400 ms into silence) and notes the rest for manual review.
   Where two windows touch, it moves their shared boundary onto the dip between
   the voices when there is one (see `dips` under "Render"). In a noisy room (a
   bar, a crowd) the separated vocals keep some background chatter: long `skip`s
