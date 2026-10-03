@@ -139,7 +139,9 @@ stream that went off air and came back with another programme. Otherwise the
 music under the speech can hide every gap from its full-mix VAD, and the cut
 may then fall inside a phrase. Transcribe a few seconds around such a cut
 (`asr_words.py` on an extract of the video). If it splits a phrase, re-split
-with `--whole` bounds placed in a real pause.
+with `--whole` bounds placed in a real pause. A long pause can be false too:
+shouts over music hide from the same VAD, and in one anime two cuts placed in
+the middle of 4–6 s "pauses" each landed on a line's first syllable.
 
 `prep` separates the voices and prints Whisper's rough transcript. It also
 switches VoiceStudio to pyannote when it's installed.
@@ -195,7 +197,11 @@ captions on screen under each phrase and lists captions no phrase covers.
 Caption times follow the display, not the speech, so windows still come from
 the VAD. The OCR misreads a character now and then (a kana for its katakana
 twin, a rare kanji), so weigh it against Whisper and the context. Song lyrics
-become bare `♪` markers: songs stay in the original audio.
+become bare `♪` markers: songs stay in the original audio. It also drops
+whole captions: it only accepts light text on a dark box, and a broadcaster's
+semi-transparent box over a bright scene fails that test. In one anime most
+lines had a caption in the picture and none in `subs.json`, so a line without
+`cc:` proves nothing: look at the frames (wide enough to read the colour).
 
 A film set abroad subtitles its foreign-language speech in the picture
 itself: white text with a dark outline at the bottom, no box. `subs.py <clip>
@@ -308,7 +314,11 @@ their own original (see "The reference sets the register").
   run about 0.4 s early. Find true onsets with Silero VAD on `vocals.wav`
   (`faster_whisper.vad.get_speech_timestamps`, `min_silence_duration_ms≈120`) or
   with `contour.py`. `onsets.py` gives a quicker energy-based check, but it hits
-  its ±0.6 s search limit on noise.
+  its ±0.6 s search limit on noise. The VAD misses shouted and drawn-out lines
+  (an excited "Found one!", a sing-song "so yummy"), even when they're the
+  loudest thing in the vocals: `draft.py` then drops the line or its end, and `fit.py` shows no actor
+  end for it. The loudness of `vocals.wav` in 50 ms steps shows where such a
+  line really starts and ends.
 - **Split long lines at the actor's pauses** so the English lands where the lips
   move. Write each piece so it stands on its own. A take whose text starts
   mid-sentence ("goes well with the rice") can come out with a subject added
