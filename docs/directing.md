@@ -413,9 +413,10 @@ their own original (see "The reference sets the register").
   their frames as delivered: check that each sits by its text, reads against
   the picture and covers nothing that matters. A line of dialogue that would
   cover a sign (its English or its original) moves to the top, if the top is
-  clear; where both are taken, move the sign's English instead (`place`). A
-  label laid over its original reads, but busily: on small labels, `boxed` or
-  a place beside it reads better. A page of text shown for a few seconds can't
+  clear; where both are taken, move the sign's English instead (`place`). Lay
+  short labels over their original without a box (the user's choice; a player
+  can't switch the box on or off); keep `boxed` for sentences over busy writing.
+  A page of text shown for a few seconds can't
   be read live in either language: translate it in full anyway, for the pause
   button. Leave what the original itself cuts off at the edge of the frame.
 
