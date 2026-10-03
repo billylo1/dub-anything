@@ -92,13 +92,16 @@ def unclean_windows(work, job_id, lines, ids, dips=False):
     characters. With `dips`, speech running on doesn't count where the voice dips
     to near silence right at the end (end_dip); `cut` is then where the line's
     reference ends, instead of the window's end. Cached in refs/clean.json by what
-    the check reads (window, voice and its clips, `ja`), not by the take:
-    rewording the English keeps it."""
+    the check reads (window, voice and its clips, `ja`, and the clips of every
+    voice it's compared with), not by the take: rewording the English keeps it,
+    and rebuilding another of the clip's voices checks its lines again."""
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
+    rivals = hashlib.sha1("|".join(f"{v}:{voice_sig(v)}" for v in sorted({line["voice"] for line in lines}))
+                          .encode()).hexdigest()[:8]
     keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
             f"{line['voice']}|{voice_sig(line['voice'])}|{line['ja']}".encode()).hexdigest()[:12]
-            + ("_dips" if dips else "") for line in lines]
+            + f"_{rivals}" + ("_dips" if dips else "") for line in lines]
     if any(k not in cache for k in keys):
         import draft
         import edges
