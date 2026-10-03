@@ -3,7 +3,8 @@
 Usage: deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assembled.mp4> ...] [--default VOICE]
 
 Each <assembled.mp4> is assemble.py's output for one voice ("actor" or
-"american"), with its .en.srt and .ja.srt beside it. The result keeps every
+"american"), with its .en.srt and .ja.srt beside it, and its .en.ass and
+.signs.ass when the parts translate text in the picture. The result keeps every
 stream of the source as it is (video, audio, its own subtitles) and adds, in
 this order:
   - audio: one English dub per voice, the default voice's first and marked
@@ -11,6 +12,10 @@ this order:
     source's own audio;
   - subtitles: English per voice (the default voice's first and on by
     default), the corrected Japanese transcript, then the source's own.
+With signs, the English tracks are the styled ones (signs placed by the text
+they translate), a signs-only track follows them, marked forced for players
+that show forced subtitles when subtitles are off, and the file becomes
+Matroska ("<name> (dubbed).mkv"): MP4's subtitles can't be placed.
 Nothing is re-encoded; the new subtitles are written in the container's format.
 Every copied stream is checked against its input (MD5) before the new file
 replaces the source; the source's name gets " (dubbed)" (once). Delivering
@@ -28,7 +33,8 @@ from core import VOICE_LABEL
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SUFFIX = " (dubbed)"
 JA_TITLE = "日本語 (transcript)"
-OURS = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|日本語 \(transcript\))$")
+SIGNS_TITLE = "English (signs only)"
+OURS = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|English \(signs only\)|日本語 \(transcript\))$")
 
 
 def dub_title(voice):
@@ -63,9 +69,9 @@ def md5(path, index):
                           capture_output=True, encoding="utf-8", check=True).stdout.strip()
 
 
-def delivered_name(source):
+def delivered_name(source, mkv=False):
     stem = source.stem[:-len(SUFFIX)] if source.stem.endswith(SUFFIX) else source.stem
-    ext = source.suffix.lower() if source.suffix.lower() in (".mp4", ".m4v", ".mov", ".mkv") else ".mkv"
+    ext = source.suffix.lower() if source.suffix.lower() in (".mp4", ".m4v", ".mov", ".mkv") and not mkv else ".mkv"
     return source.with_name(f"{stem}{SUFFIX}{ext}")
 
 
@@ -84,14 +90,18 @@ def deliver(source, dubs, default, source_lang="jpn"):
     vids = [s for s in keep if s["codec_type"] == "video"]
     auds = [s for s in keep if s["codec_type"] == "audio"]
     subs = [s for s in keep if s["codec_type"] == "subtitle"]
-    out = delivered_name(source)
+    signs = dubs[voices[0]].with_suffix(".signs.ass")
+    signs = signs if signs.exists() else None
+    out = delivered_name(source, mkv=bool(signs))
     tmp = out.with_name(out.stem + ".delivering" + out.suffix)
     mkv = out.suffix == ".mkv"
 
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(source)]
     for v in voices:
         cmd += ["-i", str(dubs[v])]
-    srts = [(dubs[v].with_suffix(".en.srt"), "eng", sub_title(v)) for v in voices]
+    srts = [(dubs[v].with_suffix(".en.ass" if signs else ".en.srt"), "eng", sub_title(v)) for v in voices]
+    if signs:
+        srts.append((signs, "eng", SIGNS_TITLE))
     ja = dubs[voices[0]].with_suffix(".ja.srt")
     if ja.exists():
         srts.append((ja, "jpn", JA_TITLE))
@@ -110,8 +120,11 @@ def deliver(source, dubs, default, source_lang="jpn"):
     for s in subs:
         cmd += ["-map", f"0:{s['index']}"]
     cmd += ["-c", "copy"]
-    for k in range(len(srts)):  # ours are .srt files; the source's own stay as they are
-        cmd += [f"-c:s:{k}", "srt" if mkv else "mov_text"]
+    for k, (path, _, _) in enumerate(srts):  # ours are .srt and .ass files
+        cmd += [f"-c:s:{k}", "ass" if path.suffix == ".ass" else "srt" if mkv else "mov_text"]
+    for k, s in enumerate(subs, len(srts)):  # the source's own stay as they are, unless Matroska can't hold them
+        if mkv and s["codec_name"] == "mov_text":
+            cmd += [f"-c:s:{k}", "srt"]
 
     def label(spec, lang, title):
         return [f"-metadata:s:{spec}", f"language={lang}", f"-metadata:s:{spec}", f"title={title}",
@@ -123,7 +136,8 @@ def deliver(source, dubs, default, source_lang="jpn"):
         lang = tags.get("language") if tags.get("language") not in (None, "und") else source_lang
         cmd += label(f"a:{k}", lang, name_of(s) or "日本語 (original)") + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
-        cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else "0"]
+        cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else
+                                               "forced" if title == SIGNS_TITLE else "0"]
     for k, s in enumerate(subs, len(srts)):
         cmd += [f"-disposition:s:{k}", "0"]
     if not mkv:

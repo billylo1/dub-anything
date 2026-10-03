@@ -9,7 +9,8 @@ PaddleOCR's PP-OCRv5 models (RapidOCR on onnxruntime, GPU when available):
 
 1. Frames are sampled over the whole picture (4 a second). A frame that barely
    differs from the last one read reuses its reading.
-2. Text is detected and read. Only light text on a dark box counts as a
+2. Text is detected and read. Only light text on a dark box, or on a
+   semi-transparent one over a bright scene (found by its edges), counts as a
    caption, so signs and other text in the scene are left out. Pieces of one
    row (captions space phrases apart) are joined.
 3. Readings of one caption across frames become one event, with its start,
@@ -137,7 +138,50 @@ def caption_box(img, box):
     lum = crop @ np.array([0.299, 0.587, 0.114], np.float32)
     text_lum, back_lum = np.percentile(lum, 90), np.percentile(lum, 40)
     ok = text_lum >= 150 and back_lum <= 100 and text_lum - back_lum >= 80
-    return ok, color_of(crop[lum >= np.percentile(lum, 90)].mean(axis=0))
+    color = color_of(crop[lum >= np.percentile(lum, 90)].mean(axis=0))
+    # Thin strokes can fill under a tenth of the box: the brightest pixels are the text.
+    return ok or (np.percentile(lum, 97) >= 150 and overlay_box(img, box)), color
+
+
+def edge_step(lum, box, side):
+    """The sharpest rise in brightness going out from one side of a text box
+    (outside over inside), within reach of the text."""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    reach = int(max(10, 0.8 * min(w, h)))
+    inset = max(2, int(0.15 * h))     # the detector's box can reach past the overlay's edge
+    if side in ("top", "bottom"):
+        a, b = int(x0 + 0.1 * w), int(x1 - 0.1 * w)
+        rows = range(int(y0) + inset, int(y0) - reach, -1) if side == "top" else \
+            range(int(y1) - inset, int(y1) + reach)
+        prof = np.array([np.median(lum[y, a:b]) for y in rows if 0 <= y < lum.shape[0] and b > a])
+    else:
+        a, b = int(y0 + 0.2 * h), int(y1 - 0.2 * h)
+        cols = range(int(x0) + inset, int(x0) - reach, -1) if side == "left" else \
+            range(int(x1) - inset, int(x1) + reach)
+        prof = np.array([np.median(lum[a:b, x]) for x in cols if 0 <= x < lum.shape[1] and b > a])
+    best = 0.0
+    for k in range(2, len(prof) - 3):
+        inside, outside = np.median(prof[max(0, k - 4):k]), np.median(prof[k:k + 4])
+        if inside > 5:
+            best = max(best, outside / inside)
+    return best
+
+
+def overlay_box(img, box, ratio=1.5):
+    """True when the text sits on a semi-transparent dark box: the picture is
+    about half as bright inside it, so brightness steps up at its edges (top and
+    bottom, or three sides). A broadcaster's box over a bright scene fails the
+    dark-background test but not this one."""
+    xs, ys = [float(p[0]) for p in box], [float(p[1]) for p in box]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    m = int(max(10, 0.8 * min(x1 - x0, y1 - y0))) + 4
+    wx, wy = max(int(x0) - m, 0), max(int(y0) - m, 0)
+    win = img[wy:int(y1) + m, wx:int(x1) + m].astype(np.float32)
+    lum = win @ np.array([0.299, 0.587, 0.114], np.float32)
+    rect = (x0 - wx, y0 - wy, x1 - wx, y1 - wy)
+    steps = {s: edge_step(lum, rect, s) >= ratio for s in ("top", "bottom", "left", "right")}
+    return (steps["top"] and steps["bottom"]) or sum(steps.values()) >= 3
 
 
 def subtitle_text(img, box):

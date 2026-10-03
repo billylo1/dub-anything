@@ -1,7 +1,7 @@
 """Run a dub from source video to the delivered file: the machine work, around the director's.
 
 Usage:
-  dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles]
+  dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
   dubrama.py run <slug> [--watch]       do every step that can run now (see below)
   dubrama.py status <slug>              where each part stands, and what blocks it
   dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
@@ -15,7 +15,8 @@ videos/<slug>.<ext> so the split keeps working after delivery renames it.
 run does, in order and only what isn't done yet: split; dub.py prep, then
 separate.py, subs.py (with --captions or --subtitles) and draft.py, first over the first part to
 dub (so the director can start on it) and then PREP_CHUNK parts at a time in film
-order, so drafts keep coming; second.py over them in the background (CPU). For
+order, so drafts keep coming; second.py over them in the background (CPU); with
+--signs, signs.py over each part once every part is drafted. For
 each part whose script the director has marked ready (or left with "lines": []),
 in each voice: render, lineqa, and up to QA_ROUNDS rounds of fresh takes or
 conversions for the flagged lines; what is still flagged after that goes to the
@@ -62,6 +63,7 @@ SEPARATE = UV + ["--python", "3.11", "--index", "https://download.pytorch.org/wh
 SECOND = UV + ["--python", "3.12", "--with", "sherpa-onnx", "--with", "soundfile", "--with", "scipy", "--with",
                "pykakasi", "--with", "huggingface_hub", "python", "second.py"]
 SUBS = UV + ["--python", "3.12", "--with", "rapidocr", "--with", "onnxruntime-gpu[cuda,cudnn]", "python", "subs.py"]
+SIGNS = SUBS[:-1] + ["signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "voice": "american"}
 ACTOR_RENDER = {"line_ref": True, "fill": True, "dips": True, "voice": "actor"}
@@ -161,6 +163,13 @@ def prepare_step(job, ps):
     chunk. Returns 'busy', 'done' or 'failed'."""
     chunk = prep_chunk(ps)
     if not chunk:
+        # Text in the picture, for translating: after the drafts, which the director needs first.
+        for p in ps if job.get("signs") else []:
+            if not original_only(p) and not (WORK / p["name"] / "signs.json").exists():
+                if not tool(job, f"signs {p['name']}", SIGNS + [p["name"]], f"signs-{p['name']}")[0]:
+                    problem(job, f"signs.py failed on {p['name']}")
+                    return "failed"
+                return "busy"
         return "done"
     names = [p["name"] for p in chunk]
     label = names[0] if len(names) == 1 else f"{names[0]}..{names[-1].rsplit('-', 1)[-1]}"
@@ -524,7 +533,7 @@ def cmd_new(args):
             shutil.copy2(src, link)
     job = {"slug": slug, "title": src.stem, "source": str(src), "video": str(link), "voices": voices,
            "default": voices[0], "split": {"minutes": args.minutes, "whole": args.whole}, "captions": "open" if args.subtitles else args.captions,
-           "created": time.strftime("%Y-%m-%d %H:%M")}
+           "signs": args.signs, "created": time.strftime("%Y-%m-%d %H:%M")}
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
     print(f"job {slug}: {src.name}, {' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
@@ -697,6 +706,8 @@ def main():
     a.add_argument("--captions", action="store_true", help="the picture carries captions: run subs.py")
     a.add_argument("--subtitles", action="store_true",
                    help="the film subtitles its foreign-language speech in the picture: run subs.py --open")
+    a.add_argument("--signs", action="store_true",
+                   help="text in the picture worth translating (signs, diagrams, title cards): run signs.py")
     a.set_defaults(fn=cmd_new)
     for name, fn in (("run", cmd_run), ("status", cmd_status), ("report", cmd_report), ("cleanup", cmd_cleanup)):
         b = sub.add_parser(name)

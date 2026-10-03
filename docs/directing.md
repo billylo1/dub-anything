@@ -113,6 +113,20 @@ the original audio but still belongs in the subtitles. Examples: dialogue alread
 English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
 list to both subtitle tracks.
 
+A top-level `"signs": [{start, end, text, box}]` list translates text in the
+picture: a title card, a diagram's labels, a page shown to be read. `box` is
+where the original is, `[x0, y0, x1, y1]` as fractions of the picture (from
+`signs.py`). The English goes over it, or `place` puts it `above`, `below`,
+`left` or `right` of the box, or `page`: from the box's top left corner,
+left-aligned and wrapped in the box. Optional: `box_end` (the box at the end,
+when the camera pans: the English moves with it, during `seen`, `[t0, t1]`, if
+given; the candidate's `seen` holds the times of its two boxes, but a pan is
+often shorter, so find it in the frames), `size` (relative font size),
+`width` (the width it wraps in, as a fraction of the picture), `boxed` (a dark
+box behind it, over busy writing), and `ja` and `note` for the record. Signs
+render nothing and don't make a part render again; they change the delivery
+(see "Package").
+
 ## Workflow
 
 For a new show, settle one thing with the user before the first part: the
@@ -197,11 +211,13 @@ captions on screen under each phrase and lists captions no phrase covers.
 Caption times follow the display, not the speech, so windows still come from
 the VAD. The OCR misreads a character now and then (a kana for its katakana
 twin, a rare kanji), so weigh it against Whisper and the context. Song lyrics
-become bare `♪` markers: songs stay in the original audio. It also drops
-whole captions: it only accepts light text on a dark box, and a broadcaster's
-semi-transparent box over a bright scene fails that test. In one anime most
-lines had a caption in the picture and none in `subs.json`, so a line without
-`cc:` proves nothing: look at the frames (wide enough to read the colour).
+become bare `♪` markers: songs stay in the original audio. A caption counts
+when its text is light on a dark box, or sits on a broadcaster's
+semi-transparent box, found by its edges: the picture is about half as bright
+inside it. Before the second test, a box over a bright scene was dropped, and in
+one anime most lines had a caption in the picture and none in `subs.json`. A
+line without `cc:` still proves little: look at the frames (wide enough to read
+the colour).
 
 A film set abroad subtitles its foreign-language speech in the picture
 itself: white text with a dark outline at the bottom, no box. `subs.py <clip>
@@ -377,6 +393,31 @@ their own original (see "The reference sets the register").
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
   narration fragments into full sentences. Short sentence fragments can be
   harder to synthesize clearly.
+- **Translate the text in the picture the viewer needs** (`"signs"`, with
+  `dubrama.py new --signs` or by hand): title cards and disclaimers, the labels
+  of a diagram the narration explains, a letter or a screen a character reads,
+  a page put up to be read with the pause button. Leave the clutter: shop signs
+  in passing, posters, number plates, the channel's logo. `signs.py <part>`
+  (subs.py's environment, about 40 s of GPU per minute) lists candidates in
+  `signs.json` with times and boxes, draws a sheet for each
+  (`work/<part>/signs/NN.jpg`) and a thumbnail of every shot (`shots-N.jpg`).
+  Read the sheets, not the OCR: it misreads stylised writing and misses vertical
+  brush lettering, handwriting and arched labels altogether, so scan the shot
+  thumbnails for text it missed and take the box from the frame. A label that
+  repeats a word of the narration is still a label (only longer text matching
+  the dialogue is dropped as a caption). A sign shows from cut to cut unless it
+  appears mid-shot, but the cut detector misses a hard cut between two similar
+  pictures (two pages on white), so check the times of anything that changes in
+  place. Diagrams come in stages: a label can appear seconds into its shot.
+  `signs.py <part> --preview [N ...]` draws the part's signs and dialogue into
+  their frames as delivered: check that each sits by its text, reads against
+  the picture and covers nothing that matters. A line of dialogue that would
+  cover a sign (its English or its original) moves to the top, if the top is
+  clear; where both are taken, move the sign's English instead (`place`). A
+  label laid over its original reads, but busily: on small labels, `boxed` or
+  a place beside it reads better. A page of text shown for a few seconds can't
+  be read live in either language: translate it in full anyway, for the pause
+  button. Leave what the original itself cuts off at the edge of the frame.
 
 ### 4. Render
 
@@ -585,6 +626,14 @@ the new file replaces the source, renamed `<name> (dubbed)`. Delivering again
 replaces the dub tracks a "(dubbed)" file already has. `dubrama.py` does both
 steps when every part is done.
 
+When any part has `signs`, `assemble.py` also writes the English track styled
+(`.en.ass`: the dialogue, with each sign placed by its text, `ass.py`) and the
+signs alone (`.signs.ass`), and `deliver.py` delivers Matroska,
+`<name> (dubbed).mkv`, in place of the source: MP4's subtitles can't be placed.
+The English tracks are then the styled ones, and the signs-only track follows
+them, marked forced, for watching the dub with subtitles off. A player has to
+render ASS subtitles to place them (mpv and VLC do, with libass).
+
 ## Gotchas
 
 - **Takes can only be replaced in a job that has rendered.** On a job's first
@@ -722,6 +771,7 @@ The loop, in the order it runs:
 | `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
 | `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
+| `signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
 | `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
 | `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
 | `voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
@@ -733,8 +783,8 @@ The loop, in the order it runs:
 | `fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
 | `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
 | `lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs; a part without lines keeps its original audio |
-| `deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` |
+| `assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
+| `deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
 
 Used now and then:
 
@@ -746,4 +796,4 @@ Used now and then:
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 | `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
 | `backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
-| `core.py`, `gpulock.py` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping |
+| `core.py`, `gpulock.py`, `ass.py` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs |

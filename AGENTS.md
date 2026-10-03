@@ -52,7 +52,8 @@ cloned or shared are final.
 - Tools in their own environments (`dubrama.py run` starts them itself):
   - `separate.py`: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python separate.py <clip> ...`
   - `second.py`: `uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip> ...`
-  - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python subs.py <clip>`
+  - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python subs.py <clip>`;
+    `signs.py` (text in the picture to translate) runs the same way
   - `pitch.py`, `contour.py`: `uv run --no-project --python 3.12 --with librosa --with soundfile python <script>`
   - `vc.py` (the `"american"` voice), which `dub.py generate` starts itself: it
     needs uv on PATH and a Chatterbox clone in `vendor/chatterbox` (see
@@ -72,10 +73,11 @@ you direct.
    "Voice"). With both, the actor's voice plays by default. Look at the video's
    length and skim it for blocks that stay in the original (a channel card,
    commercial breaks, credits) so they can be split off whole.
-   `dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles]`
+   `dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
-   picture). Record the
+   picture, `--signs` when it has text worth translating: title cards,
+   explainer diagrams, pages to read). Record the
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
    `dubrama.py run <slug> --watch`. It splits; preps, separates and drafts the
@@ -94,7 +96,9 @@ you direct.
    reference, fix every `OVER?`, and write fuller English for every `SHORT?`.
    With the American voice in the job, also run `fit.py <part> --voice
    american`; a line that needs other English for that voice alone gets
-   `"text_us"`. Give each guess a `"listen"` note (who says it, a misheard
+   `"text_us"`. With `--signs`, translate the text in the picture the viewer
+   needs into the part's `"signs"` from `signs.py`'s sheets, and check them
+   with `signs.py <part> --preview`. Give each guess a `"listen"` note (who says it, a misheard
    word): it goes into the report. A part that stays original gets
    `"lines": []`. Then `dubrama.py ready <slug> <NN>`: it renders by itself.
 4. **When `run --watch` stops.** Exit 0: delivered. Exit 2: a part is blocked
@@ -110,7 +114,9 @@ you direct.
    ears.
 6. **Hand over.** The source file is now `<name> (dubbed)`: the English dub
    tracks first (the default voice plays), the original audio after them,
-   English subtitles on, and Japanese. Every copied stream was checked against
+   English subtitles on, and Japanese (with signs: Matroska, the English
+   subtitles styled with the signs placed, and a signs-only track). Every
+   copied stream was checked against
    its source before the file was replaced. Give the user the path and the
    listen list with film times, and send a notification if they may be away.
 7. **Clean up** only when the user is happy with it: `dubrama.py cleanup <slug>`

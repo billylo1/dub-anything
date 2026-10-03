@@ -11,7 +11,9 @@ renders (work/<part>.us, see core.voice_part). The result has:
     (its "lines" plus any caption-only "captions" left in the original audio),
     any text subtitle tracks already in the source, and any --sub files
     (timed to the source video)
-plus sidecar .srt files. Output defaults to the parts' `dubbed` folder.
+plus sidecar .srt files, and when any part has "signs" (translations of text in
+the picture) the styled English track with them, .en.ass, and the signs alone,
+.signs.ass (see ass.py). Output defaults to the parts' `dubbed` folder.
 """
 import argparse
 import json
@@ -20,6 +22,7 @@ import re
 import subprocess
 import sys
 
+import ass
 from core import HERE, VOICE_LABEL, WORK, load_json, out_dir, srt_time, voice_part
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -30,7 +33,7 @@ TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
 
 def probe(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                          "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name",
+                          "format=duration:stream=index,codec_type,codec_name,width,height:stream_tags=language,title,handler_name",
                           "-of", "json", str(path)], capture_output=True, encoding="utf-8", check=True).stdout
     return json.loads(out)
 
@@ -73,7 +76,7 @@ def main():
     parts = [{**p, "name": voice_part(p["name"], args.voice)} for p in parts]
     t0, t1 = parts[0]["start"], parts[-1]["end"]
 
-    dubs, en, ja = [], [], []
+    dubs, en, ja, signs = [], [], [], []
     for p in parts:
         # A part left as it is needs no prep: its own file stands in for the job's.
         doc = load_json(WORK / p["name"] / "segments.json") or {"video": p.get("file", source)}
@@ -93,6 +96,7 @@ def main():
             en.append((line["start"] + off, line["end"] + off, line["text"]))
             if line.get("ja"):
                 ja.append((line["start"] + off, line["end"] + off, line["ja"]))
+        signs += [{**s, "start": s["start"] + off, "end": s["end"] + off} for s in script.get("signs", [])]
 
     first_doc = load_json(WORK / parts[0]["name"] / "segments.json") or {"video": parts[0].get("file", source)}
     dest = out_dir(first_doc)
@@ -106,6 +110,15 @@ def main():
             srt = out.with_suffix(f".{lang}.srt")
             write_srt(srt, cues)
             subs.append((srt, LANG3[lang], TITLES[LANG3[lang]], 0.0))
+    styled = [out.with_suffix(".en.ass"), out.with_suffix(".signs.ass")]
+    if signs:
+        video = next(s for s in probe(source)["streams"] if s["codec_type"] == "video")
+        ass.write(styled[0], video["width"], video["height"], en, signs)
+        ass.write(styled[1], video["width"], video["height"], (), signs)
+        print(f"  {len(signs)} signs: {styled[0].name}, {styled[1].name}")
+    else:
+        for path in styled:     # left from an earlier assembly: they would deliver signs no part has now
+            path.unlink(missing_ok=True)
     for s in args.sub:
         m = re.match(r"^(.+\.(?:srt|ass|ssa|vtt))(?::([^:]+))?(?::(.+))?$", s, re.IGNORECASE)
         if not m:
