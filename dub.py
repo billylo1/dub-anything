@@ -300,22 +300,28 @@ def file_sha(path):
 
 def render_mode(work, script, args):
     """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
-    "dips": .., "predict_speed": .., "voice": "actor" | "american"}. A part without one
-    gets the defaults (per-line references, fill, and references cut at a dip when
-    speech runs on past a window: core.unclean_windows) if it has never been
+    "dips": .., "cast_lines": .., "predict_speed": .., "voice": "actor" | "american"}. A
+    part without one gets the defaults (per-line references, fill, references cut at
+    a dip when speech runs on past a window, and the window check's voice test against
+    the characters' cast lines too: core.unclean_windows) if it has never been
     rendered, and the earlier behaviour (all off) if it has, so approved takes don't
     change under a new default; the block is then written so later runs agree. The
     --[no-]line-ref, --[no-]fill, --[no-]predict-speed and --voice flags override it
     for one run."""
     mode = script.get("render")
     fresh = not load_json(work / "rendered.json")
-    if mode is None or "dips" not in mode:
-        # "dips" came after the others: a part rendered without it keeps its takes.
-        mode = script["render"] = {"line_ref": fresh, "fill": fresh, **(mode or {}), "dips": fresh}
+    if mode is None or "dips" not in mode or ("cast_lines" not in mode and fresh):
+        # "dips" and "cast_lines" came after the others: a part rendered without them keeps its
+        # takes. A rendered part's block isn't rewritten for "cast_lines" (missing reads as off),
+        # so its script, and dubrama.py's record of it, stay as they were.
+        mode = script["render"] = {"line_ref": fresh, "fill": fresh, "dips": fresh, **(mode or {})}
+        if fresh:
+            mode.setdefault("cast_lines", True)
         (work / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"  render mode written to script.json: {mode}"
               + ("" if fresh else " (this part was rendered before some of these became the default)"))
-    mode = {"line_ref": False, "fill": False, "predict_speed": False, "voice": "actor", "dips": False, **mode}
+    mode = {"line_ref": False, "fill": False, "predict_speed": False, "voice": "actor", "dips": False,
+            "cast_lines": False, **mode}
     for key in ("line_ref", "fill", "predict_speed", "voice"):
         if getattr(args, key) is not None:
             mode[key] = getattr(args, key)
@@ -426,7 +432,8 @@ def cmd_generate(args):
                 seg["emo_audio"], seg["emo_alpha"] = emo[i]
                 settings[i]["emo_alpha"] = emo[i][1]
         # Per-line references: the voice's clips plus the line's own original.
-        refs = line_refs(work, job_id, script["lines"], ids, verbose=first, dips=mode["dips"]) \
+        refs = line_refs(work, job_id, script["lines"], ids, verbose=first, dips=mode["dips"],
+                         cast_lines=mode["cast_lines"]) \
             if mode["line_ref"] else {}
         for seg, i in zip(segments, ids):
             if i in refs:

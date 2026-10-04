@@ -86,8 +86,8 @@ differs.
 A top-level `"ready": true` tells `dubrama.py` the part is directed
 (`dubrama.py ready <slug> <NN>`); it renders nothing before that.
 
-A top-level `"render": {"line_ref": true, "fill": true, "dips": true}` records how
-the part is rendered (see "Render"). `dub.py generate` writes it on the first run:
+A top-level `"render": {"line_ref": true, "fill": true, "dips": true, "cast_lines": true}`
+records how the part is rendered (see "Render"). `dub.py generate` writes it on the first run:
 all on for a part never rendered, off for a part rendered before they became the
 default, so its approved takes don't change.
 
@@ -315,6 +315,11 @@ original normally sets its delivery (see "Render"). The character's reference
 holds the voice steady, and it alone sets the delivery of lines that can't use
 their own original (see "The reference sets the register").
 
+Keep a main character's reference near 8–10 s, not the full 15. A per-line
+reference is the clips, a 0.3 s pause and the line's window, and must fit
+OmniVoice's 20 s: a 15-s reference (16.7 s joined) left room only for windows
+under 3 s, and `fit.py` reported the rest as "over 20 s with the voice's clips".
+
 Build references at normal speaking level, too. A murmured reference, about
 14 dB below the show's other voices, scored nearer than their own voices on
 most short lines in its scenes, other characters' included, and the window
@@ -484,7 +489,14 @@ delivery of its line and ends where the actor stops:
   quick family argument this gave 5 of 13 run-on lines their own reference;
   the rest overlapped for real. Nor is a window clean if Whisper hears
   something other than the line's `ja` (crosstalk), or if the voice is nearer
-  another character. The comparison reads katakana as hiragana, but a word
+  another character. With `cast_lines` (the `render` block's fourth switch) that
+  last test needs two votes: the line must be nearer another voice's reference
+  *and* nearer another character's cast centroid (its clips plus up to 30 lines
+  cast to it in the show's other parts, as `draft.py` scores them). A short
+  reference can miss most of a character's range: in one anime whose young voices
+  all scored about 0.5 against each other, the references alone sent 45% of the
+  lines to their fallback, a whole confession included ("nearer" a girl who had
+  one line in the scene); with both votes, 20%. The comparison reads katakana as hiragana, but a word
   Whisper writes in kana where `ja` has kanji still counts against it: write
   `ja` the way it is said when a short line falls back only for that. `generate` prints each line that
   falls back and why. A line whose window overlapped the next speaker came out

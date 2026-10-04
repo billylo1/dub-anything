@@ -46,7 +46,7 @@ import sys
 import numpy as np
 
 import edges
-from core import HF_CACHE, JOBS, WORK, load_json, voice_clips, whisper_setup
+from core import HF_CACHE, JOBS, VOICE_SUFFIX, WORK, load_json, voice_clips, whisper_setup
 from gpulock import hold_gpu
 
 whisper_setup()
@@ -208,7 +208,8 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
         if base[key] in wanted and voices[key].get("clips"):
             samples.setdefault(base[key], []).extend(voice_clips(voices[key]))
     for script in sorted(WORK.glob("*/script.json")):
-        if script.parent.name == exclude:
+        # Another voice's copy of a part (<part>.us) repeats the director's lines.
+        if script.parent.name == exclude or any(s and script.parent.name.endswith(s) for s in VOICE_SUFFIX.values()):
             continue
         for line in load_json(script).get("lines", []):
             who = base.get(line.get("voice"))

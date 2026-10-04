@@ -83,7 +83,7 @@ def end_dip(db, start, end):
     return round((lo + k) * frame, 3) if smooth[k] - level <= -DIP_DB else None
 
 
-def unclean_windows(work, job_id, lines, ids, dips=False):
+def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
     """Whether each line's window can be its own reference, as (why, cut) per line.
     `why` says why it can't, or is None if it can: speech running on past the
     window's end (the reference would end mid-sound, which OmniVoice finishes at
@@ -91,17 +91,22 @@ def unclean_windows(work, job_id, lines, ids, dips=False):
     (crosstalk, another voice), or a voice nearer another of the clip's
     characters. With `dips`, speech running on doesn't count where the voice dips
     to near silence right at the end (end_dip); `cut` is then where the line's
-    reference ends, instead of the window's end. Cached in refs/clean.json by what
-    the check reads (window, voice and its clips, `ja`, and the clips of every
-    voice it's compared with), not by the take: rewording the English keeps it,
-    and rebuilding another of the clip's voices checks its lines again."""
+    reference ends, instead of the window's end. With `cast_lines`, a voice is
+    only nearer another character when the characters' cast centroids (their clips
+    plus lines cast to them in the show's other parts, draft.cast_centroids) say so
+    too: a reference alone can miss much of a character's range. Cached in
+    refs/clean.json by what the check reads (window, voice and its clips, `ja`, and
+    the clips of every voice it's compared with), not by the take: rewording the
+    English keeps it, and rebuilding another of the clip's voices checks its lines
+    again. Lines cast in other parts aren't in the key, so a decision stays put
+    while the show's other parts are directed."""
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
     rivals = hashlib.sha1("|".join(f"{v}:{voice_sig(v)}" for v in sorted({line["voice"] for line in lines}))
                           .encode()).hexdigest()[:8]
     keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
             f"{line['voice']}|{voice_sig(line['voice'])}|{line['ja']}".encode()).hexdigest()[:12]
-            + f"_{rivals}" + ("_dips" if dips else "") for line in lines]
+            + f"_{rivals}" + ("_dips" if dips else "") + ("_cast" if cast_lines else "") for line in lines]
     if any(k not in cache for k in keys):
         import draft
         import edges
@@ -121,6 +126,8 @@ def unclean_windows(work, job_id, lines, ids, dips=False):
         who = lambda v: voices[v].get("register_of", v)  # noqa: E731
         cast = {v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
                 for v in {line["voice"] for line in lines}}
+        # Exclude this part's own lines: a line mustn't vouch for itself.
+        cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
         # Katakana as hiragana: Whisper writes a name or a word in either ("タロウ", "ナニ").
         strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—]", "", t).translate(KANA)  # noqa: E731
         for line, key in zip(lines, keys):
@@ -141,14 +148,16 @@ def unclean_windows(work, job_id, lines, ids, dips=False):
                 elif b - a >= 0.6:
                     e = embed(x)
                     best = max(cast, key=lambda v: float(e @ cast[v]))
-                    if who(best) != who(line["voice"]):
+                    if who(best) != who(line["voice"]) and not (
+                            who(line["voice"]) in cents
+                            and max(cents, key=lambda v: float(e @ cents[v])) == who(line["voice"])):
                         why = f"voice nearer {best}"
             cache[key] = {"cut": cut} if cut and not why else why
         cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
     return [(None, cache[k]["cut"]) if isinstance(cache[k], dict) else (cache[k], None) for k in keys]
 
 
-def line_refs(work, job_id, lines, ids, verbose=True, dips=False):
+def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=False):
     """Per-line references: the voice's own clips (work/voices/<key>.wav), a 0.3 s
     pause, then this line's original from the job's separated vocals, with the
     line's `ja` after the voice's transcript. OmniVoice copies its reference's
@@ -163,7 +172,7 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False):
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
     (work / "refs").mkdir(exist_ok=True)
     refs = {}
-    for line, i, (why, cut) in zip(lines, ids, unclean_windows(work, job_id, lines, ids, dips)):
+    for line, i, (why, cut) in zip(lines, ids, unclean_windows(work, job_id, lines, ids, dips, cast_lines)):
         if not line.get("line_ref", True) or line.get("effect") in ROOM_EFFECTS:
             continue
         if why:
@@ -440,7 +449,7 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
         base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
         if todo and mode.get("line_ref", not rendered):
             own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
-                            dips=mode.get("dips", not rendered))
+                            dips=mode.get("dips", not rendered), cast_lines=mode.get("cast_lines", not rendered))
     spans = actor_spans(job, lines) if short or (predict and american) else [None] * len(lines)
     rows = []
     for i, (line, sid, span) in enumerate(zip(lines, ids, spans)):

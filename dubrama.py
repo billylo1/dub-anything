@@ -66,7 +66,7 @@ SUBS = UV + ["--python", "3.12", "--with", "rapidocr", "--with", "onnxruntime-gp
 SIGNS = SUBS[:-1] + ["signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "voice": "american"}
-ACTOR_RENDER = {"line_ref": True, "fill": True, "dips": True, "voice": "actor"}
+ACTOR_RENDER = {"line_ref": True, "fill": True, "dips": True, "cast_lines": True, "voice": "actor"}
 ENV = {**backend.full_env(), "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
 GPU_FULL = re.compile(r"out of memory|Generation failed", re.I)  # the backend's cache filled the card
 RETRY = ("render failed", "lineqa failed")  # problems a new run retries; the rest wait for a script change
@@ -285,9 +285,14 @@ def variant(job, p, voice):
     base = WORK / p["name"]
     script = load_json(base / "script.json")
     if voice == "actor":
-        if script["lines"] and any(k not in script.get("render", {}) for k in ACTOR_RENDER):
+        want = dict(ACTOR_RENDER)
+        if load_json(base / "rendered.json"):
+            # Rendered before "cast_lines" existed: dub.py reads it missing as off, and
+            # writing it would change the script's record and render the part again.
+            want.pop("cast_lines")
+        if script["lines"] and any(k not in script.get("render", {}) for k in want):
             # Complete it before the first render, so dub.py doesn't change the script under it.
-            script["render"] = {**ACTOR_RENDER, **script.get("render", {})}
+            script["render"] = {**want, **script.get("render", {})}
             write_json(base / "script.json", script)
         return name
     work = WORK / name
