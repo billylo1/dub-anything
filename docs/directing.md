@@ -315,6 +315,12 @@ original normally sets its delivery (see "Render"). The character's reference
 holds the voice steady, and it alone sets the delivery of lines that can't use
 their own original (see "The reference sets the register").
 
+Build references at normal speaking level, too. A murmured reference, about
+14 dB below the show's other voices, scored nearer than their own voices on
+most short lines in its scenes, other characters' included, and the window
+check sent them all to their fallback. Its own speaker's lines scored low
+against it. Rebuilt from lines at his usual level, it pulled nothing.
+
 ### 3. Translate and time
 
 - **Translate for meaning, in the character's voice**, not word for word. Keep
@@ -419,6 +425,13 @@ their own original (see "The reference sets the register").
   A page of text shown for a few seconds can't
   be read live in either language: translate it in full anyway, for the pause
   button. Leave what the original itself cuts off at the edge of the frame.
+  A handwritten letter in close-up fills most of the frame: put its English in
+  the clear area beside it (`place: "page"` with a `box` drawn over that area
+  and `width` to fit), in short lines, rather than over the writing.
+  `dubrama.py` runs `signs.py` only when no part is waiting to render, so on
+  a long video with parts marked ready, delivery waits for it after the last
+  render. Run `signs.py` on the parts yourself while the renders go (it takes
+  turns with them on the GPU) and place the signs meanwhile.
 
 ### 4. Render
 
@@ -748,7 +761,12 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   separation stay cached, and the first render then fails with "out of memory",
   even in the flush itself. Only a restart (`backend.py restart`) frees that;
   `dubrama.py` restarts the backend before the first render after a prep, and
-  when a render runs out of memory.
+  when a render runs out of memory. With both voices, the backend keeps the
+  American voice's engine loaded after its render, and the next part's actor
+  render ran out of memory on a long per-line reference about one part in six;
+  the restart cleared it each time. A program outside the dub using the GPU
+  (another project's job) makes the retry fail too: two failures block the
+  part, and the next `dubrama.py run` retries it.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
