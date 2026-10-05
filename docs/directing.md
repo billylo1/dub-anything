@@ -378,7 +378,11 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   `"american"` voice, `fit.py` estimates IndexTTS's length instead, from the
   English syllables and how long the actor speaks in the window (IndexTTS
   follows the pace of its emotion reference). There fill does slow a take, so
-  `SHORT?` means the English ends early even at fill's slowest speed. Unscripted
+  `SHORT?` means the English ends early even at fill's slowest speed. Where
+  `fit.py` finds no actor end (`-`: a shout the VAD missed), its American
+  estimate can run short: three shouted lines of one anime passed it and came
+  out 15-25% over their room, blocking the part. Give such lines a fifth of
+  slack, or shorter `text_us`; a wail ("Waaah!") is drawn out. Unscripted
   talk (interviews, chat, a host's patter) is full of hedges, restarts and
   restatements. English written as tight as its meaning comes out a third
   short there, so write the first draft closer to all that was said, hedges
@@ -617,7 +621,9 @@ How these were chosen, and what else was tried, is in
   dropped fillers ("Hmm", "huh") that ended up accepted anyway. So reword a line
   that fails twice rather than waiting on another roll: a one-word line
   misheard on every take ("Fine." heard as "Find.") usually clears with one
-  more word of context ("That's fine."). Leave names to the listener. A
+  more word of context ("That's fine."). Leave names to the listener. Reword
+  at once a line QA hears as profanity or a slur, even if the take is probably
+  right: a listener can hear it the same way. A
   hesitation ("Um...", "Well...") or a one-word answer that fails twice goes
   back to the original audio, with a caption if it says anything. A take that
   starts with the line's own Japanese (QA's "leading extra" in Japanese, the
