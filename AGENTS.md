@@ -41,31 +41,32 @@ cloned or shared are final.
 - `work/NOTES.md` (git-ignored, may not exist) has this machine's paths and
   per-show notes: story, cast, word choices. Read it, and add to it when you
   learn something about a show.
-- Run the scripts with VoiceStudio's Python
-  (`C:\git\VoiceStudio\.venv\Scripts\python.exe`). Make sure
+- The scripts are in `scripts/`. Run them from the repo root with VoiceStudio's
+  Python: `C:\git\VoiceStudio\.venv\Scripts\python.exe scripts/fit.py <part>`.
+  A script named alone in these docs (`fit.py`) is one of them. Make sure
   `OMNIVOICE_DATA_DIR` / `OMNIVOICE_CACHE_DIR` are set in the shell. They're user
   env vars, but a shell started before they were set won't have them.
-- The VoiceStudio backend must be up: `backend.py status`. `backend.py start`
-  starts it detached from your shell, so it outlives your session, and waits
-  until it answers (`restart` after an NVIDIA driver update, or when renders
-  crawl). `dubrama.py run` starts it too.
-- Tools in their own environments (`dubrama.py run` starts them itself):
-  - `separate.py`: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python separate.py <clip> ...`
-  - `second.py`: `uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy --with pykakasi --with huggingface_hub python second.py <clip> ...`
-  - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python subs.py <clip>`;
+- The VoiceStudio backend must be up: `scripts/backend.py status`.
+  `scripts/backend.py start` starts it detached from your shell, so it outlives
+  your session, and waits until it answers (`restart` after an NVIDIA driver
+  update, or when renders crawl). `scripts/dubrama.py run` starts it too.
+- Tools in their own environments (`scripts/dubrama.py run` starts them itself):
+  - `separate.py`: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python scripts/separate.py <clip> ...`
+  - `second.py`: `uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy --with pykakasi --with huggingface_hub python scripts/second.py <clip> ...`
+  - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python scripts/subs.py <clip>`;
     `signs.py` (text in the picture to translate) runs the same way
-  - `pitch.py`, `contour.py`: `uv run --no-project --python 3.12 --with librosa --with soundfile python <script>`
-  - `vc.py` (the `"american"` voice), which `dub.py generate` starts itself: it
-    needs uv on PATH and a Chatterbox clone in `vendor/chatterbox` (see
-    [docs/setup.md](docs/setup.md)).
+  - `pitch.py`, `contour.py`: `uv run --no-project --python 3.12 --with librosa --with soundfile python scripts/<script>`
+  - `vc.py` (the `"american"` voice), which `scripts/dub.py generate` starts
+    itself: it needs uv on PATH and a Chatterbox clone in `vendor/chatterbox`
+    (see [docs/setup.md](docs/setup.md)).
 - One GPU job at a time is enforced: every GPU tool waits for the GPU lock
   (`gpulock.py`) before it loads a model, and prints who holds it. So you can run
-  `asr_words.py` or `fit.py` while `dubrama.py run` renders; they queue.
+  `asr_words.py` or `fit.py` while `scripts/dubrama.py run` renders; they queue.
 
 ## A dub, start to finish
 
-The user asks for a video to be dubbed. `dubrama.py` does the machine work;
-you direct.
+The user asks for a video to be dubbed. `scripts/dubrama.py` does the machine
+work; you direct.
 
 1. **Intake.** Confirm the source file. Ask one question: the actor's voice
    (Japanese-accented English), American, or both. Recommend by genre: the
@@ -73,41 +74,42 @@ you direct.
    "Voice"). With both, the actor's voice plays by default. Look at the video's
    length and skim it for blocks that stay in the original (a channel card,
    commercial breaks, credits) so they can be split off whole.
-   `dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+   `scripts/dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
    picture, `--signs` when it has text worth translating: title cards,
    explainer diagrams, pages to read). Record the
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
-   `dubrama.py run <slug> --watch`. It splits; preps, separates and drafts the
-   first part (a few minutes: start casting and directing it), then the rest
-   four parts at a time, so drafts keep coming; runs `second.py` on the CPU;
-   renders each part in each voice as soon as you mark its script ready, with
-   QA rounds, ahead of any prep still to do; and delivers when every part is
-   done. Follow it with `dubrama.py status <slug>` and the logs in
+   `scripts/dubrama.py run <slug> --watch`. It splits; preps, separates and
+   drafts the first part (a few minutes: start casting and directing it), then
+   the rest four parts at a time, so drafts keep coming; runs `second.py` on the
+   CPU; renders each part in each voice as soon as you mark its script ready,
+   with QA rounds, ahead of any prep still to do; and delivers when every part
+   is done. Follow it with `scripts/dubrama.py status <slug>` and the logs in
    `work/jobs/<slug>/logs/`.
 3. **Direct, part by part** ([docs/directing.md](docs/directing.md)). Cast the
    voices (`cast.py`, `frames.py`, `work/voices.json`) from the first parts.
    Write each part's `script.json` from its `draft.json` and the `second.py` log,
-   ending each window in a pause with nobody else inside it. Then `edges.py
-   --apply` (check long `skip`s by hand), `tails.py` for echo and PA, and
-   `fit.py`. Snap the windows of lines that fall back to the character's
-   reference, fix every `OVER?`, and write fuller English for every `SHORT?`.
-   With the American voice in the job, also run `fit.py <part> --voice
-   american`; a line that needs other English for that voice alone gets
-   `"text_us"`. With `--signs`, translate the text in the picture the viewer
-   needs into the part's `"signs"` from `signs.py`'s sheets, and check them
-   with `signs.py <part> --preview`. Give each guess a `"listen"` note (who says it, a misheard
-   word): it goes into the report. A part that stays original gets
-   `"lines": []`. Then `dubrama.py ready <slug> <NN>`: it renders by itself.
+   ending each window in a pause with nobody else inside it. Then
+   `scripts/edges.py <part> --apply` (check long `skip`s by hand), `tails.py`
+   for echo and PA, and `fit.py`. Snap the windows of lines that fall back to
+   the character's reference, fix every `OVER?`, and write fuller English for
+   every `SHORT?`. With the American voice in the job, also run
+   `scripts/fit.py <part> --voice american`; a line that needs other English
+   for that voice alone gets `"text_us"`. With `--signs`, translate the text in
+   the picture the viewer needs into the part's `"signs"` from `signs.py`'s
+   sheets, and check them with `scripts/signs.py <part> --preview`. Give each
+   guess a `"listen"` note (who says it, a misheard word): it goes into the
+   report. A part that stays original gets `"lines": []`. Then
+   `scripts/dubrama.py ready <slug> <NN>`: it renders by itself.
 4. **When `run --watch` stops.** Exit 0: delivered. Exit 2: a part is blocked
    (`status` says why: lines that don't fit their window, or a render that
    failed twice). Fix the script and start `run --watch` again; the part
    renders again by itself. A render or QA failure with an unchanged script is
-   retried when `run` starts again, so fix its cause first (`backend.py
-   restart` for "out of memory" or "Generation failed"). Tell the user at once
-   about anything you can't fix.
+   retried when `run` starts again, so fix its cause first
+   (`scripts/backend.py restart` for "out of memory" or "Generation failed").
+   Tell the user at once about anything you can't fix.
 5. **Triage.** The report (`work/jobs/<slug>/report.md`) lists what QA still
    flags after three rounds. Reword what a voice can't say (that part renders
    and delivers again by itself). Leave names and near-misses for the user's
@@ -119,10 +121,10 @@ you direct.
    copied stream was checked against
    its source before the file was replaced. Give the user the path and the
    listen list with film times, and send a notification if they may be away.
-7. **Clean up** only when the user is happy with it: `dubrama.py cleanup <slug>`
-   moves the VoiceStudio jobs, parts and takes to `videos/_to-delete/<slug>/`
-   for the user to delete. The scripts, notes and report stay, so a line can be
-   fixed later.
+7. **Clean up** only when the user is happy with it:
+   `scripts/dubrama.py cleanup <slug>` moves the VoiceStudio jobs, parts and
+   takes to `videos/_to-delete/<slug>/` for the user to delete. The scripts,
+   notes and report stay, so a line can be fixed later.
 
 **A long video: direct in parallel.** The machine work is a few hours for a
 feature film, and directing it alone takes longer. Direct the first two or
@@ -131,12 +133,12 @@ three parts yourself: cast every voice you can and write the show's notes in
 names a clone can't say). Then hand batches of parts to subagents with those
 notes and docs/directing.md, each writing its parts' `script.json` without
 marking them ready. Give them the keys to use for characters you expect in
-several batches; they add any other voice with `voices.py add` only (it locks
-`voices.json` and refuses a key that exists). Two directors whose batches share a
-scene can still build the same new character under two keys, minutes apart:
-compare new voices with `voices.py sim` and keep one. Read their scripts for consistency
-(names, terms, a character's voice) before you mark each part ready, and keep
-the notes current as they report new characters or words. Hold the ready marks
+several batches; they add any other voice with `scripts/voices.py add` only (it
+locks `voices.json` and refuses a key that exists). Two directors whose batches
+share a scene can still build the same new character under two keys, minutes
+apart: compare new voices with `scripts/voices.py sim` and keep one. Read their
+scripts for consistency (names, terms, a character's voice) before you mark each
+part ready, and keep the notes current as they report new characters or words. Hold the ready marks
 until the last parts are drafted: a ready part renders before any more prep, so
 early ready marks starve the directors still waiting for drafts, while the GPU
 stays just as busy either way. Spawn the later parts' directors early; they
@@ -156,12 +158,12 @@ backend won't start, the source can't be split or prepped, the disk is
 filling, or a part is blocked and you can't fix it. At the end: the delivered
 file and the listen list.
 
-**By hand.** The steps `dubrama.py run` takes can be run one by one (docs/directing.md,
-"Workflow"): `split.py`, `dub.py prep`, `separate.py`, `subs.py`, `draft.py`,
-`second.py`, then per part `dub.py generate --match-level` and `lineqa.py
---reroll`, and `assemble.py` and `deliver.py` at the end. Only when many of a
-character's fallback lines sound wrong: `register.py report`, `build`, `route
---apply`, `check`.
+**By hand.** The steps `scripts/dubrama.py run` takes can be run one by one
+(docs/directing.md, "Workflow"): `split.py`, `dub.py prep`, `separate.py`,
+`subs.py`, `draft.py`, `second.py`, then per part `dub.py generate
+--match-level` and `lineqa.py --reroll`, and `assemble.py` and `deliver.py` at
+the end, each from `scripts/`. Only when many of a character's fallback lines
+sound wrong: `scripts/register.py report`, `build`, `route --apply`, `check`.
 
 ## Ground rules
 

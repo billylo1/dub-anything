@@ -1,7 +1,7 @@
 """On-screen text: find the signs, labels and title cards in a clip's picture.
 
-Usage: signs.py <clip> [--fps 2] [--from T0] [--to T1]   (after `dub.py prep`; subs.py's environment, see AGENTS.md)
-       signs.py <clip> --preview [SIGN ...]
+Usage: scripts/signs.py <clip> [--fps 2] [--from T0] [--to T1]   (after `dub.py prep`; subs.py's environment, see AGENTS.md)
+       scripts/signs.py <clip> --preview [SIGN ...]
 
 Candidates for the director to translate into a part's "signs" (see
 docs/directing.md, "Signs"). Most text in a picture is clutter; the director
@@ -44,7 +44,7 @@ import numpy as np
 import ass
 import subs
 
-HERE = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 W, H = subs.W, subs.H
 PUNCT = re.compile(r"[\s、。,.!?！？…・「」『』（）()〈〉《》≪≫～~ー—-]")
 
@@ -311,9 +311,9 @@ def main():
                     help="draw the script's signs into their frames (all, or these by number)")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
-    work = HERE / "work" / args.clip
+    work = ROOT / "work" / args.clip
     video = json.loads((work / "segments.json").read_text(encoding="utf-8"))["video"]
-    video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else HERE / video
+    video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else ROOT / video
     w, h = subs.size(video)
     if args.preview is not None:
         return preview(work, video, w, h, set(args.preview))

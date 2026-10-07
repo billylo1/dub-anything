@@ -8,7 +8,7 @@ others work.
 
 - An NVIDIA GPU with ≥ 6 GB of VRAM (VoiceStudio's default voice engine). On a
   16 GB RTX 4090 laptop everything runs at once. `nvidia-smi` should work.
-- NVIDIA driver ≥ 610 if you want `split.py --encoder h264_nvenc` (current
+- NVIDIA driver ≥ 610 if you want `scripts/split.py --encoder h264_nvenc` (current
   FFmpeg builds need NVENC API 13.1). Otherwise use the default x264.
 - `winget install Git.Git astral-sh.uv Gyan.FFmpeg`, then open a new terminal.
 
@@ -52,11 +52,12 @@ re-synthesized every line instead of only the changed ones. It also adds two
 general-purpose voice presets, `echo` for flashbacks and `pa` for
 announcements over a public-address system, and lets reverb ring out instead of
 stopping dead where the dry take ends. And it lets each dub line carry its own
-voice reference (`dub.py generate --line-ref`), and its own emotion reference
-for engines that take one (IndexTTS 2, `--engine indextts2 --emo-alpha`). For
-IndexTTS 2.5 it passes a line's speed on as the engine's duration factor (it was
-dropped before), and it gives each line a seed, so the `"american"` voice's fill
-re-times the same take. See [directing.md](directing.md#gotchas).
+voice reference (`scripts/dub.py generate --line-ref`), and its own emotion
+reference for engines that take one (IndexTTS 2,
+`--engine indextts2 --emo-alpha`). For IndexTTS 2.5 it passes a line's speed on as the
+engine's duration factor (it was dropped before), and it gives each line a seed,
+so the `"american"` voice's fill re-times the same take. See
+[directing.md](directing.md#gotchas).
 
 IndexTTS 2.5 is optional (about 12 GB). Install it through the running backend:
 `POST http://127.0.0.1:3900/engines/sidecar/indextts2/install`, then poll
@@ -67,15 +68,15 @@ IndexTTS 2.5 is optional (about 12 GB). Install it through the running backend:
 From this repo, with VoiceStudio's Python:
 
 ```powershell
-& C:\git\VoiceStudio\.venv\Scripts\python.exe backend.py start
+& C:\git\VoiceStudio\.venv\Scripts\python.exe scripts\backend.py start
 ```
 
 It starts the backend detached (it keeps running after the terminal or the
 agent's session closes), logs to `backend.log` beside the data folder, and
 waits until `http://127.0.0.1:3900/health` returns
-`{"status":"ok","device":"cuda (...)"}`. `backend.py status`, `stop` and
-`restart` do what they say; `dubrama.py run` starts it when it's down. Or run it
-yourself in a terminal you leave open:
+`{"status":"ok","device":"cuda (...)"}`. `scripts/backend.py status`, `stop` and
+`restart` do what they say; `scripts/dubrama.py run` starts it when it's down.
+Or run it yourself in a terminal you leave open:
 
 ```powershell
 cd C:\git\VoiceStudio; uv run --no-sync uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900
@@ -129,7 +130,7 @@ cache (`HF_HUB_CACHE`, else `OMNIVOICE_CACHE_DIR`) on the first conversion.
 ```powershell
 cd <path-to-dubrama>
 $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
-& $py dub.py prep <some short clip>.mp4      # prints a Japanese transcript
+& $py scripts\dub.py prep <some short clip>.mp4      # prints a Japanese transcript
 ```
 
 Four tools run in their own throwaway uv environments, so they can't disturb
@@ -138,7 +139,7 @@ VoiceStudio's:
   (about 900 MB) downloads on first use into `%OMNIVOICE_CACHE_DIR%\audio-separator`.
 - `second.py`: sherpa-onnx.
 - `subs.py`: RapidOCR.
-- `vc.py`: Chatterbox, which `dub.py generate` starts itself for the
+- `vc.py`: Chatterbox, which `scripts/dub.py generate` starts itself for the
   `"american"` voice.
 
 The commands are in [AGENTS.md](../AGENTS.md).

@@ -1,12 +1,12 @@
 """Run a dub from source video to the delivered file: the machine work, around the director's.
 
 Usage:
-  dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
-  dubrama.py run <slug> [--watch]       do every step that can run now (see below)
-  dubrama.py status <slug>              where each part stands, and what blocks it
-  dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
-  dubrama.py report <slug>              write and print the report (work/jobs/<slug>/report.md)
-  dubrama.py cleanup <slug>             after delivery, move the bulk to videos/_to-delete/<slug>/
+  scripts/dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
+  scripts/dubrama.py run <slug> [--watch]       do every step that can run now (see below)
+  scripts/dubrama.py status <slug>              where each part stands, and what blocks it
+  scripts/dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
+  scripts/dubrama.py report <slug>              write and print the report (work/jobs/<slug>/report.md)
+  scripts/dubrama.py cleanup <slug>             after delivery, move the bulk to videos/_to-delete/<slug>/
 
 A job (work/jobs/<slug>/job.json) is one source video and the voices to dub it in
 ("both" plays the actor's voice by default). The source is hard-linked into
@@ -48,22 +48,22 @@ import sys
 import time
 
 import backend
-from core import HERE, JOBS, VOICE_LABEL, WORK, actor_ends, line_id, load_json, speech_length, voice_part
+from core import JOBS, ROOT, VOICE_LABEL, WORK, actor_ends, line_id, load_json, speech_length, voice_part
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 JOB_DIR = WORK / "jobs"
-VIDEOS = HERE / "videos"
+VIDEOS = ROOT / "videos"
 QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = sys.executable
 UV = ["uv", "run", "--no-project"]
 SEPARATE = UV + ["--python", "3.11", "--index", "https://download.pytorch.org/whl/cu128", "--index-strategy",
                  "unsafe-best-match", "--with", "torch==2.8.0", "--with", "audio-separator", "--with", "onnxruntime",
-                 "python", "separate.py"]
+                 "python", "scripts/separate.py"]
 SECOND = UV + ["--python", "3.12", "--with", "sherpa-onnx", "--with", "soundfile", "--with", "scipy", "--with",
-               "pykakasi", "--with", "huggingface_hub", "python", "second.py"]
-SUBS = UV + ["--python", "3.12", "--with", "rapidocr", "--with", "onnxruntime-gpu[cuda,cudnn]", "python", "subs.py"]
-SIGNS = SUBS[:-1] + ["signs.py"]
+               "pykakasi", "--with", "huggingface_hub", "python", "scripts/second.py"]
+SUBS = UV + ["--python", "3.12", "--with", "rapidocr", "--with", "onnxruntime-gpu[cuda,cudnn]", "python", "scripts/subs.py"]
+SIGNS = SUBS[:-1] + ["scripts/signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "cast_lines": False, "voice": "american"}
 ACTOR_RENDER = {"line_ref": True, "fill": True, "dips": True, "cast_lines": True, "voice": "actor"}
@@ -81,7 +81,7 @@ def job_file(slug):
 def load_job(slug):
     job = load_json(job_file(slug))
     if not job:
-        raise SystemExit(f"no job {slug!r} (dubrama.py new <video>)")
+        raise SystemExit(f"no job {slug!r} (scripts/dubrama.py new <video>)")
     return job
 
 
@@ -121,7 +121,7 @@ def tool(job, label, cmd, logname):
     log(f"{label} ...")
     path = logs / f"{logname}.log"
     with open(path, "w", encoding="utf-8") as f:  # written as it runs, to follow a long render
-        r = subprocess.run(cmd, cwd=HERE, env=ENV, stdout=f, stderr=subprocess.STDOUT)
+        r = subprocess.run(cmd, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT)
     out = path.read_text(encoding="utf-8", errors="replace")
     log(f"{label} {'ok' if r.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s)")
     return r.returncode == 0, out
@@ -133,7 +133,7 @@ def split(job):
     pdir = VIDEOS / f"{job['slug']}-parts"
     if (pdir / "parts.json").exists():
         return True
-    cmd = [PY, "split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
+    cmd = [PY, "scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
     for w in job["split"]["whole"]:
         cmd += ["--whole", w]
     return tool(job, "split", cmd, "split")[0]
@@ -175,7 +175,7 @@ def prepare_step(job, ps):
     label = names[0] if len(names) == 1 else f"{names[0]}..{names[-1].rsplit('-', 1)[-1]}"
     for p in chunk:
         if not (WORK / p["name"] / "segments.json").exists():
-            ok, out = tool(job, f"prep {p['name']}", [PY, "dub.py", "prep", p["file"]], f"prep-{p['name']}")
+            ok, out = tool(job, f"prep {p['name']}", [PY, "scripts/dub.py", "prep", p["file"]], f"prep-{p['name']}")
             if not ok and "produced no segments" in out:
                 # No speech at all (a silent channel card): nothing to dub, so it stays original.
                 (WORK / p["name"]).mkdir(exist_ok=True)
@@ -202,7 +202,7 @@ def prepare_step(job, ps):
                 problem(job, f"subs.py failed on {n}")
                 return "failed"
             return "busy"
-    if not tool(job, f"draft {label}", [PY, "draft.py"] + names, f"draft-{label}")[0]:
+    if not tool(job, f"draft {label}", [PY, "scripts/draft.py"] + names, f"draft-{label}")[0]:
         problem(job, "draft.py failed (see its log)")
         return "failed"
     return "busy"
@@ -216,7 +216,7 @@ def clean_backend(job):
     if BACKEND["dirty"]:
         log("restarting the backend to free the GPU memory prep used")
         if not backend.restart():
-            raise SystemExit(problem(job, "the backend won't restart (backend.py status)") or 2)
+            raise SystemExit(problem(job, "the backend won't restart (scripts/backend.py status)") or 2)
         BACKEND["dirty"] = False
 
 
@@ -242,7 +242,7 @@ def second(job, ps):
         logs.mkdir(parents=True, exist_ok=True)
         f = open(logs / f"second-{time.strftime('%H%M%S')}.log", "w", encoding="utf-8")
         log(f"second.py over {len(todo)} parts in the background (CPU)")
-        SECOND_RUN[job["slug"]] = (subprocess.Popen(SECOND + todo, cwd=HERE, env=ENV, stdout=f, stderr=subprocess.STDOUT),
+        SECOND_RUN[job["slug"]] = (subprocess.Popen(SECOND + todo, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT),
                                    todo, f)
 
 
@@ -307,7 +307,7 @@ def variant(job, p, voice):
         except OSError:
             shutil.copy2(p["file"], video)
     if not (work / "segments.json").exists():
-        ok, out = tool(job, f"prep {name}", [PY, "dub.py", "prep", str(video)], f"prep-{name}")
+        ok, out = tool(job, f"prep {name}", [PY, "scripts/dub.py", "prep", str(video)], f"prep-{name}")
         if not ok:
             problem(job, f"prep {name} failed: {last_error(out)}")
             return None
@@ -368,7 +368,7 @@ def advance(job, name):
     if stage in ("render", "remix"):
         clean_backend(job)
         what = {"render": "render" if not st["round"] else f"round {st['round']}", "remix": "re-mix"}[stage]
-        ok, out = tool(job, f"{what} {name}", [PY, "dub.py", "generate", name, "--match-level"],
+        ok, out = tool(job, f"{what} {name}", [PY, "scripts/dub.py", "generate", name, "--match-level"],
                        f"gen-{name}-{st['round']}{'-remix' if stage == 'remix' else ''}")
         if not ok:
             over = re.findall(r"^\s+(L\d+\s+[\d.]+\s.*\sOVER\s+.*)$", out, re.M)
@@ -391,7 +391,7 @@ def advance(job, name):
         return "busy"
     if stage == "qa":
         ok, out = tool(job, f"qa {name}" + (f" (round {st['round']})" if st["round"] else ""),
-                       [PY, "lineqa.py", name, "--reroll"], f"qa-{name}-{st['round']}")
+                       [PY, "scripts/lineqa.py", name, "--reroll"], f"qa-{name}-{st['round']}")
         if not ok:
             st["problem"] = f"lineqa failed: {last_error(out)}"
             save()
@@ -432,7 +432,7 @@ def deliver_job(job, ps):
         return True
     dubs = {}
     for voice in job["voices"]:
-        ok, out = tool(job, f"assemble {voice}", [PY, "assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}")
+        ok, out = tool(job, f"assemble {voice}", [PY, "scripts/assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}")
         m = re.search(r"-> (.+\.mp4)", out)
         if not ok or not m:
             return problem(job, f"assemble.py failed for the {voice} voice: {last_error(out)}")
@@ -526,7 +526,7 @@ def cmd_new(args):
     if not re.fullmatch(r"[a-z0-9_]+", slug or ""):
         raise SystemExit("give the job a --slug of lowercase letters, digits and _ (no hyphens)")
     if job_file(slug).exists():
-        raise SystemExit(f"job {slug!r} exists: dubrama.py status {slug}")
+        raise SystemExit(f"job {slug!r} exists: scripts/dubrama.py status {slug}")
     voices = {"both": ["actor", "american"], "actor": ["actor"], "american": ["american"]}[args.voices]
     VIDEOS.mkdir(exist_ok=True)
     link = VIDEOS / f"{slug}{src.suffix.lower()}"
@@ -542,7 +542,7 @@ def cmd_new(args):
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
     print(f"job {slug}: {src.name}, {' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
-    print(f"next: dubrama.py run {slug} --watch   (in the background), then direct the parts")
+    print(f"next: scripts/dubrama.py run {slug} --watch   (in the background), then direct the parts")
 
 
 def cmd_ready(args):
@@ -595,7 +595,7 @@ def cmd_status(args):
 def cmd_run(args):
     job = load_job(args.slug)
     if not backend.ensure():
-        raise SystemExit("the VoiceStudio backend won't start (backend.py status)")
+        raise SystemExit("the VoiceStudio backend won't start (scripts/backend.py status)")
     if not split(job):
         return problem(job, "split.py failed") or 2
     ps = parts(job)
@@ -650,7 +650,7 @@ def cmd_run(args):
             log(f"delivered {job['delivered']['path']}; report {path}")
             return 0
         if (new_block and args.watch) or (blocked and not busy and not args.watch):
-            log("waiting on the director: see dubrama.py status " + job["slug"])
+            log("waiting on the director: see scripts/dubrama.py status " + job["slug"])
             report(job, ps, quiet=True)
             return 2
         if not args.watch and not busy:

@@ -30,7 +30,7 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 import draft  # noqa: E402
 import register as R  # noqa: E402
 from core import JOBS, WORK, line_id, load_json, speech_length  # noqa: E402

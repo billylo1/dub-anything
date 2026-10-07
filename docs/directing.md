@@ -44,7 +44,7 @@ voice without re-rendering parts already approved, add it under a new key
 (`speaker_1_v2`) and use that from then on.
 
 A character can have a second reference in another register, built by
-`register.py build` (see "The reference sets the register" below). Its entry
+`scripts/register.py build` (see "The reference sets the register" below). Its entry
 names the character: `"register_of": "speaker_1", "register": "calm"`. Casting,
 pace estimates and QA treat it as the same character; only the delivery
 differs.
@@ -72,24 +72,25 @@ differs.
 - `take` (optional): a number that gives a line repeated word for word its own
   take. VoiceStudio keys takes by the line's voice and text, so two identical
   lines in one part would collide.
-- `keep_voice` (optional): `true` stops `register.py route` from moving the line
-  to another of the character's references, e.g. when one of them can't say a
-  word in it.
+- `keep_voice` (optional): `true` stops `scripts/register.py route` from moving
+  the line to another of the character's references, e.g. when one of them can't
+  say a word in it.
 - `line_ref` (optional): `false` keeps the character's reference for this line
   instead of its own original (see "Render").
 - `text_us` (optional): the English for the American voice when it needs to
-  differ, usually fuller text for a line `fit.py --voice american` calls `SHORT?`.
-  `dubrama.py` renders that voice from a copy of the script in `<part>.us`.
+  differ, usually fuller text for a line `scripts/fit.py --voice american` calls
+  `SHORT?`. `dubrama.py` renders that voice from a copy of the script in
+  `<part>.us`.
 - `listen` (optional): why the user should check this line (a casting guess, a
   misheard word); `dubrama.py` puts it in the report with the film time.
 
 A top-level `"ready": true` tells `dubrama.py` the part is directed
-(`dubrama.py ready <slug> <NN>`); it renders nothing before that.
+(`scripts/dubrama.py ready <slug> <NN>`); it renders nothing before that.
 
 A top-level `"render": {"line_ref": true, "fill": true, "dips": true, "cast_lines": true}`
-records how the part is rendered (see "Render"). `dub.py generate` writes it on the first run:
-all on for a part never rendered, off for a part rendered before they became the
-default, so its approved takes don't change.
+records how the part is rendered (see "Render"). `scripts/dub.py generate`
+writes it on the first run: all on for a part never rendered, off for a part
+rendered before they became the default, so its approved takes don't change.
 
 With `concise` timing (the default), each line starts at the window start. With
 `fill` on, its pace is then adjusted so it ends where the actor stops (see
@@ -131,19 +132,20 @@ render nothing and don't make a part render again; they change the delivery
 
 For a new show, settle one thing with the user before the first part: the
 voice, or both (see "Voice" under Render). Everything else has a default.
-`dubrama.py` runs the machine steps below for a whole video, around your
-directing (AGENTS.md, "A dub, start to finish"); this section is what each step
-does and how to direct it.
+`scripts/dubrama.py` runs the machine steps below for a whole video, around
+your directing (AGENTS.md, "A dub, start to finish"); this section is what each
+step does and how to direct it. The scripts are in `scripts/` and run from the
+repo root.
 
 ### 1. Prep and draft
 
 ```powershell
-& $py split.py videos\episode.mkv          # only for long videos: ~3-minute parts
-& $py dub.py prep videos\episode-parts\episode-01.mp4
-& $py draft.py episode-01                  # after the cast exists: --cast key,key,...
+& $py scripts\split.py videos\episode.mkv          # only for long videos: ~3-minute parts
+& $py scripts\dub.py prep videos\episode-parts\episode-01.mp4
+& $py scripts\draft.py episode-01                  # after the cast exists: --cast key,key,...
 ```
 
-`split.py --whole A-B` cuts exactly at A and B and keeps that stretch as one
+`scripts/split.py --whole A-B` cuts exactly at A and B and keeps that stretch as one
 part. Use it for a block that stays in the original (a run of songs, a
 commercial break) and at a splice between two recordings, such as a live
 stream that went off air and came back with another programme. Otherwise the
@@ -160,7 +162,7 @@ the middle of 4–6 s "pauses" each landed on a line's first syllable.
 `prep` separates the voices and prints Whisper's rough transcript. It also
 switches VoiceStudio to pyannote when it's installed.
 
-For cleaner references, try `separate.py episode-01` (its own environment;
+For cleaner references, try `scripts/separate.py episode-01` (its own environment;
 see AGENTS.md). Residual music in the vocals can affect clones, transcripts,
 register measurements and level matching. Compare the vocals and background
 on your material before choosing a separator. Run separation before drafting
@@ -187,17 +189,17 @@ approved takes also changes their background and level measurements.
 Short or weak matches get a `?`, and any speech left uncovered is listed.
 
 Whisper still mishears. Re-listen to stretches that look garbled with
-`asr_words.py episode-01 <t0> <t1>`. It transcribes that window of the clip's
-separated vocals with word times and prints where the VAD hears speech, and a
+`scripts/asr_words.py episode-01 <t0> <t1>`. It transcribes that window of the
+clip's separated vocals with word times and prints where the VAD hears speech, and a
 focused pass often gets what the full pass missed. Correct remaining errors
 using surrounding dialogue, on-screen text and consistent terminology.
 Keep source excerpts in `work/NOTES.md`.
 
-`draft.py --model` and `asr_words.py --model` accept faster-whisper models.
-Compare recognisers on your own corrected samples; confidence alone does not
-prove that a transcription is right.
+`scripts/draft.py --model` and `scripts/asr_words.py --model` accept
+faster-whisper models. Compare recognisers on your own corrected samples;
+confidence alone does not prove that a transcription is right.
 
-`second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
+`scripts/second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
 flags lines where both disagree with Whisper. Re-listen with `asr_words.py`
 and decide from context. It needs its own environment (see AGENTS.md).
 
@@ -205,7 +207,7 @@ Some recordings have the broadcaster's closed captions burned into the
 picture. They are the best transcript there is: the exact words, the names
 spelled right, a bracketed name when the speaker isn't obvious, "≪" for a
 voice off screen, and often a colour of their own for each main character.
-`subs.py <clip>` reads them (OCR over sampled frames) into
+`scripts/subs.py <clip>` reads them (OCR over sampled frames) into
 `work/<clip>/subs.json`. Run it before `draft.py`, which then prints the
 captions on screen under each phrase and lists captions no phrase covers.
 Caption times follow the display, not the speech, so windows still come from
@@ -220,17 +222,17 @@ line without `cc:` still proves little: look at the frames (wide enough to read
 the colour).
 
 A film set abroad subtitles its foreign-language speech in the picture
-itself: white text with a dark outline at the bottom, no box. `subs.py <clip>
---open` reads those instead (only the bottom band, 2 frames a second), and
-`dubrama.py new --subtitles` runs it on every part. The subtitles are the
-film's own translation, so use them for the captions' `ja`; for the English,
-read Whisper's transcript of the speech as well, which keeps puns and names
-the Japanese subtitle drops. A short line Whisper doesn't tag (under 1 s, or
+itself: white text with a dark outline at the bottom, no box.
+`scripts/subs.py <clip> --open` reads those instead (only the bottom band, 2
+frames a second), and `scripts/dubrama.py new --subtitles` runs it on every
+part. The subtitles are the film's own translation, so use them for the
+captions' `ja`; for the English, read Whisper's transcript of the speech as
+well, which keeps puns and names the Japanese subtitle drops. A short line Whisper doesn't tag (under 1 s, or
 detected without confidence) can still be in that language: the subtitle on
 screen gives it away. Reading them costs about as much GPU time as preparing the
 part, more than drafting it, and `--subtitles` reads every part. For a film
 with only a few scenes in another language, leave `--subtitles` off and run
-`subs.py --open` by hand on the parts whose draft tags that language.
+`scripts/subs.py --open` by hand on the parts whose draft tags that language.
 
 ### 2. Cast
 
@@ -244,15 +246,15 @@ others. Decide each line's speaker from:
    character is represented by its voice clips plus up to 30 lines already cast
    to it in the show's other scripts, so casting gets surer with every directed
    part. A clear winner usually scores 0.5–0.9 and beats the runner-up by 0.2 or
-   more. Lines under ~0.6 s are unreliable. `voices.py score <clip> a-b ...`
+   more. Lines under ~0.6 s are unreliable. `scripts/voices.py score <clip> a-b ...`
    scores any stretch the same way: half of a line that two people may share,
    or a window you are about to draw. For a new show or a batch of new
-   characters, run `cast.py part-05 part-06 ...` first: it clusters every line
-   across parts by voice, so each cluster is one person. The same person in a
-   different register (a quiet monologue, a campy aside) can form a separate
-   cluster, so check the nearest-cast hint. Name the clusters once, build their
-   voices, then run `draft.py --recast` on those parts: it keeps their
-   transcripts and only suggests the speakers again.
+   characters, run `scripts/cast.py part-05 part-06 ...` first: it clusters
+   every line across parts by voice, so each cluster is one person. The same
+   person in a different register (a quiet monologue, a campy aside) can form a
+   separate cluster, so check the nearest-cast hint. Name the clusters once,
+   build their voices, then run `scripts/draft.py --recast` on those parts: it
+   keeps their transcripts and only suggests the speakers again.
 2. **Video frames** at the line's time: who is in close-up with their mouth open.
    On-screen names and role captions can help identify a speaker. Burned-in
    closed captions (`subs.py`) often give each main character a colour of
@@ -268,23 +270,25 @@ others. Decide each line's speaker from:
 
 For a new character, build a voice from 5–15 s of **clean, single-speaker**
 speech (see the reference-leakage gotcha below). 3–4 s works for a bit part.
-Pick only clips bounded by real pauses. `voices.py spans <clip> a-b ...` shows
-the VAD's speech spans around each candidate (CPU, instant): if one runs across
-the boundary into another speaker's line, skip that clip. `voices.py add <key>
-<clip> '<clips>' '<ref_text>'` writes the entry and builds the joined reference,
-and `voices.py check <key>` transcribes it clip by clip. For anyone with less
-than 3 s of clean speech (walk-ons, a single whisper), or for a line that's a
-name, keep the original audio and put the line in `captions`. Voices over a
+Pick only clips bounded by real pauses. `scripts/voices.py spans <clip> a-b ...`
+shows the VAD's speech spans around each candidate (CPU, instant): if one runs
+across the boundary into another speaker's line, skip that clip.
+`scripts/voices.py add <key> <clip> '<clips>' '<ref_text>'` writes the entry and
+builds the joined reference, and `scripts/voices.py check <key>` transcribes it
+clip by clip. For anyone with less than 3 s of clean speech (walk-ons, a single
+whisper), or for a line that's a name, keep the original audio and put the
+line in `captions`. Voices over a
 phone are often too quiet and filtered for the VAD to hear: keep them original
 and caption them too.
 
 `voices.json` holds every show's cast, and `draft.py` only scores a show's lines
 against the voices built from its own parts. A key another show already uses
-(a common surname, `wife`, `boy`) is taken: `voices.py add` refuses it, so pick
-another. When directors working in parallel each build a voice for what may be
-the same character, `voices.py sim <key> <key>` compares the references: the
-same person scores well above unrelated voices (0.5 against 0.1-0.3 in one
-film). Keep one, so the other doesn't pull in other people's lines.
+(a common surname, `wife`, `boy`) is taken: `scripts/voices.py add` refuses it,
+so pick another. When directors working in parallel each build a voice for what
+may be the same character, `scripts/voices.py sim <key> <key>` compares the
+references: the same person scores well above unrelated voices (0.5
+against 0.1-0.3 in one film). Keep one, so the other doesn't pull in other
+people's lines.
 
 When one performer voices every character (a storyteller acting out a
 dialogue, a narrator doing the voices), give them one voice and cast every
@@ -356,18 +360,18 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   falls back to the character's reference. In overlapping dialogue, trimming a
   window's end back to the actor's last pause is often enough. Where two lines
   run straight into each other, the voice usually still dips for a moment
-  between them; `edges.py --apply` moves the shared boundary onto that dip.
+  between them; `scripts/edges.py --apply` moves the shared boundary onto that dip.
 - **Size the text:** each clone follows its actor's pace, from about 8 to 16
   letters per second. Short lines cost more than their length suggests: even
-  "Really?" takes 0.8–1.2 s. `fit.py <clip>` computes the length OmniVoice will
-  give every line not rendered yet, with OmniVoice's own rule and the reference
-  the render will use: typically within 0.2 s, nine lines in ten within 0.4 s,
-  about as close as two takes of one line are to each other. It needs no
-  earlier renders, so it works on a new show's first part. It first lists the
-  lines that will fall back to the character's reference (snap those windows if
-  you can), then flags `OVER?` and `risk` against the room each line has, and
-  `SHORT?` for English that ends well before the actor stops at natural pace.
-  Run it before the first render and fix the flags. For `OVER?`: widen short
+  "Really?" takes 0.8–1.2 s. `scripts/fit.py <clip>` computes the length
+  OmniVoice will give every line not rendered yet, with OmniVoice's own rule and
+  the reference the render will use: typically within 0.2 s, nine lines in ten
+  within 0.4 s, about as close as two takes of one line are to each other. It
+  needs no earlier renders, so it works on a new show's first part. It first
+  lists the lines that will fall back to the character's reference (snap those
+  windows if you can), then flags `OVER?` and `risk` against the room each line
+  has, and `SHORT?` for English that ends well before the actor stops at natural
+  pace. Run it before the first render and fix the flags. For `OVER?`: widen short
   windows into following silence, merge them with a neighbour, or cut words.
   Treat `risk` on a window under about 1 s as `OVER?`: short English is
   stretched (see below), so even one word takes 0.9–1.3 s, more than fill's
@@ -398,40 +402,41 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   different times on two lines of one character; `fit.py` accounts for this.
 - **Keep what's already in the target language.** If characters speak English in
   the original, leave it and caption it. `draft.py` tags such lines
-  `[English]`; `asr_words.py <clip> t0 t1 --lang en` re-listens to them. If the
-  video has burned-in Japanese subtitles there, use them for the captions' `ja`.
+  `[English]`; `scripts/asr_words.py <clip> t0 t1 --lang en` re-listens to them.
+  If the video has burned-in Japanese subtitles there, use them for the
+  captions' `ja`.
 - **Keep a third language too.** Speech in neither Japanese nor English (the
   locals in a film set abroad) stays in the original audio with English
   captions, as an English-language film would subtitle it. `draft.py` tags it
-  with its language (`[Finnish]`); `asr_words.py ... --lang fi` re-listens.
+  with its language (`[Finnish]`); `scripts/asr_words.py ... --lang fi` re-listens.
   A Japanese character speaking that language keeps their own voice there too.
 - **Voice-over can be freer.** A narrator isn't on screen, so merge clipped
   narration fragments into full sentences. Short sentence fragments can be
   harder to synthesize clearly.
 - **Translate the text in the picture the viewer needs** (`"signs"`, with
-  `dubrama.py new --signs` or by hand): title cards and disclaimers, the labels
-  of a diagram the narration explains, a letter or a screen a character reads,
-  a page put up to be read with the pause button. Leave the clutter: shop signs
-  in passing, posters, number plates, the channel's logo. `signs.py <part>`
-  (subs.py's environment, about 40 s of GPU per minute) lists candidates in
-  `signs.json` with times and boxes, draws a sheet for each
-  (`work/<part>/signs/NN.jpg`) and a thumbnail of every shot (`shots-N.jpg`).
-  Read the sheets, not the OCR: it misreads stylised writing and misses vertical
-  brush lettering, handwriting and arched labels altogether, so scan the shot
-  thumbnails for text it missed and take the box from the frame. A label that
-  repeats a word of the narration is still a label (only longer text matching
-  the dialogue is dropped as a caption). A sign shows from cut to cut unless it
-  appears mid-shot, but the cut detector misses a hard cut between two similar
-  pictures (two pages on white), so check the times of anything that changes in
-  place. Diagrams come in stages: a label can appear seconds into its shot.
-  `signs.py <part> --preview [N ...]` draws the part's signs and dialogue into
-  their frames as delivered: check that each sits by its text, reads against
-  the picture and covers nothing that matters. A line of dialogue that would
-  cover a sign (its English or its original) moves to the top, if the top is
-  clear; where both are taken, move the sign's English instead (`place`). Lay
-  short labels over their original without a box (the user's choice; a player
-  can't switch the box on or off); keep `boxed` for sentences over busy writing.
-  A page of text shown for a few seconds can't
+  `scripts/dubrama.py new --signs` or by hand): title cards and disclaimers, the
+  labels of a diagram the narration explains, a letter or a screen a character
+  reads, a page put up to be read with the pause button. Leave the clutter: shop
+  signs in passing, posters, number plates, the channel's logo.
+  `scripts/signs.py <part>` (subs.py's environment, about 40 s of GPU per
+  minute) lists candidates in `signs.json` with times and boxes, draws a sheet
+  for each (`work/<part>/signs/NN.jpg`) and a thumbnail of every shot
+  (`shots-N.jpg`). Read the sheets, not the OCR: it misreads stylised writing
+  and misses vertical brush lettering, handwriting and arched labels altogether,
+  so scan the shot thumbnails for text it missed and take the box from the
+  frame. A label that repeats a word of the narration is still a label (only
+  longer text matching the dialogue is dropped as a caption). A sign shows from
+  cut to cut unless it appears mid-shot, but the cut detector misses a hard cut
+  between two similar pictures (two pages on white), so check the times of
+  anything that changes in place. Diagrams come in stages: a label can appear
+  seconds into its shot. `scripts/signs.py <part> --preview [N ...]` draws the
+  part's signs and dialogue into their frames as delivered: check that each sits
+  by its text, reads against the picture and covers nothing that matters. A line
+  of dialogue that would cover a sign (its English or its original) moves to the
+  top, if the top is clear; where both are taken, move the sign's English
+  instead (`place`). Lay short labels over their original without a box (the
+  user's choice; a player can't switch the box on or off); keep `boxed` for
+  sentences over busy writing. A page of text shown for a few seconds can't
   be read live in either language: translate it in full anyway, for the pause
   button. Leave what the original itself cuts off at the edge of the frame.
   A handwritten letter in close-up fills most of the frame: put its English in
@@ -445,7 +450,7 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
 ### 4. Render
 
 ```powershell
-& $py dub.py generate episode-01 --match-level
+& $py scripts\dub.py generate episode-01 --match-level
 ```
 
 If a line overflows, VoiceStudio stops at the first one. `dub.py` then prints
@@ -554,9 +559,9 @@ above has a default.
   some of the intonation, a little lower in pitch. Per-line references don't
   apply.
 
-Recommend one by genre, or both: `dubrama.py new --voices both` renders every
-part in each voice and delivers both tracks, the actor's playing by default. In
-trials, `"american"` came out closer to the actors than the clones on an
+Recommend one by genre, or both: `scripts/dubrama.py new --voices both` renders
+every part in each voice and delivers both tracks, the actor's playing by
+default. In trials, `"american"` came out closer to the actors than the clones on an
 animated series. On a live-action drama it stayed less like the actors than the
 clones, and conversion cost some of the native accent. Record the choice in
 `work/NOTES.md`; the job and each part's `render` block keep it, so later parts
@@ -588,12 +593,12 @@ How these were chosen, and what else was tried, is in
 
 ### 5. QA
 
-- `qa.py episode-01` transcribes the finished MP4 in English and lines it up with
-  the script. Word timestamps drift by a line or so in quiet passages, so a
-  word appearing in the neighbouring window is usually fine. Whisper also
-  invents words on background noise; check `energy.py` before
+- `scripts/qa.py episode-01` transcribes the finished MP4 in English and lines
+  it up with the script. Word timestamps drift by a line or so in quiet
+  passages, so a word appearing in the neighbouring window is usually fine.
+  Whisper also invents words on background noise; check `energy.py` before
   worrying.
-- **Check each rendered line on its own too:** `lineqa.py episode-01`. The
+- **Check each rendered line on its own too:** `scripts/lineqa.py episode-01`. The
   full-mix QA hid these problems:
   - junk at the start of lines (reference leakage, below)
   - dropped words in fast lists
@@ -603,8 +608,9 @@ How these were chosen, and what else was tried, is in
 
   Numbers, units, contractions and "Dr." are normalized, so formatting doesn't
   count as a failure. Triage each flag. A random glitch (a dropped word, a
-  mangled first word) usually clears with a fresh take: `lineqa.py episode-01
-  --reroll` queues the flagged lines, and the next `generate` re-rolls them.
+  mangled first word) usually clears with a fresh take:
+  `scripts/lineqa.py episode-01 --reroll` queues the flagged lines, and the next
+  `generate` re-rolls them.
   A word the voice can't say needs rewording. Every take is a new roll of the
   dice, so re-check after each render. A fresh take can also come out worse
   than the one it replaced: `--reroll` keeps each replaced take
@@ -635,7 +641,7 @@ How these were chosen, and what else was tried, is in
 ### 6. Package
 
 ```powershell
-& $py assemble.py episode --parts 1-4      # or: assemble.py <clip> for an unsplit clip
+& $py scripts\assemble.py episode --parts 1-4      # or: scripts\assemble.py <clip> for an unsplit clip
 ```
 
 This produces one MP4. The video is stream-copied from the source, so part cuts
@@ -647,7 +653,7 @@ official subtitles). It also writes sidecar `.en.srt` / `.ja.srt` files.
 `--voice american` assembles the American renders instead.
 
 ```powershell
-& $py deliver.py <source video> actor=<actor assembled.mp4> american=<american assembled.mp4>
+& $py scripts\deliver.py <source video> actor=<actor assembled.mp4> american=<american assembled.mp4>
 ```
 
 `deliver.py` puts the dubs into the source file itself: each voice's English
@@ -680,7 +686,7 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   syllables into each take. Clips taken
   straight from Whisper timestamps are cut off because those run early. Snap
   clips to real speech boundaries, keep neighbours out, then check the joined
-  reference with `asr_words.py work\voices\<key>.wav`. Every phrase must be
+  reference with `scripts/asr_words.py work\voices\<key>.wav`. Every phrase must be
   complete, and `ref_text` must match what is actually said.
 - **Keep screams out of voice clips.** Speech detection doesn't count a scream
   or a wail as speech, so a clip can look like a short word with silence around
@@ -694,9 +700,9 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   attacks (a breath, a consonant) by 20–100 ms. If the actor is already
   sounding when the window opens, that sliver of Japanese plays and is then
   cut. It's rare enough to sound random ("sometimes the start is glitchy").
-  `edges.py <clip> --apply` finds these and starts the window 20 ms before the
-  true attack. It only moves clear cases: a voice within 16 dB of the line at
-  the cut that began 20–130 ms before the window. Shorter fragments weren't
+  `scripts/edges.py <clip> --apply` finds these and starts the window 20 ms
+  before the true attack. It only moves clear cases: a voice within 16 dB of the
+  line at the cut that began 20–130 ms before the window. Shorter fragments weren't
   heard, and longer ones are usually someone else's sound, except where the
   sound rises out of silence: the separated vocals hold zeros (or nearly)
   between phrases, so a sound that begins there and runs unbroken into the
@@ -717,7 +723,7 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   the voices when there is one (see `dips` under "Render"). In a noisy room (a
   bar, a crowd) the separated vocals keep some background chatter: long `skip`s
   with a voice at or above the line's level there are the room, not the actor.
-- **Match reverberation to the source.** `tails.py <clip>` compares the
+- **Match reverberation to the source.** `scripts/tails.py <clip>` compares the
   original voice tail with the rendered take. Music or a following sound can
   look like reverb, so review the scene before choosing an effect. `echo`
   provides heavy reverb with a 1 s tail; `pa` provides public-address tone
@@ -768,23 +774,23 @@ render ASS subtitles to place them (mpv and VLC do, with libass).
   `separate.py` swapped in. So after re-separating one job, a new job for the
   same video (an A/B copy, say) starts with Roformer stems, not htdemucs, even
   though VoiceStudio only runs htdemucs. Check `separator.json` in the new job
-  folder, and use `separate.py --restore` or copy the stems you want.
+  folder, and use `scripts/separate.py --restore` or copy the stems you want.
 - **A long-running backend can fill the GPU.** After many renders (other engines
   included), PyTorch's cache can hold almost all the VRAM while only OmniVoice
   is loaded (`GET /model/loaded` shows the free memory). Renders then slow to
   tens of seconds a line, and long per-line references fail with "Generation
   failed". `POST /system/flush-memory` on the backend releases it without
-  unloading anything; `dub.py generate` calls it before and after each run.
+  unloading anything; `scripts/dub.py generate` calls it before and after each run.
   Prepping a whole video fills it too: transcription, diarisation and
   separation stay cached, and the first render then fails with "out of memory",
-  even in the flush itself. Only a restart (`backend.py restart`) frees that;
-  `dubrama.py` restarts the backend before the first render after a prep, and
+  even in the flush itself. Only a restart (`scripts/backend.py restart`) frees
+  that; `dubrama.py` restarts the backend before the first render after a prep, and
   when a render runs out of memory. With both voices, the backend keeps the
   American voice's engine loaded after its render, and the next part's actor
   render ran out of memory on a long per-line reference about one part in six;
   the restart cleared it each time. A program outside the dub using the GPU
   (another project's job) makes the retry fail too: two failures block the
-  part, and the next `dubrama.py run` retries it.
+  part, and the next `scripts/dubrama.py run` retries it.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
@@ -808,34 +814,34 @@ The loop, in the order it runs:
 
 | Script | Does |
 |---|---|
-| `dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
-| `split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
-| `separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
-| `subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
-| `signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
-| `draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
-| `cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
-| `voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
-| `frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
-| `asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
-| `edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
-| `tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
-| `fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
-| `dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
-| `lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
-| `deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
+| `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
+| `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
+| `scripts/dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
+| `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
+| `scripts/subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
+| `scripts/signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
+| `scripts/draft.py <name> ...` | Careful transcript snapped to real speech, missed lines recovered, speaker suggested per line, English speech found, long hallucinations re-transcribed, captions shown under each phrase → `draft.json` |
+| `scripts/cast.py <name> ...` | Group lines across parts by voice, so each character gets one voice |
+| `scripts/voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
+| `scripts/frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
+| `scripts/asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
+| `scripts/second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
+| `scripts/edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
+| `scripts/tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
+| `scripts/fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
+| `scripts/dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
+| `scripts/lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
+| `scripts/assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
+| `scripts/deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
 
 Used now and then:
 
 | Script | Does |
 |---|---|
-| `vc.py --pairs <file>` | Convert takes to the actor's timbre (Chatterbox); `dub.py generate` runs it itself for the `"american"` voice |
-| `register.py report\|build\|route\|check\|drop` | Optional calm or raised reference for a character's lines that can't use their own original |
-| `qa.py <name>` | Transcribe the finished dub back and line it up with the script |
+| `scripts/vc.py --pairs <file>` | Convert takes to the actor's timbre (Chatterbox); `scripts/dub.py generate` runs it itself for the `"american"` voice |
+| `scripts/register.py report\|build\|route\|check\|drop` | Optional calm or raised reference for a character's lines that can't use their own original |
+| `scripts/qa.py <name>` | Transcribe the finished dub back and line it up with the script |
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 | `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
-| `backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
+| `scripts/backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
 | `core.py`, `gpulock.py`, `ass.py` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs |

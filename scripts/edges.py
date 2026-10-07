@@ -1,7 +1,7 @@
 """Find window edges that cut the actor mid-sound: starts that open after the
 actor has already started speaking, and ends that close before they stop.
 
-Usage: edges.py <name> [--apply]   (after `dub.py prep`; works on script.json)
+Usage: scripts/edges.py <name> [--apply]   (after `dub.py prep`; works on script.json)
 
 At each window start VoiceStudio crossfades from the original mix, voice
 included, to the voice-free bed in 10 ms. Speech detection misses soft attacks

@@ -17,8 +17,9 @@ import time
 import numpy as np
 import soundfile as sf
 
-HERE = pathlib.Path(__file__).resolve().parent
-WORK = HERE / "work"
+HERE = pathlib.Path(__file__).resolve().parent     # the scripts
+ROOT = HERE.parent                                  # the repo: work/, videos/, vendor/
+WORK = ROOT / "work"
 # Same resolution as VoiceStudio's backend/core/config.py.
 JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"

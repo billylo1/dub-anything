@@ -1,8 +1,8 @@
 """Careful transcription with word timings (beam 5, no VAD filter), Japanese by default.
 
-Usage: asr_words.py <wav> [offset_seconds]        a wav file (offset is added to printed times)
-       asr_words.py <clip> <t0> <t1>               a stretch of a prepped clip's separated vocals,
-                                                   plus where the VAD hears speech in it
+Usage: scripts/asr_words.py <wav> [offset_seconds]         a wav file (offset is added to printed times)
+       scripts/asr_words.py <clip> <t0> <t1>               a stretch of a prepped clip's separated vocals,
+                                                           plus where the VAD hears speech in it
 Options: --model <repo>  (default Systran/faster-whisper-large-v3)
          --lang en    for speech already in English (default ja)
 """
@@ -28,7 +28,7 @@ args = ap.parse_args()
 seg_doc = WORK / args.source / "segments.json"
 if seg_doc.exists():
     if len(args.times) != 2:
-        raise SystemExit("usage: asr_words.py <clip> <t0> <t1>")
+        raise SystemExit("usage: scripts/asr_words.py <clip> <t0> <t1>")
     t0, t1 = args.times
     audio = decode_audio(str(JOBS / load_json(seg_doc)["job_id"] / "vocals.wav"), sampling_rate=16000)
     audio, offset = audio[int(t0 * 16000):int(t1 * 16000)], t0

@@ -1,8 +1,8 @@
 """Voice conversion: give finished takes the actor's timbre, keeping their words,
 accent, timing and level.
 
-Usage: vc.py --pairs pairs.json   (dub.py generate runs it for parts rendered with
-                                    "voice": "american"; own environment, see UV_RUN)
+Usage: scripts/vc.py --pairs pairs.json   (dub.py generate runs it for parts rendered with
+                                            "voice": "american"; own environment, see UV_RUN)
   pairs.json: [{"in": "engine take.wav", "target": "actor reference.wav", "out": "converted.wav"}, ...]
 
 The model is Chatterbox's voice converter (Resemble AI, MIT licence): the take is
@@ -35,7 +35,7 @@ import soundfile as sf
 
 from gpulock import hold_gpu
 
-HERE = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 # The environment it runs in (dub.py prepends this to "python vc.py ...").
 UV_RUN = ["uv", "run", "--no-project", "--python", "3.11",
           "--index", "https://download.pytorch.org/whl/cu128", "--index-strategy", "unsafe-best-match",
@@ -87,7 +87,7 @@ class Chatterbox:
     def __init__(self):
         import types
         import torch
-        src = pathlib.Path(os.environ.get("CHATTERBOX_SRC") or HERE / "vendor" / "chatterbox")
+        src = pathlib.Path(os.environ.get("CHATTERBOX_SRC") or ROOT / "vendor" / "chatterbox")
         if not (src / "src" / "chatterbox" / "vc.py").exists():
             raise SystemExit(f"no Chatterbox source at {src}: git clone --depth 1 "
                              "https://github.com/resemble-ai/chatterbox vendor/chatterbox (or set CHATTERBOX_SRC)")

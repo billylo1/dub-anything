@@ -1,6 +1,6 @@
 """Round-trip QA: transcribe a dubbed MP4 in English and line it up with the script.
 
-Usage: qa.py <name> [tag]
+Usage: scripts/qa.py <name> [tag]
 """
 import json
 import pathlib

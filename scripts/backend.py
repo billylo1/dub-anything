@@ -1,6 +1,6 @@
 """Keep the VoiceStudio backend running.
 
-Usage: backend.py status | start | stop | restart
+Usage: scripts/backend.py status | start | stop | restart
 
 start launches the backend detached from the shell that asks (on Windows through
 the process service, so it outlives an agent's session), with OMNIVOICE_DATA_DIR,
@@ -20,10 +20,10 @@ import time
 
 import requests
 
-HERE = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 PORT = int(re.search(r":(\d+)", API.split("//", 1)[-1]).group(1)) if re.search(r":\d+", API.split("//", 1)[-1]) else 80
-VS_DIR = pathlib.Path(os.environ.get("VOICESTUDIO_DIR") or HERE.parent / "VoiceStudio")
+VS_DIR = pathlib.Path(os.environ.get("VOICESTUDIO_DIR") or ROOT.parent / "VoiceStudio")
 
 
 def user_env(name):
@@ -144,7 +144,7 @@ def start(wait=600):
     if sys.platform == "win32":
         # A child of this shell dies with an agent's session; one started by the
         # process service (WMI) doesn't. A batch file carries the environment.
-        launcher = HERE / "work" / "backend-start.cmd"
+        launcher = ROOT / "work" / "backend-start.cmd"
         launcher.parent.mkdir(exist_ok=True)
         lines = ["@echo off"] + [f'set "{k}={env[k].replace("%", "%%")}"'
                                  for k in ("PATH", "OMNIVOICE_DATA_DIR", "OMNIVOICE_CACHE_DIR") if env.get(k)]

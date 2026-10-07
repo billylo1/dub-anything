@@ -16,7 +16,7 @@ import pathlib
 import sys
 import time
 
-LOCK = pathlib.Path(__file__).resolve().parent / "work" / "gpu.lock"
+LOCK = pathlib.Path(__file__).resolve().parents[1] / "work" / "gpu.lock"
 OWNER = LOCK.with_suffix(".owner")
 QUEUE = LOCK.with_suffix(".queue")
 _held = None

@@ -1,6 +1,6 @@
 """Put the finished dubs into the source video itself, renamed "<name> (dubbed)".
 
-Usage: deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assembled.mp4> ...] [--default VOICE]
+Usage: scripts/deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assembled.mp4> ...] [--default VOICE]
 
 Each <assembled.mp4> is assemble.py's output for one voice ("actor" or
 "american"), with its .en.srt and .ja.srt beside it, and its .en.ass and

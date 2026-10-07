@@ -2,8 +2,8 @@
 
 Usage (needs sherpa-onnx, so run it in its own env):
   uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy
-      --with pykakasi --with huggingface_hub python second.py <clip> [<clip> ...] [--script] [--all]
-  ... second.py <clip> <t0>:<t1> [<t0>:<t1> ...]      any stretches of the clip
+      --with pykakasi --with huggingface_hub python scripts/second.py <clip> [<clip> ...] [--script] [--all]
+  ... scripts/second.py <clip> <t0>:<t1> [<t0>:<t1> ...]      any stretches of the clip
 It runs on the CPU, so it can run beside GPU work (drafting, rendering).
 
 Runs ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice over each line of
@@ -28,7 +28,7 @@ from huggingface_hub import snapshot_download
 from scipy.signal import resample_poly
 
 # Same resolution as core.py.
-WORK = pathlib.Path(__file__).resolve().parent / "work"
+WORK = pathlib.Path(__file__).resolve().parents[1] / "work"
 JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
 HF_CACHE = (os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DIR")

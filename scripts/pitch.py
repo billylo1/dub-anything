@@ -1,8 +1,8 @@
 """Median voice pitch per transcribed phrase, to sanity-check speaker labels.
 
-Usage: pitch.py <name>   (reads work/<name>/segments.json and that job's vocals.wav)
+Usage: scripts/pitch.py <name>   (reads work/<name>/segments.json and that job's vocals.wav)
 Needs librosa, so run it in a throwaway env:
-  uv run --no-project --python 3.12 --with librosa --with soundfile python pitch.py <clip>
+  uv run --no-project --python 3.12 --with librosa --with soundfile python scripts/pitch.py <clip>
 """
 import json
 import os
@@ -17,7 +17,7 @@ JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
 
 sys.stdout.reconfigure(encoding="utf-8")
-work = pathlib.Path(__file__).resolve().parent / "work" / sys.argv[1]
+work = pathlib.Path(__file__).resolve().parents[1] / "work" / sys.argv[1]
 doc = json.loads((work / "segments.json").read_text(encoding="utf-8"))
 wav = JOBS / doc["job_id"] / "vocals.wav"
 y, sr = librosa.load(wav, sr=16000, mono=True)

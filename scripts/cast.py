@@ -1,6 +1,6 @@
 """Group the lines of one or more clips by voice, to cast consistently across parts.
 
-Usage: cast.py <name> [<name> ...] [--min 0.9] [--threshold 0.38]   (after draft.py)
+Usage: scripts/cast.py <name> [<name> ...] [--min 0.9] [--threshold 0.38]   (after draft.py)
 
 Every draft line of at least --min seconds gets a speaker embedding (WeSpeaker,
 as in draft.py). Average-linkage clustering by cosine similarity then puts one

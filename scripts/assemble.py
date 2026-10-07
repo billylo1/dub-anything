@@ -1,6 +1,6 @@
 """Package dubbed clips as one video: dub + original audio, subtitles in both languages.
 
-Usage: assemble.py <stem> [--voice actor|american] [--parts 1-4] [--out FILE] [--sub FILE.srt:lang[:title]] ...
+Usage: scripts/assemble.py <stem> [--voice actor|american] [--parts 1-4] [--out FILE] [--sub FILE.srt:lang[:title]] ...
 
 <stem> is a split video (videos/<stem>-parts/parts.json from split.py) or a
 single prepped clip (work/<stem>). --voice american assembles the parts' American
@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 import ass
-from core import HERE, VOICE_LABEL, WORK, load_json, out_dir, srt_time, voice_part
+from core import ROOT, VOICE_LABEL, WORK, load_json, out_dir, srt_time, voice_part
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu"}
@@ -64,7 +64,7 @@ def main():
                     help="video encoder when the range doesn't start at 0 (else stream copy)")
     args = ap.parse_args()
 
-    manifest = HERE / "videos" / f"{args.stem}-parts" / "parts.json"
+    manifest = ROOT / "videos" / f"{args.stem}-parts" / "parts.json"
     if manifest.exists():
         pj = load_json(manifest)
         source, parts = pathlib.Path(pj["video"]), pick(pj["parts"], args.parts)

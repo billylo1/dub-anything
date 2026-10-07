@@ -1,6 +1,6 @@
 """Transcribe every rendered line on its own and flag the ones that don't match.
 
-Usage: lineqa.py <name> [<name> ...] [--all] [--reroll]   (after `dub.py generate`)
+Usage: scripts/lineqa.py <name> [<name> ...] [--all] [--reroll]   (after `dub.py generate`)
 
 Full-mix QA (qa.py) hides problems that show up clearly per line:
   - extra words before the first expected one: voice-reference leakage
@@ -198,13 +198,13 @@ def check(name, model, show_all, reroll):
         (work / "rendered.json").write_text(json.dumps(rendered, indent=1), encoding="utf-8")
         if converted:
             (work / "converted.json").write_text(json.dumps(converted, indent=1), encoding="utf-8")
-        print(f"put back {len(restored)} earlier takes: the next `dub.py generate {name}` re-mixes them")
+        print(f"put back {len(restored)} earlier takes: the next `scripts/dub.py generate {name}` re-mixes them")
     if reroll and flagged:
         (work / "reroll.json").write_text(json.dumps(flagged, ensure_ascii=False, indent=1), encoding="utf-8")
         again = sum(1 for f in flagged if f.get("reconvert"))
         what = [f"{n} {kind}" for n, kind in ((len(flagged) - again, "for fresh takes"),
                                               (again, "to be converted again")) if n]
-        print(f"queued {' and '.join(what)} on the next `dub.py generate {name}` "
+        print(f"queued {' and '.join(what)} on the next `scripts/dub.py generate {name}` "
               f"(their current takes are kept, and put back if the new ones are worse)")
 
 

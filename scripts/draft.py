@@ -1,6 +1,6 @@
 """First draft of a clip's script: careful transcript, real timings, suggested cast.
 
-Usage: draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `dub.py prep`)
+Usage: scripts/draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `dub.py prep`)
 
 1. Whisper large-v3 (beam 5, word timings) over the separated vocals.
 2. Silero VAD finds where speech really is. Whisper's times run ~0.4 s early,

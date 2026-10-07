@@ -1,7 +1,7 @@
 """Compare each generated English clip's speech length with its script window,
 and with how long the actor actually speaks in it.
 
-Usage: fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job's seg_en_L*.wav)
+Usage: scripts/fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job's seg_en_L*.wav)
 Lines not rendered yet get an estimate (~): the length OmniVoice itself will give
 them, computed with its own rule from the reference the render will use (the
 line's own original, or the voice's clips for the lines listed as falling back).

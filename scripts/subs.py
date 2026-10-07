@@ -1,6 +1,6 @@
 """Burned-in captions: read a clip's on-screen closed captions into timed text.
 
-Usage: subs.py <clip> [--open] [--fps 4] [--from T0] [--to T1]   (after `dub.py prep`; own environment, see AGENTS.md)
+Usage: scripts/subs.py <clip> [--open] [--fps 4] [--from T0] [--to T1]   (after `dub.py prep`; own environment, see AGENTS.md)
 
 Some recordings carry the broadcaster's closed captions burned into the picture:
 the exact dialogue, often the speaker's name in brackets, "≪" for a voice off
@@ -44,7 +44,7 @@ import numpy as np
 
 from gpulock import hold_gpu
 
-HERE = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 W, H = 960, 540      # positions are kept in these units, whatever the video's size
 OFF_MARKS = "≪≤《«<"
 # A speaker label; OCR sometimes drops its opening bracket.
@@ -330,9 +330,9 @@ def main():
     args = ap.parse_args()
     args.fps = args.fps or (2 if args.open else 4)
     sys.stdout.reconfigure(encoding="utf-8")
-    work = HERE / "work" / args.clip
+    work = ROOT / "work" / args.clip
     video = json.loads((work / "segments.json").read_text(encoding="utf-8"))["video"]
-    video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else HERE / video
+    video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else ROOT / video
     w, h = size(video)
     # Open subtitles sit in the bottom of the picture: reading only that band is
     # faster, and keeps signs and other text in the scene out.

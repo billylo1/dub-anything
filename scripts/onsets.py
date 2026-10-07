@@ -1,6 +1,6 @@
 """Compare each script window with where the original actor's voice actually is.
 
-Usage: onsets.py <name>   Voice activity = 20 ms frames of the separated vocals
+Usage: scripts/onsets.py <name>   Voice activity = 20 ms frames of the separated vocals
 within 25 dB of the clip's loudest speech. Reports the active span found near
 each window, so windows can be snapped to real onsets.
 """

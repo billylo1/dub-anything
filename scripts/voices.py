@@ -1,11 +1,11 @@
 """Build and check the cast's voices (work/voices.json).
 
 Usage:
-  voices.py spans <clip> <a-b> [<a-b> ...]     where the VAD hears speech around candidate clips (CPU)
-  voices.py add <key> <from-clip> '<clips>' '<ref_text>' [--replace]
-  voices.py check <key> [<key> ...]            transcribe each clip of a voice's joined reference (GPU)
-  voices.py sim <key> <key> [<key> ...]        speaker-embedding similarity between voices' references (GPU)
-  voices.py score <clip> <a-b> [<a-b> ...]     who each stretch sounds like, against the show's cast (GPU)
+  scripts/voices.py spans <clip> <a-b> [<a-b> ...]     where the VAD hears speech around candidate clips (CPU)
+  scripts/voices.py add <key> <from-clip> '<clips>' '<ref_text>' [--replace]
+  scripts/voices.py check <key> [<key> ...]            transcribe each clip of a voice's joined reference (GPU)
+  scripts/voices.py sim <key> <key> [<key> ...]        speaker-embedding similarity between voices' references (GPU)
+  scripts/voices.py score <clip> <a-b> [<a-b> ...]     who each stretch sounds like, against the show's cast (GPU)
 
 spans: a reference clip must start and end in a pause. Each candidate a-b (seconds in
 the clip's separated vocals) is shown with the speech spans around it: OK when none

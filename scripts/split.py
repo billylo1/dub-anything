@@ -1,6 +1,6 @@
 """Cut a long video into ~N-minute parts at pauses in speech, to dub part by part.
 
-Usage: split.py <video> [--minutes 3] [--whole A-B ...] [--out DIR] [--encoder auto|h264_nvenc|libx264]
+Usage: scripts/split.py <video> [--minutes 3] [--whole A-B ...] [--out DIR] [--encoder auto|h264_nvenc|libx264]
 Silero VAD over the full mix finds the gaps between speech; near each N-minute
 mark (+-30 s) the longest gap wins and the cut goes in its middle, so no line
 is split. --whole A-B (seconds, repeatable) cuts exactly at A and B and keeps

@@ -15,14 +15,14 @@ spec in voices.json has "register_of": "<character>" (and "register": "calm" or
 the reference nearest the actor's delivery on that line, except lines marked
 "keep_voice": true (a word one reference can't say, say).
 
-Usage: register.py report [clip ...]            each reference against the lines it serves
-       register.py build <voice> calm|raised    a reference in that register from the
-                                                character's own clean lines (-> voices.json)
-       register.py route <clip ...> [--apply]   give each line the nearest-register reference
-       register.py check [clip ...]             how well the takes' register follows the
-                                                original's, and whether each extra reference
-                                                delivers its register
-       register.py drop <voice>                 retire an extra reference that doesn't
+Usage: scripts/register.py report [clip ...]            each reference against the lines it serves
+       scripts/register.py build <voice> calm|raised    a reference in that register from the
+                                                        character's own clean lines (-> voices.json)
+       scripts/register.py route <clip ...> [--apply]   give each line the nearest-register reference
+       scripts/register.py check [clip ...]             how well the takes' register follows the
+                                                        original's, and whether each extra reference
+                                                        delivers its register
+       scripts/register.py drop <voice>                 retire an extra reference that doesn't
 report and check default to every directed clip (work/*/script.json).
 """
 import argparse
@@ -325,7 +325,7 @@ def cmd_check(args):
                 continue
             d_orig, d_take = orig[on].mean() - orig[~on].mean(), take[on].mean() - take[~on].mean()
             want = -1 if show.voices[v].get("register") == "calm" else 1
-            verdict = "working" if want * d_take >= 0.5 else f"not delivering its register: register.py drop {v}"
+            verdict = "working" if want * d_take >= 0.5 else f"not delivering its register: scripts/register.py drop {v}"
             print(f"    {v}: its {on.sum()} lines stand {d_orig:+.2f} apart from the others in the original, "
                   f"{d_take:+.2f} in the takes -> {verdict}")
     if rows:
@@ -349,7 +349,7 @@ def cmd_drop(args):
                 n += 1
         if n:
             path.write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
-            print(f"{clip}: {n} lines back to {base}; run dub.py generate {clip}")
+            print(f"{clip}: {n} lines back to {base}; run scripts/dub.py generate {clip}")
     update_voices(lambda voices: voices.pop(args.voice))
 
 

@@ -70,27 +70,27 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 ## Doing it by hand
 
 With VoiceStudio's Python (`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`),
-`dubrama.py` runs the machine work of a whole dub; you write the scripts:
+`scripts/dubrama.py` runs the machine work of a whole dub; you write the scripts:
 
 ```powershell
-& $py dubrama.py new D:\movies\my-show.mkv --voices both   # a job named my_show
-& $py dubrama.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
+& $py scripts\dubrama.py new D:\movies\my-show.mkv --voices both   # a job named my_show
+& $py scripts\dubrama.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
 # write work\my_show-NN\script.json for each part, then:
-& $py dubrama.py ready my_show 01
-& $py dubrama.py status my_show
+& $py scripts\dubrama.py ready my_show 01
+& $py scripts\dubrama.py status my_show
 ```
 
-Or step by step, with the backend running (`backend.py start`):
+Or step by step, with the backend running (`scripts/backend.py start`):
 
 ```powershell
-& $py split.py videos\episode.mkv                     # long video -> parts at pauses
-& $py dub.py prep videos\episode-parts\episode-01.mp4  # upload, separate, transcribe
-& $py draft.py episode-01                            # careful transcript, suggested cast
+& $py scripts\split.py videos\episode.mkv                      # long video -> parts at pauses
+& $py scripts\dub.py prep videos\episode-parts\episode-01.mp4  # upload, separate, transcribe
+& $py scripts\draft.py episode-01                              # careful transcript, suggested cast
 # write work\episode-01\script.json and the cast in work\voices.json
-& $py dub.py generate episode-01 --match-level       # clone, time, mix, export
-& $py lineqa.py episode-01                           # check each rendered line
-& $py assemble.py episode --parts 1-4                # one video with both audio tracks
-& $py deliver.py D:\movies\episode.mkv actor=videos\episode-parts\dubbed\episode.dubbed.mp4
+& $py scripts\dub.py generate episode-01 --match-level         # clone, time, mix, export
+& $py scripts\lineqa.py episode-01                             # check each rendered line
+& $py scripts\assemble.py episode --parts 1-4                  # one video with both audio tracks
+& $py scripts\deliver.py D:\movies\episode.mkv actor=videos\episode-parts\dubbed\episode.dubbed.mp4
 ```
 
 Some steps need their own environments (`separate.py`, `subs.py`, `second.py`;

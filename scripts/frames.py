@@ -1,6 +1,6 @@
 """Labelled grid of video frames, for casting: who is on screen at each line?
 
-Usage: frames.py <out.jpg> <video> <seconds>[:label] ... [--cols 5] [--width 400]
+Usage: scripts/frames.py <out.jpg> <video> <seconds>[:label] ... [--cols 5] [--width 400]
 
 One frame per time, stamped with the time and label, tiled into one image.
 Close-ups, visible speech and on-screen name captions help identify speakers.

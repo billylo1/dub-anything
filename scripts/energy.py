@@ -1,6 +1,6 @@
 """Print a per-second loudness bar chart of a clip's separated vocals vs background.
 
-Usage: energy.py <name>   (after `dub.py prep`; reads work/<name>/segments.json)
+Usage: scripts/energy.py <name>   (after `dub.py prep`; reads work/<name>/segments.json)
 """
 import json
 import sys

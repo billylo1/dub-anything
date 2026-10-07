@@ -1,8 +1,8 @@
 """Re-separate prepped clips' vocals with a Roformer model instead of VoiceStudio's htdemucs.
 
 Usage (its own env, see AGENTS.md):
-  separate.py <clip> [<clip> ...] [--model vocals_mel_band_roformer.ckpt]
-  separate.py <clip> --restore            put htdemucs's stems back
+  scripts/separate.py <clip> [<clip> ...] [--model vocals_mel_band_roformer.ckpt]
+  scripts/separate.py <clip> --restore            put htdemucs's stems back
 
 Residual background music in separated vocals can affect voice references,
 cloned lines, drafts, register measurements and level matching. Compare the
@@ -25,8 +25,8 @@ import tempfile
 
 from gpulock import hold_gpu
 
-HERE = pathlib.Path(__file__).resolve().parent
-WORK = HERE / "work"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+WORK = ROOT / "work"
 # Same resolution as core.py / VoiceStudio's backend/core/config.py.
 DATA = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
                     or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")

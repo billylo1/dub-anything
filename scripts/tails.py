@@ -1,6 +1,6 @@
 """Find lines whose original voice carries heavy reverb (flashbacks, echoing halls).
 
-Usage: tails.py <name> [--all]   (after writing script.json; --all prints every line)
+Usage: scripts/tails.py <name> [--all]   (after writing script.json; --all prints every line)
 
 For each line it measures how long the original voice rings on after the actor
 stops: the time from the last loud frame (within 10 dB of the line's peak) until
