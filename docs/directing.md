@@ -312,7 +312,10 @@ be a third faster than how that person talks, and every take on it then ends
 early (in one interview, two in three lines came out short until the clips
 were swapped). `fit.py` warns when a reference is more than 15% faster or
 slower than the speaker's lines in the show's scripts. Swap clips before the
-first render; afterwards a changed voice re-renders its lines.
+first render; afterwards a changed voice re-renders its lines. A swap can
+overshoot: one reference 19% fast, rebuilt from formal lines only (a polite
+self-introduction), came out 21% slow; one brisk clip and one formal clip
+landed near the speaker's median.
 
 Pick reference lines in the character's usual register. Each line's own
 original normally sets its delivery (see "Render"). The character's reference
@@ -376,7 +379,11 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   Treat `risk` on a window under about 1 s as `OVER?`: short English is
   stretched (see below), so even one word takes 0.9–1.3 s, more than fill's
   fastest speed can recover. The estimate is least reliable for such one-word
-  lines.
+  lines. It runs short on two- to four-word lines in windows up to about
+  1.3 s too: in one fast-talking comedy, eight parts blocked on lines fit.py had
+  passed ("Oh. She hung up.", "What is it, <name>?"), whose takes came out
+  30–60% longer than estimated. Give such lines a third of slack, or keep a
+  one-word reply original with a caption.
   For `SHORT?`: write fuller English, closer to everything the actor says.
   Don't count on fill to slow a short line down (see "Render"). In the
   `"american"` voice, `fit.py` estimates IndexTTS's length instead, from the
