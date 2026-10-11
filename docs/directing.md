@@ -315,7 +315,18 @@ slower than the speaker's lines in the show's scripts. Swap clips before the
 first render; afterwards a changed voice re-renders its lines. A swap can
 overshoot: one reference 19% fast, rebuilt from formal lines only (a polite
 self-introduction), came out 21% slow; one brisk clip and one formal clip
-landed near the speaker's median.
+landed near the speaker's median. The warning measures each line by its
+window, pauses included, so a deadpan speaker whose windows hold long pauses
+and drawn-out words reads as slow: in one anime such a character stayed 42%
+"fast" after his clips were swapped for slower ones, while `fit.py` flagged
+only three of his lines. Go by the per-line `SHORT?` flags there, not the
+warning alone.
+
+Check the speaker of every reference clip with a frame, even when the draft
+and the casting look settled. In a two-person scene the draft gave both
+speakers one suggestion, and a reference built from it held two lines of the
+other girl; the per-line references would have carried her voice into every
+fallback line of the first.
 
 Pick reference lines in the character's usual register. Each line's own
 original normally sets its delivery (see "Render"). The character's reference
@@ -352,7 +363,13 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   (an excited "Found one!", a sing-song "so yummy"), even when they're the
   loudest thing in the vocals: `draft.py` then drops the line or its end, and `fit.py` shows no actor
   end for it. The loudness of `vocals.wav` in 50 ms steps shows where such a
-  line really starts and ends.
+  line really starts and ends. Some voices it misses altogether: in one anime,
+  two soft, high female voices showed no speech spans at all through ordinary
+  lines held at the level of everyone else's speech. Draft windows for such a
+  character are Whisper's (early), `voices.py spans` reports their clips as
+  clean however they are bounded, and their reference clips have to be cut by
+  loudness too. Dialogue heard from a distance, 15-20 dB below the scene's
+  other voices, is better kept original with captions.
 - **Split long lines at the actor's pauses** so the English lands where the lips
   move. Write each piece so it stands on its own. A take whose text starts
   mid-sentence ("goes well with the rice") can come out with a subject added
