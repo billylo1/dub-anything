@@ -2,7 +2,36 @@
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English** on Windows with an NVIDIA GPU.
+tested for **Japanese → English** on Windows with an NVIDIA GPU. Other language
+pairs and hardware need changes in a few known places, a job you can hand your
+coding agent: see [Other languages and hardware](#other-languages-and-hardware).
+
+## What's different
+
+Most dubbing tools run a fixed pipeline: transcribe, translate, clone each
+speaker from one clip, speed up whatever runs long. dubrama differs where a
+listener notices:
+
+- **An agent directs, line by line.** It casts each line from speaker
+  embeddings, frames and the dialogue, fixes what Whisper misheard from context,
+  writes English timed to the actor, and triages every QA flag. It tells you
+  which lines are guesses instead of hiding them.
+- **Each line acts like the original.** The voice is prompted with the actor's
+  own delivery of that line, not one clip per character, so a shout stays a
+  shout and a murmur a murmur. A line whose window holds another voice falls
+  back to the character's usual reference, so nothing leaks in.
+- **Each line takes the actor's time.** Every take is re-timed to end where the
+  actor stops, so turns land where they did in the original instead of leaving
+  dead air. Each take's length is predicted before the first render, so the
+  English is written to fill the time.
+- **Every line is checked.** Each rendered line is transcribed back; a garbled
+  one gets fresh takes, up to three rounds, and the best is kept.
+- **It reads the picture.** Burned-in closed captions become the transcript
+  (and often name the speaker), and text on screen can be translated as placed
+  subtitles.
+- **Chosen by ear.** The defaults were picked by listening to the alternatives
+  side by side against the original; what was measured is in
+  [docs/research.md](docs/research.md).
 
 ## How you use it
 
@@ -66,6 +95,32 @@ Outside the dubbed lines you hear the original soundtrack, so songs, laughs and
 names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 [Jumpgate](https://github.com/swax/jumpgate) file. It is rendered with
 `npm run render -- <path>/docs/process.jg` from Jumpgate's `packages/jumpgate`.
+
+## Other languages and hardware
+
+Only Japanese → English on Windows with an NVIDIA GPU has been tested. The voice
+engine isn't the limit: VoiceStudio clones voices in hundreds of languages and
+runs on macOS and Linux too. What assumes Japanese, English or NVIDIA is in
+dubrama's own scripts, in these places:
+
+- **The source language.** Whisper is told the speech is Japanese
+  (`dub.py prep`, `draft.py`, `voices.py`; `asr_words.py` takes `--lang`), and
+  each line keeps its transcript in a field named `ja`.
+- **Second opinions and captions.** `second.py` checks Whisper against a
+  Japanese-only recogniser and SenseVoice, and `subs.py` reads captions with a
+  Chinese and Japanese OCR model. Another source language needs models that
+  know it, or goes without these checks.
+- **The target language.** Rendered lines are transcribed back as English
+  (`lineqa.py`), take lengths are predicted from fits made on Japanese → English
+  takes, and the American voice is English by design.
+- **The directing notes.** [docs/directing.md](docs/directing.md) was written
+  from Japanese → English dubs. Most of it is about casting, timing and QA and
+  carries over; the parts about kana and kanji don't.
+- **Hardware.** The models run on CUDA and mostly fall back to the CPU without
+  it, much slower. Video is encoded with NVENC when it's there, else x264. The
+  Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)
+  already check the platform, so Linux with an NVIDIA GPU should be the
+  shortest port.
 
 ## Doing it by hand
 

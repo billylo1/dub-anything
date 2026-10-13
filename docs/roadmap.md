@@ -67,8 +67,8 @@ How each piece was chosen, and the measurements behind it, are in
 ## Later
 
 - **Lip sync** (LatentSync / MuseTalk); feasible on a decent NVIDIA GPU.
-- **Other language pairs.** `dub.py prep` and `draft.py` assume a Japanese
-  source and an English target.
+- **Other language pairs and hardware.** What assumes Japanese, English or
+  NVIDIA is listed in the README, "Other languages and hardware".
 - **Upstream to VoiceStudio:**
   - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
     presets, and per-segment voice and emotion references in dubs;
