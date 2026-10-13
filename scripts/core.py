@@ -65,7 +65,7 @@ LANG_NAMES = {"ja": "Japanese", "en": "English", "zh": "Chinese", "ko": "Korean"
 LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu",
          "it": "ita", "pt": "por", "ru": "rus", "fi": "fin", "sv": "swe"}
 NATIVE = {"en": "English", "ja": "日本語", "es": "Español"}  # a language's name in itself, for track titles
-PAIRS = {("ja", "en"), ("en", "ja"), ("es", "en")}  # the pairs the scripts know
+PAIRS = {("ja", "en"), ("en", "ja"), ("es", "en"), ("en", "es")}  # the pairs the scripts know
 
 
 def langs(name):
@@ -92,7 +92,9 @@ def line_ref_default(tgt):
     takes were Japanese fell from 0.96 to 0.53), and without it the takes followed
     the actors' delivery as closely and matched their voices as well. Into English
     from Spanish, as from Japanese, they help: the takes followed the actors more
-    closely, and their English hardly changed (P(en) 0.78 against 0.80)."""
+    closely, and their English hardly changed (P(en) 0.78 against 0.80). Into
+    Spanish from English too: the takes followed the actors' pitch far more
+    closely and their Spanish didn't change (P(es) 0.60 against 0.61)."""
     return tgt != "ja"
 
 
@@ -572,8 +574,8 @@ TITLES = {
            "signs": "English (signs only)", "transcript": "English (transcript)", "original": "English (original)"},
     "ja": {"dub": {"actor": "日本語吹替（俳優の声）"}, "subs": {"actor": "日本語（俳優の声の吹替）"},
            "signs": "日本語（画面の文字のみ）", "transcript": "日本語 (transcript)", "original": "日本語 (original)"},
-    # Only a source so far: no dub into Spanish.
-    "es": {"transcript": "Español (transcript)", "original": "Español (original)"},
+    "es": {"dub": {"actor": "Doblaje en español (voz del actor)"}, "subs": {"actor": "Español (doblaje con la voz del actor)"},
+           "signs": "Español (solo textos en pantalla)", "transcript": "Español (transcript)", "original": "Español (original)"},
 }
 
 

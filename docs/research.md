@@ -273,6 +273,24 @@ originals per part.
     fastest speed. So Spanish → English keeps them on. OmniVoice's length
     rule held here too: with each take's reference and speed, a median error
     of +0.02 s, 77% within 0.2 s and 91% within 0.4 s.
+18. **Into Spanish, the per-line reference helps too.** A live-action sketch
+    was dubbed from English into Spanish (31 lines, four clones) twice from the
+    same script, with per-line references and without. Unlike into Japanese
+    (finding 16), the English original in the reference cost the Spanish
+    nothing: Whisper's confidence that the takes were Spanish was 0.60 with
+    it and 0.61 without, low either way as the clones keep their actors'
+    English accent. With it the takes followed the actors' pitch far more
+    closely (rank correlation 0.40 against -0.05; arousal and effort were
+    level, near zero and 0.2 on 24 scored lines), matched their voices as
+    well (WeSpeaker 0.58 against 0.57), sounded cleaner (SQUIM PESQ 2.46
+    against 2.28, SDR 14.4 against 12.2 dB) and passed the first QA check
+    without a flag, against two (one line heard half in English). Without it
+    the takes ended a little nearer the actor (median 0.10 against 0.14 s)
+    and fewer needed fill's fastest speed (5 against 8). So English →
+    Spanish keeps them on. OmniVoice's length rule held, better with them:
+    with each take's reference and speed, a median error of +0.06 s, 71%
+    within 0.2 s and all within 0.4 s (without them +0.14 s, 45% and 84%).
+    One sketch is little to go on; it awaits a listener.
 
 ## What the pipeline does now
 
@@ -291,14 +309,16 @@ actor's speech, and `lineqa.py` converts a take again when only the
 conversion garbled it. A part dubbed from English into Japanese renders
 without per-line references (finding 16), and `lineqa.py` compares its takes by
 their reading in kana. One dubbed from Spanish into English keeps them
-(finding 17).
+(finding 17), and so does one dubbed from English into Spanish (finding 18),
+whose takes `lineqa.py` compares word by word without accents.
 
 ## Open questions
 
-- **A native Japanese voice.** Dubbing into Japanese, every clone keeps its
-  actor's English accent; the counterpart of the `"american"` voice would be
-  an engine that speaks native Japanese (CosyVoice 3 is in VoiceStudio's
-  catalogue, not installed here) converted to the actor's timbre.
+- **A native Japanese or Spanish voice.** Dubbing into Japanese or Spanish,
+  every clone keeps its actor's English accent; the counterpart of the
+  `"american"` voice would be an engine that speaks the language natively
+  (CosyVoice 3 is in VoiceStudio's catalogue, not installed here; IndexTTS
+  speaks only English and Chinese) converted to the actor's timbre.
 
 - **Steadier short takes.** Most fill passes, overflows and re-rolls come
   from lines under about 1.5 s, whose takes vary most from roll to roll (see

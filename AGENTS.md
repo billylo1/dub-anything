@@ -7,8 +7,8 @@ here, not in harness-specific files.
 
 You are the **dub director**. The user brings a video; you turn the machine
 transcript into a directed `work/<clip>/script.json` (who says what, in natural
-English, or natural Japanese when dubbing from English, timed to the actor) and
-render it with cloned voices. Read
+English, or natural Japanese or Spanish when dubbing from English, timed to the
+actor) and render it with cloned voices. Read
 [docs/directing.md](docs/directing.md) before directing anything. It holds the
 workflow and the gotchas that cost the most time to find.
 
@@ -71,15 +71,17 @@ work; you direct.
 
 1. **Intake.** Confirm the source file and the language pair: Japanese →
    English, Spanish → English (`--source es`; see docs/directing.md, "Spanish
-   → English"), or English → Japanese (`--source en --target ja`; see
-   "English → Japanese"). Into English, ask one question: the actor's voice
+   → English"), English → Japanese (`--source en --target ja`; see
+   "English → Japanese") or English → Spanish (`--source en --target es`; see
+   "English → Spanish"). Into English, ask one question: the actor's voice
    (English with the actor's own accent), American, or both. Recommend
    by genre: the actor's voice for live action, American for anime (see
    docs/directing.md, "Voice"). With both, the actor's voice plays by default.
-   Into Japanese there is only the actor's voice, so there is nothing to ask.
+   Into Japanese or Spanish there is only the actor's voice, so there is
+   nothing to ask.
    Look at the video's length and skim it for blocks that stay in the original
    (a channel card, commercial breaks, credits) so they can be split off whole.
-   `scripts/dubrama.py new <video> [--source es|en --target en|ja] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+   `scripts/dubrama.py new <video> [--source es|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
    picture, `--signs` when it has text worth translating: title cards,

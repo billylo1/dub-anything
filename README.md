@@ -2,8 +2,8 @@
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English**, **Spanish → English** and **English →
-Japanese** on Windows with an NVIDIA GPU. Other language pairs and hardware need changes in a few known
+tested for **Japanese → English**, **Spanish → English**, **English →
+Japanese** and **English → Spanish** on Windows with an NVIDIA GPU. Other language pairs and hardware need changes in a few known
 places, a job you can hand your coding agent: see
 [Other languages and hardware](#other-languages-and-hardware).
 
@@ -104,8 +104,8 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Other languages and hardware
 
-Three language pairs are built and tested, Japanese → English, Spanish →
-English and English → Japanese, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
+Four language pairs are built and tested, Japanese → English, Spanish →
+English, English → Japanese and English → Spanish, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
 VoiceStudio clones voices in hundreds of languages and runs on macOS and Linux
 too. Each part records its pair when it's prepared (`dub.py prep --source en
 --target ja`), and the scripts read it from there; `PAIRS` in `scripts/core.py`
@@ -123,15 +123,17 @@ lists the pairs they know. Another pair needs work in these places:
   confidence, since it mistakes a language close to the target's sound
   (short Spanish over music) for the target.
 - **The target language.** Rendered lines are transcribed back and compared
-  word by word in English and by their kana reading in Japanese (`lineqa.py`,
-  `kana.py`); another language needs its own normalization. Take lengths come
-  from OmniVoice's own rule, with corrections measured on Japanese → English
-  takes. Track and subtitle names are listed per language (`TITLES` in
-  `core.py`), and the American voice is English by design.
+  word by word in English and Spanish (numbers spelled out in each, accents
+  aside in Spanish) and by their kana reading in Japanese (`lineqa.py`,
+  `kana.py`); another language needs its own normalization, number words and
+  negations. Take lengths come from OmniVoice's own rule, with corrections
+  measured on Japanese → English takes; they held for the other three pairs.
+  Track and subtitle names are listed per language (`TITLES` in `core.py`),
+  and the American voice is English by design.
 - **The directing notes.** [docs/directing.md](docs/directing.md) was written
   from Japanese → English dubs, with sections on what differs dubbing English
-  into Japanese and Spanish into English. Most of it is about casting, timing
-  and QA and carries over.
+  into Japanese or Spanish and Spanish into English. Most of it is about
+  casting, timing and QA and carries over.
 - **Hardware.** The models run on CUDA and mostly fall back to the CPU without
   it, much slower. Video is encoded with NVENC when it's there, else x264. The
   Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)

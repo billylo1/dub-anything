@@ -3,8 +3,8 @@
 ## Where it stands
 
 dubrama dubs Japanese and Spanish video into English end to end (see
-directing.md, "Spanish → English"), and English video into Japanese (the
-actor's voice only; see "English → Japanese"):
+directing.md, "Spanish → English"), and English video into Japanese or Spanish
+(the actor's voice only; see "English → Japanese" and "English → Spanish"):
 
 - **Transcript and cast.** Parts are separated with Mel-Band Roformer and
   transcribed by Whisper, with two other recognisers as a second opinion and
@@ -17,8 +17,8 @@ actor's voice only; see "English → Japanese"):
   lengths before the first render.
 - **Checks and packaging.** Every line is transcribed back and checked, with up
   to three rounds of fresh takes for what fails. The dubs go into the source
-  file itself, renamed "(dubbed)": one English track per voice, the original
-  audio, and English and Japanese subtitles.
+  file itself, renamed "(dubbed)": one dub track per voice, the original
+  audio, and subtitles in both languages.
 - **Running it.** `dubrama.py` runs a whole dub around the agent's directing:
   the machine steps in order, each part rendered as soon as its script is
   ready, one GPU job at a time, delivery and a report of what to listen for.
@@ -70,10 +70,10 @@ How each piece was chosen, and the measurements behind it, are in
 
 - **Lip sync** (LatentSync / MuseTalk); feasible on a decent NVIDIA GPU.
 - **Other language pairs and hardware.** What a pair beyond Japanese ↔ English
-  and Spanish → English, or other hardware, needs is listed in the README,
+  and Spanish ↔ English, or other hardware, needs is listed in the README,
   "Other languages and hardware".
-- **A native Japanese voice** for dubs into Japanese, the counterpart of the
-  American voice (research.md, open questions).
+- **A native Japanese or Spanish voice** for dubs into those languages, the
+  counterpart of the American voice (research.md, open questions).
 - **Upstream to VoiceStudio:**
   - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
     presets, and per-segment voice and emotion references in dubs;

@@ -60,10 +60,10 @@ differs.
 - `start`/`end`: the window the English line may occupy.
 - `voice`: a key in `voices.json`.
 - `ja`: the corrected original. The field is named for the source language:
-  `en` when dubbing from English (see "English → Japanese"), `es` from Spanish
-  (see "Spanish → English").
-- `text`: the English that is spoken (the dub's language: Japanese when
-  dubbing into it).
+  `en` when dubbing from English (see "English → Japanese" and "English →
+  Spanish"), `es` from Spanish (see "Spanish → English").
+- `text`: the English that is spoken (the dub's language: Japanese or Spanish
+  when dubbing into it).
 - `instruct` (optional): OmniVoice tags, comma-separated, from a fixed
   vocabulary only. The useful one is `whisper`; the others cover gender, age,
   pitch and accent. `dub.py` rejects anything else, because free text aborts the
@@ -113,7 +113,7 @@ dialogue is the same cast, so dub it like the show with the same voices. Its tit
 cards and on-screen text stay as they are.
 
 A top-level `"captions": [{start, end, ja, text}]` list (`en` for `ja` dubbing
-from English) holds speech that stays in the original audio but still belongs in
+from English, `es` from Spanish) holds speech that stays in the original audio but still belongs in
 the subtitles. Examples: dialogue already in
 English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
 list to both subtitle tracks.
@@ -137,8 +137,8 @@ render nothing and don't make a part render again; they change the delivery
 For a new show, settle one thing with the user before the first part: the
 voice, or both (see "Voice" under Render). Everything else has a default. The
 language pair is Japanese → English unless the job says otherwise (`--source
-en --target ja`, see "English → Japanese"; `--source es`, see "Spanish →
-English").
+en --target ja`, see "English → Japanese"; `--source en --target es`, see
+"English → Spanish"; `--source es`, see "Spanish → English").
 `scripts/dubrama.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
 step does and how to direct it. The scripts are in `scripts/` and run from the
@@ -876,6 +876,69 @@ is what differs.
   English model: Latin letters come out right, accents not always (a title
   card's "Adaptación" read as "Adaptacion"). Correct them in `es`.
 
+## English → Spanish
+
+dubrama also dubs English video into Spanish. Everything above applies, and
+much of "English → Japanese" too; this is what differs.
+
+- **The job.** `scripts/dubrama.py new <video> --source en --target es` (by
+  hand, `scripts/dub.py prep <video> --source en --target es`). A line keeps
+  its original in `en`, takes are made and heard in Spanish
+  (`seg_es_<id>.wav`), and the delivered file carries the Spanish dub and
+  subtitles and the English transcript. There is one voice, the actor's,
+  speaking Spanish with the actor's English accent; the American voice is
+  English only.
+- **Which Spanish.** Write neutral Latin American Spanish, as US studios dub
+  for Latin America, unless the user asks for Spain's: `ustedes`, never
+  `vosotros`. Use the established Spanish names of characters and of the
+  films and franchises a script mentions (their Latin American titles), and
+  record them in `work/NOTES.md`. People's names stay as they are, but a
+  nickname with a known Spanish form takes it. Latin American Spanish says
+  `z` and `c` like `s`, so Whisper writing "casa" for "caza" is not a fault.
+- **Per-line references stay on.** Into Japanese the actor's English original
+  carried the accent into the takes (research.md, finding 16). Into Spanish it
+  didn't: on a sketch rendered both ways (31 lines, four clones), Whisper's
+  confidence that the takes were Spanish was 0.60 with them and 0.61 without,
+  and with them the takes followed the actors' pitch far more closely, sounded
+  cleaner and passed the first QA check without a flag, against two
+  (finding 18). That confidence is low for every take, as for any clone that
+  keeps an English accent, so read the per-line transcripts
+  (`lineqa.py <part> --all`) rather than trusting the pass count.
+- **Translate concisely.** OmniVoice's length rule counts Latin letters in both
+  languages, and Spanish needs more of them than English for the same meaning,
+  so a faithful first draft runs long, as into Japanese. Cut what the picture
+  makes clear and prefer the short word, but write fuller where the actor
+  pauses mid-line: a narrator's or a hero's slow, dramatic lines came out
+  `SHORT?` in tight Spanish, and a line with two long pauses needed a third
+  more words. A slow-talking clone is the tightest: one character who spoke in
+  a low growl needed a four-word line cut to three to fit a 2-s window.
+  `fit.py`'s estimates held: with each take's reference and speed, a median
+  error of +0.06 s, 71% within 0.2 s and every take within 0.4 s. Even so,
+  eight of 31 takes ran at fill's fastest speed.
+- **Short lines.** One- and two-word replies stretch towards 2 s, and `fit.py`
+  runs short on them here too: a two-word question estimated at 1.07 s came out
+  at 1.46 s and blocked the first render, since VoiceStudio stops at an
+  overflow before fill can re-time anything. Use the shortest natural form (a
+  colloquial "¿Que qué?" for "You what?") or keep the reply original with a
+  caption.
+- **Wordplay.** Rebuild a pun from Spanish words rather than translating its
+  words: a mishearing joke between two English near-homophones works as two
+  Spanish ones, and a tagline punning on a swear word as a mild Spanish curse
+  with the same image. Note the choice in the line's `listen` so the user can
+  judge it.
+- **Numbers.** VoiceStudio spells digits out in Spanish, so a year can stay in
+  digits in the script (and the subtitles), unlike in Japanese.
+- **QA** compares Spanish word by word, as English: accents and `¿¡` aside
+  (Whisper writes "esta" or "está"), numbers spelled out in Spanish
+  (num2words), `Sr.`, `Sra.`, `Dr.` and `Ud.` expanded, and "negation differs"
+  counting no, nunca, nada, nadie, ni, ningún, jamás and tampoco. A take that
+  runs words together can still pass on letters: a cast-card line sped up to
+  fit came back as one invented word where "como" met a short name. Reword
+  such a line (shorter, or another verb) rather than re-rolling it.
+- **Subtitles and signs** stay in Arial, which has the accents, `ñ` and `¿¡`.
+  A cast card the narration reads out ("<actor> as <character>") needs no
+  sign: the viewer hears it in Spanish.
+
 ## Gotchas
 
 - **Takes can only be replaced in a job that has rendered.** On a job's first
@@ -1020,7 +1083,7 @@ The loop, in the order it runs:
 |---|---|
 | `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `scripts/dub.py prep <video> [--source en\|es --target ja\|en]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English, `es.srt` from Spanish) |
+| `scripts/dub.py prep <video> [--source en\|es --target ja\|en\|es]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English, `es.srt` from Spanish) |
 | `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `scripts/subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `scripts/signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
@@ -1034,7 +1097,7 @@ The loop, in the order it runs:
 | `scripts/tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `scripts/fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
 | `scripts/dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
-| `scripts/lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone (Japanese compared by its reading in kana); flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
+| `scripts/lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone (Japanese compared by its reading in kana, Spanish without accents); flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
 | `scripts/assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft subtitles in both languages, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
 | `scripts/deliver.py <source> actor=<mp4> [american=<mp4>] [--source en --target ja]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
 

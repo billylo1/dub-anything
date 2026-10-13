@@ -11,7 +11,9 @@ Full-mix QA (qa.py) hides problems that show up clearly per line:
   - words a voice can't say, and silent takes
 Both sides are normalized before comparing (numbers spelled out, contractions
 expanded, "Dr." = "doctor", compounds joined), so digits and spelling don't
-count as failures. Takes are heard in the part's target language. Japanese is
+count as failures. Takes are heard in the part's target language. Spanish is
+compared word by word like English, without accents (Whisper writes "esta" or
+"está"), with its own number words, abbreviations and negations. Japanese is
 compared by its reading in kana (kana.py), so kanji or kana, katakana or
 hiragana and digits or kanji numerals don't count either; a take with English
 in it (the actor's original leaking from the per-line reference) is flagged.
@@ -34,6 +36,7 @@ import pathlib
 import re
 import shutil
 import sys
+import unicodedata
 
 import soundfile as sf
 
@@ -109,6 +112,36 @@ def words(text, reading="plain"):
     return out
 
 
+ES_ABBREV = {"sr": "senor", "sra": "senora", "srta": "senorita", "dr": "doctor", "dra": "doctora",
+             "ud": "usted", "uds": "ustedes", "okey": "ok", "okay": "ok", "vs": "versus"}
+ES_NEGATIONS = {"no", "nunca", "nada", "nadie", "ni", "ningun", "ninguno", "ninguna", "jamas", "tampoco"}
+# Words that say a number, accents aside; "uno", "una" and "un" are left out, as articles too.
+ES_NUMBER = re.compile(r"dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|"
+                       r"dieci[a-z]+|veinte|veinti[a-z]+|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|"
+                       r"noventa|cien|ciento|[a-z]+cientos|quinientos|mil|millon|millones")
+
+
+def words_es(text, reading="plain"):
+    """words() for Spanish, without accents (Whisper writes "esta" or "está", "si" or
+    "sí"): numbers spelled out in Spanish (num2words), read "plain" or as "digits"."""
+    from num2words import num2words
+    plain = lambda s: re.sub(r"[\u0300-\u036f]", "", unicodedata.normalize("NFD", s))  # noqa: E731
+    t = plain(text.lower())
+    t = re.sub(r"(\d+)\s*%", r"\1 por ciento", t)
+    t = re.sub(r"(?<=\d)[.,](?=\d{3}\b)", "", t)  # 1.000 or 1,000
+    t = re.sub(r"(\d)[.,](\d)", r"\1 punto \2", t)
+    t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t)
+    out = []
+    for w in re.findall(r"[a-z0-9]+", t):
+        if w.isdigit() and reading == "digits":
+            out += [plain(num2words(int(d), lang="es")) for d in w]
+        elif w.isdigit() and len(w) < 13:
+            out += plain(num2words(int(w), lang="es")).split()
+        else:
+            out.append(ES_ABBREV.get(w, w))
+    return out
+
+
 JA_PUNCT = re.compile(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—:：;；\"'’“”]")
 JA_NEGATION = re.compile(r"ない|なかっ|ません")
 JA_MATCH = 0.8  # kana are finer than words: one misheard mora in a short line costs more
@@ -147,8 +180,9 @@ def compare(want, got, lang="en"):
     Numbers count in any reading ("1979" is "nineteen seventy nine", "03" "zero three")."""
     if lang == "ja":
         return compare_ja(want, got)
-    readings = ("plain", "pairs", "digits")
-    want_w, got_w = max(((words(want, a), words(got, b)) for a in readings for b in readings),
+    split, readings = (words_es, ("plain", "digits")) if lang == "es" else (words, ("plain", "pairs", "digits"))
+    negations, is_number = (ES_NEGATIONS, ES_NUMBER.fullmatch) if lang == "es" else (NEGATIONS, NUMBER_WORDS.__contains__)
+    want_w, got_w = max(((split(want, a), split(got, b)) for a in readings for b in readings),
                         key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio())
     notes = []
     if want_w and want_w[0] in got_w[:4] and got_w.index(want_w[0]) > 0:
@@ -160,9 +194,9 @@ def compare(want, got, lang="en"):
     elif ratio < 0.85:
         notes.append(f"match {ratio:.2f}")
     # A close match can still flip the meaning ("can" heard as "can't", "seventy" as "forty").
-    if got_w and sum(w in NEGATIONS for w in want_w) != sum(w in NEGATIONS for w in got_w):
+    if got_w and sum(w in negations for w in want_w) != sum(w in negations for w in got_w):
         notes.append("negation differs")
-    nums = lambda ws: [w for w in ws if w in NUMBER_WORDS]  # noqa: E731
+    nums = lambda ws: [w for w in ws if is_number(w)]  # noqa: E731
     if got_w and nums(want_w) != nums(got_w):
         notes.append(f"number differs: '{' '.join(nums(want_w))}' -> '{' '.join(nums(got_w))}'")
     return notes, ratio
