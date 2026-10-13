@@ -2,8 +2,8 @@
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English** and **English → Japanese** on Windows with an
-NVIDIA GPU. Other language pairs and hardware need changes in a few known
+tested for **Japanese → English**, **Spanish → English** and **English →
+Japanese** on Windows with an NVIDIA GPU. Other language pairs and hardware need changes in a few known
 places, a job you can hand your coding agent: see
 [Other languages and hardware](#other-languages-and-hardware).
 
@@ -104,20 +104,24 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Other languages and hardware
 
-Two language pairs are built and tested, Japanese → English and English →
-Japanese, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
+Three language pairs are built and tested, Japanese → English, Spanish →
+English and English → Japanese, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
 VoiceStudio clones voices in hundreds of languages and runs on macOS and Linux
 too. Each part records its pair when it's prepared (`dub.py prep --source en
 --target ja`), and the scripts read it from there; `PAIRS` in `scripts/core.py`
 lists the pairs they know. Another pair needs work in these places:
 
 - **The source language.** Whisper transcribes any language, and each line
-  keeps its transcript in a field named for it (`ja`, `en`). The stock
+  keeps its transcript in a field named for it (`ja`, `en`, `es`). The stock
   hallucinations `draft.py` watches for are listed per language, and the
-  second opinions (`second.py`: ReazonSpeech for Japanese, Parakeet for
-  English, SenseVoice for both) and the caption OCR (`subs.py`, a Chinese and
-  Japanese model) know only some languages. Another source language needs
-  models that know it, or goes without these checks.
+  second opinions (`second.py`: ReazonSpeech and SenseVoice for Japanese,
+  Parakeet and SenseVoice for English, Parakeet v3 and Canary for Spanish)
+  and the caption OCR (`subs.py`, a Chinese and Japanese model that reads
+  Latin letters but not always their accents) know only some languages.
+  Another source language needs models that know it, or goes without these
+  checks. `draft.py` checks Whisper's language detection against its
+  confidence, since it mistakes a language close to the target's sound
+  (short Spanish over music) for the target.
 - **The target language.** Rendered lines are transcribed back and compared
   word by word in English and by their kana reading in Japanese (`lineqa.py`,
   `kana.py`); another language needs its own normalization. Take lengths come
@@ -125,8 +129,9 @@ lists the pairs they know. Another pair needs work in these places:
   takes. Track and subtitle names are listed per language (`TITLES` in
   `core.py`), and the American voice is English by design.
 - **The directing notes.** [docs/directing.md](docs/directing.md) was written
-  from Japanese → English dubs, with a section on what differs dubbing English
-  into Japanese. Most of it is about casting, timing and QA and carries over.
+  from Japanese → English dubs, with sections on what differs dubbing English
+  into Japanese and Spanish into English. Most of it is about casting, timing
+  and QA and carries over.
 - **Hardware.** The models run on CUDA and mostly fall back to the CPU without
   it, much slower. Video is encoded with NVENC when it's there, else x264. The
   Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)

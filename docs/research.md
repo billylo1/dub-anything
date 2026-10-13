@@ -258,6 +258,21 @@ originals per part.
     OmniVoice's length rule held for Japanese takes as it did for English:
     with each take's reference and speed, a median error of +0.02 s, 84%
     within 0.2 s and 97% within 0.4 s.
+17. **From Spanish, the per-line reference helps, as from Japanese.** The
+    first ten minutes of a telenovela (three parts, 116 lines, seven clones,
+    fast dialogue) were rendered twice from the same scripts, with per-line
+    references and without. With them the takes followed the actors' arousal
+    and effort more closely (rank correlation 0.46 and 0.44 against 0.36 and
+    0.26), matched their voices a little better (WeSpeaker 0.54 against
+    0.52) and sounded a little cleaner (SQUIM PESQ 2.20 against 2.15, SDR
+    11.9 against 11.1 dB). Whisper's confidence that the takes were English
+    hardly moved (0.78 against 0.80): the Spanish original didn't carry a
+    heavier accent into the English, as the English one did into Japanese
+    (finding 16). Both ended as near the actor (0.11 s on average), and
+    without per-line references two lines overflowed their windows at fill's
+    fastest speed. So Spanish → English keeps them on. OmniVoice's length
+    rule held here too: with each take's reference and speed, a median error
+    of +0.02 s, 77% within 0.2 s and 91% within 0.4 s.
 
 ## What the pipeline does now
 
@@ -275,7 +290,8 @@ duration factor, `fit.py` predicts their length from the English and the
 actor's speech, and `lineqa.py` converts a take again when only the
 conversion garbled it. A part dubbed from English into Japanese renders
 without per-line references (finding 16), and `lineqa.py` compares its takes by
-their reading in kana.
+their reading in kana. One dubbed from Spanish into English keeps them
+(finding 17).
 
 ## Open questions
 

@@ -5,13 +5,14 @@ Usage: scripts/deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assem
 
 Each <assembled.mp4> is assemble.py's output for one voice ("actor" or
 "american"), with its subtitles beside it (.en.srt and .ja.srt for a dub
-between Japanese and English), and its .en.ass (.ja.ass, dubbing into
-Japanese) and .signs.ass when the parts translate text in the picture. The
-result keeps every stream of the source as it is (video, audio, its own
-subtitles) and adds, in this order:
+between Japanese and English, .en.srt and .es.srt from Spanish), and its
+.en.ass (.ja.ass, dubbing into Japanese) and .signs.ass when the parts
+translate text in the picture. The result keeps every stream of the source
+as it is (video, audio, its own subtitles) and adds, in this order:
   - audio: one dub per voice, the default voice's first and marked
     default (some players ignore the flag and play the first track), then the
-    source's own audio;
+    source's own audio (its first track, which split.py cut the parts from,
+    tagged with the source language);
   - subtitles: the dub's per voice (the default voice's first and on by
     default), the corrected transcript of the source, then the source's own.
 Track names are in each track's language (core.TITLES).
@@ -40,8 +41,8 @@ LEGACY = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|English \(signs on
 
 def ours(name):
     """Whether a track is one we delivered (a dub, its subtitles, the signs, a transcript)."""
-    titles = {t for lang in TITLES.values() for kind in ("dub", "subs") for t in lang[kind].values()}
-    titles |= {lang[kind] for lang in TITLES.values() for kind in ("signs", "transcript")}
+    titles = {t for lang in TITLES.values() for kind in ("dub", "subs") for t in lang.get(kind, {}).values()}
+    titles |= {lang[kind] for lang in TITLES.values() for kind in ("signs", "transcript") if kind in lang}
     return name in titles or bool(LEGACY.match(name))
 
 
@@ -138,6 +139,11 @@ def deliver(source, dubs, default, pair=PAIR):
     for k, s in enumerate(auds, len(voices)):
         tags = s.get("tags") or {}
         lang = tags.get("language") if tags.get("language") not in (None, "und") else LANG3[src]
+        if k == len(voices) and lang != LANG3[src]:
+            # The track the parts were cut from speaks the source language, whatever its tag
+            # says (a web download can tag every track with the uploader's default).
+            print(f"  the original audio was tagged {lang!r}: tagging it {LANG3[src]!r}")
+            lang = LANG3[src]
         cmd += label(f"a:{k}", lang, name_of(s) or TITLES[src]["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
         cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else

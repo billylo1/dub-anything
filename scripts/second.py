@@ -10,12 +10,14 @@ Runs ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice over each line o
 work/<clip>/draft.json (or script.json with --script) on the separated vocals,
 and compares them with the line's `ja` as kana, so spelling choices don't count.
 A part dubbed from English (its segments.json's source_lang) gets NVIDIA's
-Parakeet TDT 0.6B v2 and SenseVoice in English instead, compared with the line's
-`en` word by word. A line is flagged when the two agree with each other more
-than either agrees with Whisper, and differ from it by 30% or more. Treat
-agreement as a review signal: re-listen with asr_words.py and decide from context.
-The models (~850 MB for Japanese, ~1 GB for English) download to VoiceStudio's
-model cache on first use.
+Parakeet TDT 0.6B v2 and SenseVoice in English instead, and a part dubbed from
+Spanish gets Parakeet TDT 0.6B v3 and Canary 180M Flash in Spanish. Those two
+are compared with the line's `en` or `es` word by word, accents aside. A line is flagged when
+the two agree with each other more than either agrees with Whisper, and differ
+from it by 30% or more. Treat agreement as a review signal: re-listen with
+asr_words.py and decide from context. The models (~850 MB for Japanese, ~1 GB
+for English, ~900 MB for Spanish) download to VoiceStudio's model cache on first
+use.
 """
 import argparse
 import json
@@ -23,6 +25,7 @@ import os
 import pathlib
 import re
 import sys
+import unicodedata
 
 import numpy as np
 import pykakasi
@@ -47,19 +50,27 @@ kks = pykakasi.kakasi()
 
 def recognisers(lang):
     """Two recognisers for the language, by name."""
+    part = lambda d, f: os.path.join(d, f)  # noqa: E731
+
+    def parakeet(repo):
+        pk = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*.int8.onnx", "tokens.txt"])
+        return sherpa_onnx.OfflineRecognizer.from_transducer(
+            encoder=part(pk, "encoder.int8.onnx"), decoder=part(pk, "decoder.int8.onnx"),
+            joiner=part(pk, "joiner.int8.onnx"), tokens=part(pk, "tokens.txt"), num_threads=8, sample_rate=SR,
+            feature_dim=128, model_type="nemo_transducer", decoding_method="greedy_search")
+    if lang == "es":
+        cn = snapshot_download("csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8", cache_dir=HF_CACHE,
+                               allow_patterns=["*.int8.onnx", "tokens.txt"])
+        return {"parakeet": parakeet("csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"),
+                "canary": sherpa_onnx.OfflineRecognizer.from_nemo_canary(
+                    encoder=part(cn, "encoder.int8.onnx"), decoder=part(cn, "decoder.int8.onnx"),
+                    tokens=part(cn, "tokens.txt"), src_lang="es", tgt_lang="es", num_threads=8)}
     sv = snapshot_download("csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", cache_dir=HF_CACHE,
                            allow_patterns=["model.int8.onnx", "tokens.txt"])
-    part = lambda d, f: os.path.join(d, f)  # noqa: E731
     sensevoice = sherpa_onnx.OfflineRecognizer.from_sense_voice(
         model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang, use_itn=True)
     if lang == "en":
-        pk = snapshot_download("csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8", cache_dir=HF_CACHE,
-                               allow_patterns=["*.int8.onnx", "tokens.txt"])
-        return {"parakeet": sherpa_onnx.OfflineRecognizer.from_transducer(
-            encoder=part(pk, "encoder.int8.onnx"), decoder=part(pk, "decoder.int8.onnx"),
-            joiner=part(pk, "joiner.int8.onnx"), tokens=part(pk, "tokens.txt"), num_threads=8, sample_rate=SR,
-            feature_dim=128, model_type="nemo_transducer", decoding_method="greedy_search"),
-            "sensevoice": sensevoice}
+        return {"parakeet": parakeet("csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"), "sensevoice": sensevoice}
     rz = snapshot_download("reazon-research/reazonspeech-k2-v2", cache_dir=HF_CACHE,
                            allow_patterns=["*-epoch-99-avg-1.onnx", "tokens.txt"])
     return {
@@ -76,8 +87,12 @@ def kana(text):
 
 
 def units(text, lang):
-    """What two transcripts are compared by: kana for Japanese, lowercase words else."""
-    return kana(text) if lang == "ja" else re.findall(r"[a-z0-9]+", text.lower().replace("'", "").replace("’", ""))
+    """What two transcripts are compared by: kana for Japanese, lowercase words else,
+    without their accents (Whisper writes "esta" where another model writes "está")."""
+    if lang == "ja":
+        return kana(text)
+    text = unicodedata.normalize("NFD", text.lower().replace("'", "").replace("’", ""))
+    return re.findall(r"[a-z0-9]+", "".join(c for c in text if not unicodedata.combining(c)))
 
 
 def dist(a, b, lang="ja"):
@@ -106,7 +121,7 @@ def main():
     recs = {}
     for clip in clips:
         lang = source_lang(clip)
-        if lang not in ("ja", "en"):
+        if lang not in ("ja", "en", "es"):
             print(f"{clip}: no second opinions for {lang}")
             continue
         if lang not in recs:
@@ -117,6 +132,26 @@ def main():
 def source_lang(clip):
     """The language a part speaks, as dub.py prep recorded it (core.langs)."""
     return json.loads((WORK / clip / "segments.json").read_text(encoding="utf-8")).get("source_lang") or "ja"
+
+
+def decode(rec, audio):
+    """A recogniser's transcript of a stretch, or "" when it rejects it (an odd
+    shape). Canary warns on stderr for most lines that its first token was
+    end-of-text (sherpa-onnx issue #3919, harmless), so stderr is muted meanwhile."""
+    sys.stderr.flush()
+    saved = os.dup(2)
+    try:
+        with open(os.devnull, "w") as null:
+            os.dup2(null.fileno(), 2)
+            s = rec.create_stream()
+            s.accept_waveform(SR, audio)
+            rec.decode_stream(s)
+            return s.result.text.strip()
+    except RuntimeError:  # the model rejects an odd-shaped stretch; skip that opinion
+        return ""
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
 
 
 def check(clip, spans, recs, lang, script, show_all):
@@ -134,15 +169,7 @@ def check(clip, spans, recs, lang, script, show_all):
         clip_audio = x[int(a * SR):int(b * SR)]
         if len(clip_audio) < 0.1 * SR or line.get("lang"):
             continue  # a draft line at (or past) the clip's very end, or not in the source language
-        got = {}
-        for name, rec in recs.items():
-            s = rec.create_stream()
-            s.accept_waveform(SR, clip_audio)
-            try:
-                rec.decode_stream(s)
-                got[name] = s.result.text.strip()
-            except RuntimeError:  # the model rejects an odd-shaped stretch; skip that opinion
-                got[name] = ""
+        got = {name: decode(rec, clip_audio) for name, rec in recs.items()}
         whisper = line.get(lang, "")
         one, two = list(recs)
         agree = dist(got[one], got[two], lang)

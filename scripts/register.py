@@ -33,7 +33,7 @@ import sys
 import numpy as np
 
 import draft
-from core import JOBS, WORK, langs, line_id, load_json, said, take_wav, update_voices, voice_clips
+from core import JOBS, WORK, bare, langs, line_id, load_json, said, take_wav, update_voices, voice_clips
 from gpulock import hold_gpu
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -225,7 +225,6 @@ def cmd_build(args):
     centroid = draft.cast_centroids(embed, {base})[base]
     hold_gpu()
     model = draft.WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
-    strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—'\"’:;]", "", t.lower())  # noqa: E731
     picked, total = [], 0.0
     for clip, i, line, f in sorted(clean_lines(show, base), key=lambda x: abs(arousal(x[3], nm) - target)):
         a = arousal(f, nm)
@@ -235,7 +234,7 @@ def cmd_build(args):
         sim = float(embed(x) @ centroid)
         src = langs(clip)[0]
         heard = "".join(q["said"] for q in draft.transcribe(model, x, language=src))
-        ref, got = strip(said(line, src)), strip(heard)
+        ref, got = bare(said(line, src)), bare(heard)
         err = cer(ref, got)
         ok = sim >= 0.5 and err <= 0.25
         print(f"  {'take' if ok else 'skip'} {clip} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} arousal {a:+.1f}"

@@ -13,6 +13,7 @@ import pathlib
 import re
 import sys
 import time
+import unicodedata
 
 import numpy as np
 import soundfile as sf
@@ -55,16 +56,16 @@ def srt_time(t):
 # The language pair: what the source speaks and what the dub speaks, as ISO 639-1 codes.
 # `dub.py prep` records it in each part's segments.json; parts prepped before it was
 # recorded are Japanese -> English. A line keeps its original words in the field named
-# for the source language ("ja": "...", or "en": "..." when dubbing from English) and
-# the dub's words in "text".
+# for the source language ("ja": "...", or "en" or "es" when dubbing from English or
+# Spanish) and the dub's words in "text".
 PAIR = ("ja", "en")
 LANG_NAMES = {"ja": "Japanese", "en": "English", "zh": "Chinese", "ko": "Korean", "es": "Spanish",
               "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
               "fi": "Finnish", "sv": "Swedish"}
 LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu",
          "it": "ita", "pt": "por", "ru": "rus", "fi": "fin", "sv": "swe"}
-NATIVE = {"en": "English", "ja": "日本語"}  # a language's name in itself, for track titles
-PAIRS = {("ja", "en"), ("en", "ja")}       # the pairs the scripts know
+NATIVE = {"en": "English", "ja": "日本語", "es": "Español"}  # a language's name in itself, for track titles
+PAIRS = {("ja", "en"), ("en", "ja"), ("es", "en")}  # the pairs the scripts know
 
 
 def langs(name):
@@ -89,7 +90,9 @@ def line_ref_default(tgt):
     script says otherwise. Not into Japanese: there the actor's English original
     carried their accent into the takes (Whisper's confidence that one actor's
     takes were Japanese fell from 0.96 to 0.53), and without it the takes followed
-    the actors' delivery as closely and matched their voices as well."""
+    the actors' delivery as closely and matched their voices as well. Into English
+    from Spanish, as from Japanese, they help: the takes followed the actors more
+    closely, and their English hardly changed (P(en) 0.78 against 0.80)."""
     return tgt != "ja"
 
 
@@ -113,6 +116,18 @@ ROOM_EFFECTS = {"echo", "pa"}  # their original carries the room, which a refere
 # rate). Kanji written as kana counts against it, so only gross mismatches fail.
 LINE_REF_CER = 0.5
 KANA = {c: c - 0x60 for c in range(0x30A1, 0x30F7)}  # katakana -> hiragana, for str.translate
+
+
+def bare(text):
+    """Words as a window's check compares them with what Whisper hears: whatever the
+    case, without spaces and punctuation, katakana as hiragana (Whisper writes a name
+    or a word in either, "タロウ", "ナニ") and Latin letters without their accents
+    (it writes "esta" or "está")."""
+    text = re.sub(r"[\s、。,.!?！？¿¡…・「」『』«»“”()（）ー〜~\-—'\"‘’:;]", "", text.lower())
+    text = re.sub(r"[\u0300-\u036f]", "", unicodedata.normalize("NFD", text))
+    return unicodedata.normalize("NFC", text).translate(KANA)
+
+
 # Speech running on past a window's end still leaves a clean reference when the
 # voice dips to near silence (this far below the line's speech level) within
 # DIP_REACH of the end: a turn change, or the actor's tail, too quick for the
@@ -184,9 +199,6 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
                 for v in {line["voice"] for line in lines}}
         # Exclude this part's own lines: a line mustn't vouch for itself.
         cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
-        # Katakana as hiragana: Whisper writes a name or a word in either ("タロウ", "ナニ").
-        # English is compared by its letters, whatever the case and punctuation.
-        strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—'\"’:;]", "", t.lower()).translate(KANA)  # noqa: E731
         for line, key in zip(lines, keys):
             if key in cache:
                 continue
@@ -199,7 +211,7 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
             x = audio[int(a * sr):int((cut or b) * sr)]
             if why is None:
                 heard = "".join(p["said"] for p in draft.transcribe(model, x, language=src))
-                err = cer(strip(said(line, src)), strip(heard))
+                err = cer(bare(said(line, src)), bare(heard))
                 if err > LINE_REF_CER:
                     why = f"heard as '{heard}' ({err:.0%} off)"
                 elif b - a >= 0.6:
@@ -560,6 +572,8 @@ TITLES = {
            "signs": "English (signs only)", "transcript": "English (transcript)", "original": "English (original)"},
     "ja": {"dub": {"actor": "日本語吹替（俳優の声）"}, "subs": {"actor": "日本語（俳優の声の吹替）"},
            "signs": "日本語（画面の文字のみ）", "transcript": "日本語 (transcript)", "original": "日本語 (original)"},
+    # Only a source so far: no dub into Spanish.
+    "es": {"transcript": "Español (transcript)", "original": "Español (original)"},
 }
 
 

@@ -60,7 +60,8 @@ differs.
 - `start`/`end`: the window the English line may occupy.
 - `voice`: a key in `voices.json`.
 - `ja`: the corrected original. The field is named for the source language:
-  `en` when dubbing from English (see "English → Japanese").
+  `en` when dubbing from English (see "English → Japanese"), `es` from Spanish
+  (see "Spanish → English").
 - `text`: the English that is spoken (the dub's language: Japanese when
   dubbing into it).
 - `instruct` (optional): OmniVoice tags, comma-separated, from a fixed
@@ -136,7 +137,8 @@ render nothing and don't make a part render again; they change the delivery
 For a new show, settle one thing with the user before the first part: the
 voice, or both (see "Voice" under Render). Everything else has a default. The
 language pair is Japanese → English unless the job says otherwise (`--source
-en --target ja`, see "English → Japanese").
+en --target ja`, see "English → Japanese"; `--source es`, see "Spanish →
+English").
 `scripts/dubrama.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
 step does and how to direct it. The scripts are in `scripts/` and run from the
@@ -206,7 +208,7 @@ confidence alone does not prove that a transcription is right.
 
 `scripts/second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
 flags lines where both disagree with Whisper (for English speech, Parakeet and
-SenseVoice). Re-listen with `asr_words.py`
+SenseVoice; for Spanish, Parakeet v3 and Canary). Re-listen with `asr_words.py`
 and decide from context. It needs its own environment (see AGENTS.md).
 
 Some recordings have the broadcaster's closed captions burned into the
@@ -787,6 +789,93 @@ is what differs.
   put it `above` or `below` the original at `size` 1.3–1.5. Lower thirds
   (a name and a role) translate as two lines, the name in katakana.
 
+## Spanish → English
+
+dubrama also dubs Spanish video into English. Everything above applies; this
+is what differs.
+
+- **The job.** `scripts/dubrama.py new <video> --source es` (the target is
+  English; by hand, `scripts/dub.py prep <video> --source es`). Each part's
+  `segments.json` records the pair: Whisper listens in Spanish, a line keeps
+  its original in `es` (captions too), and the delivered file carries the
+  Spanish transcript (`.es.srt`). Both voices apply: the actor's voice speaks
+  English with the actor's Spanish accent, as it keeps a Japanese actor's
+  accent from Japanese. The original audio is tagged Spanish in the
+  delivered file whatever the source's tag says: web downloads often tag
+  every track English.
+- **English that isn't.** Whisper's language detection calls short Spanish
+  phrases English, above all over music, and forced into English it
+  translates them: a one-word greeting came out "Thank you.", a two-word
+  question another English question. In the first ten minutes of a
+  telenovela it tagged nine phrases English and one Korean, and none was
+  English speech. So `draft.py` keeps a
+  target-language tag only when Whisper also transcribes the phrase more
+  surely in English than in Spanish. The rest keep their Spanish and are
+  tagged `[English?]` with the English reading: six of the nine. Check what
+  stays `[English]` as well (`asr_words.py ... --lang es` and `--lang en`, and
+  a frame): of the other three, two were crowd noise and one was a Spanish
+  exclamation, written as an unrelated English sentence.
+- **"¡Gracias!" from nowhere.** On a laugh, crowd noise or a song, Whisper
+  writes "¡Gracias!" (and "¡Suscríbete!") where it hears no words, as it
+  writes "ご視聴ありがとうございました" in Japanese. Real thanks are everywhere in
+  dialogue, so the draft only marks a recovered phrase that says nothing
+  else `[likely Whisper hallucination]`: three of the four it marked in a
+  telenovela's party scenes were noise.
+- **Songs.** Without burned-in captions there are no ♪ markers, and the draft
+  transcribes sung lyrics as dialogue: a telenovela's theme song over its
+  opening titles, a pop song at a party. Keep them original. `cast.py` puts a
+  singer's lines in a cluster of their own, which finds the theme song at
+  once.
+- **Second opinions.** `second.py` runs NVIDIA's Parakeet TDT 0.6B v3 and
+  Canary 180M Flash in Spanish (about 900 MB) and compares them with the
+  draft word by word, accents aside. On two parts of fast dialogue it flagged
+  6 of 77 and 6 of 100 lines, mostly words a draft window cut off or took from
+  the next speaker, and a few mishearings (a possessive both models heard
+  as a demonstrative). Parakeet returns nothing on some short stretches, and
+  Canary can loop on crowd noise ("sí" eighty times); no line is flagged
+  where either fails. Word-level comparison also flags a word the draft
+  writes as one and the models as two (a long adjective).
+- **Fast dialogue.** Telenovela dialogue runs from one speaker to the next
+  with no pause the VAD can find, so many windows share a boundary and many
+  reference clips can't be bounded by pauses. Cut references at a dip of
+  30 dB or more between the voices, and set a shared boundary by transcribing
+  each side of it: on one line `edges.py` moved a boundary onto a dip inside
+  the next speaker's first words, and the window check then heard only the
+  rest of her line. Look at the loudness where each reference clip ends, too:
+  one ended with the first syllable of the speaker's next phrase, which
+  Whisper left out of its transcript, so `voices.py check` passed it. At a
+  party the crowd stays in the separated vocals and keeps the VAD on past
+  the actors: 6 of 44 lines in one party scene fell back to the character's
+  reference for speech running on past their windows, and every "voice
+  sounds on" note from `edges.py` and "WET" line from `tails.py` there was
+  music or crowd at -25 to -30 dB, not the actors.
+- **Translate concisely.** OmniVoice's length rule counts Latin letters in
+  both languages, so a take of English lasts about as long as the actor took
+  for that many letters of Spanish. Spanish needs more letters than English
+  for the same meaning, so natural English fits, and padded English doesn't:
+  in one telenovela scene 7 of 15 first drafts, written out in full, came out
+  `OVER?` in `fit.py` (up to 1.6 s on a 3-s window), and all fit once
+  trimmed to natural, tight English. Write it the way an English-language
+  show would say it, and keep the forms of address the characters use
+  ("Doña" or "Don" before a name). Spanish names stay as they are; the
+  clones say them as the actors do.
+- **Per-line references stay on.** Into Japanese they carried the English
+  accent into the takes (research.md, finding 16). From Spanish they didn't:
+  over 116 lines of a telenovela, Whisper's confidence that the takes were
+  English was 0.78 with them and 0.80 without, and with them the takes
+  followed the actors' delivery more closely (arousal rank correlation 0.46
+  against 0.36), matched their voices a little better and fit their windows
+  more easily (research.md, finding 17). `fit.py`'s estimates held as for
+  Japanese → English: median error +0.02 s, 91% within 0.4 s.
+- **QA** is the same as for Japanese → English. Read the per-line
+  transcripts (`lineqa.py <part> --all`) for a meaning QA lets pass: a
+  compliment opening "My, don't you…" passed while Whisper heard "Why don't
+  you…?", a jab a listener may hear too; opening it with "Wow," instead
+  cleared it.
+- **Captions and signs.** `subs.py` and `signs.py` read with a Chinese and
+  English model: Latin letters come out right, accents not always (a title
+  card's "Adaptación" read as "Adaptacion"). Correct them in `es`.
+
 ## Gotchas
 
 - **Takes can only be replaced in a job that has rendered.** On a job's first
@@ -931,7 +1020,7 @@ The loop, in the order it runs:
 |---|---|
 | `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `scripts/dub.py prep <video> [--source en --target ja]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English) |
+| `scripts/dub.py prep <video> [--source en\|es --target ja\|en]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English, `es.srt` from Spanish) |
 | `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `scripts/subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `scripts/signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
@@ -940,7 +1029,7 @@ The loop, in the order it runs:
 | `scripts/voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
 | `scripts/frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `scripts/asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `scripts/second.py <clip> ... [--script]` | Two more recognisers over each line (ReazonSpeech and SenseVoice for Japanese, Parakeet and SenseVoice for English): flags lines where both disagree with Whisper (own environment) |
+| `scripts/second.py <clip> ... [--script]` | Two more recognisers over each line (ReazonSpeech and SenseVoice for Japanese, Parakeet and SenseVoice for English, Parakeet v3 and Canary for Spanish): flags lines where both disagree with Whisper (own environment) |
 | `scripts/edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `scripts/tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `scripts/fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
