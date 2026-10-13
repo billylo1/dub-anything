@@ -10,7 +10,9 @@ transcript into a directed `work/<clip>/script.json` (who says what, in natural
 English, or natural Japanese or Spanish when dubbing from English, timed to the
 actor) and render it with cloned voices. Read
 [docs/directing.md](docs/directing.md) before directing anything. It holds the
-workflow and the gotchas that cost the most time to find.
+workflow and the gotchas that cost the most time to find. Read the notes on the
+job's two languages in [docs/languages/](docs/languages/README.md) too (`ja.md`,
+`en.md`, `es.md`): what differs with each as the source and as the target.
 
 ## Your role
 
@@ -70,13 +72,13 @@ The user asks for a video to be dubbed. `scripts/dubrama.py` does the machine
 work; you direct.
 
 1. **Intake.** Confirm the source file and the language pair: Japanese →
-   English, Spanish → English (`--source es`; see docs/directing.md, "Spanish
-   → English"), English → Japanese (`--source en --target ja`; see
-   "English → Japanese") or English → Spanish (`--source en --target es`; see
-   "English → Spanish"). Into English, ask one question: the actor's voice
-   (English with the actor's own accent), American, or both. Recommend
-   by genre: the actor's voice for live action, American for anime (see
-   docs/directing.md, "Voice"). With both, the actor's voice plays by default.
+   English, Spanish → English (`--source es`), English → Japanese (`--source en
+   --target ja`) or English → Spanish (`--source en --target es`), the pairs
+   the scripts know (`PAIRS` in `scripts/languages/`). Into English, ask one
+   question: the actor's voice (English with the actor's own accent),
+   American, or both. Recommend by genre: the actor's voice for live action,
+   American for anime (see docs/directing.md, "Voice"). With both, the actor's
+   voice plays by default.
    Into Japanese or Spanish there is only the actor's voice, so there is
    nothing to ask.
    Look at the video's length and skim it for blocks that stay in the original
@@ -138,9 +140,10 @@ feature film, and directing it alone takes longer. Direct the first two or
 three parts yourself: cast every voice you can and write the show's notes in
 `work/NOTES.md` (characters, who calls whom what, word choices, running jokes,
 names a clone can't say). Then hand batches of parts to subagents with those
-notes and docs/directing.md, each writing its parts' `script.json` without
-marking them ready. Give them the keys to use for characters you expect in
-several batches; they add any other voice with `scripts/voices.py add` only (it
+notes, docs/directing.md and the two languages' notes, each writing its parts'
+`script.json` without marking them ready. Give them the keys to use for
+characters you expect in several batches; they add any other voice with
+`scripts/voices.py add` only (it
 locks `voices.json` and refuses a key that exists). Two directors whose batches
 share a scene can still build the same new character under two keys, minutes
 apart: compare new voices with `scripts/voices.py sim` and keep one. Read their
@@ -184,7 +187,8 @@ sound wrong: `scripts/register.py report`, `build`, `route --apply`, `check`.
   speaker embeddings, frames, `fit.py`, `qa.py`, and per-line transcription of
   the rendered clips. Then tell the user what to listen for.
 - When you learn something general about dubbing, put it in
-  `docs/directing.md`. Show-specific notes go in `work/NOTES.md`.
+  `docs/directing.md`, or in `docs/languages/<code>.md` when it's about one
+  language. Show-specific notes go in `work/NOTES.md`.
 - Keep production titles, real cast names, dialogue excerpts, scene descriptions
   and source-specific measurements in ignored `work/` files. Documentation,
   diagrams, examples and commit messages must use generic descriptions and

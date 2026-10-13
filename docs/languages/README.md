@@ -1,5 +1,9 @@
 # Languages
 
+The directing notes for each language, on what differs with it as the source
+and as the target, are beside this file: [ja.md](ja.md), [en.md](en.md),
+[es.md](es.md). Read the job's two beside [directing.md](../directing.md).
+
 The scripts dub the pairs listed in `PAIRS` (`scripts/languages/__init__.py`):
 Japanese → English, Spanish → English, English → Japanese and English → Spanish.
 What they know about a language is in one module, `scripts/languages/<code>.py`,
@@ -84,6 +88,6 @@ isn't there.
    (`subs.py`, `signs.py`) reads Chinese, Japanese and Latin letters, not
    always with their accents. The American voice is English only. Note
    anything else that falls short.
-4. **The directing notes.** Add a section to
-   [directing.md](../directing.md) on what differs when dubbing from or into
-   the language, like the sections there for the pairs so far.
+4. **The directing notes.** Start `<code>.md` here, with what differs when
+   the language is the source and when it's the target, as the notes for the
+   languages so far do, and link it from the list at the top.

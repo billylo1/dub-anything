@@ -105,35 +105,37 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 ## Other languages and hardware
 
 Four language pairs are built and tested, Japanese → English, Spanish →
-English, English → Japanese and English → Spanish, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
-VoiceStudio clones voices in hundreds of languages and runs on macOS and Linux
-too. Each part records its pair when it's prepared (`dub.py prep --source en
---target ja`), and the scripts read it from there; `PAIRS` in `scripts/languages/`
-lists the pairs they know. Another pair needs work in these places:
+English, English → Japanese and English → Spanish, on Windows with an NVIDIA
+GPU. The voice engine isn't the limit: VoiceStudio clones voices in hundreds of
+languages and runs on macOS and Linux too. Each part records its pair when it's
+prepared (`dub.py prep --source en --target ja`), and the scripts read it from
+there. What they know about a language is in one module,
+`scripts/languages/<code>.py`, and the pairs they know are `PAIRS` beside it;
+[docs/languages/](docs/languages/README.md) says how to add one. A new language
+needs:
 
-- **The source language.** Whisper transcribes any language, and each line
-  keeps its transcript in a field named for it (`ja`, `en`, `es`). The stock
-  hallucinations `draft.py` watches for are listed per language, and the
-  second opinions (`second.py`: ReazonSpeech and SenseVoice for Japanese,
-  Parakeet and SenseVoice for English, Parakeet v3 and Canary for Spanish)
-  and the caption OCR (`subs.py`, a Chinese and Japanese model that reads
-  Latin letters but not always their accents) know only some languages.
-  Another source language needs models that know it, or goes without these
-  checks. `draft.py` checks Whisper's language detection against its
-  confidence, since it mistakes a language close to the target's sound
-  (short Spanish over music) for the target.
-- **The target language.** Rendered lines are transcribed back and compared
-  word by word in English and Spanish (numbers spelled out in each, accents
-  aside in Spanish) and by their kana reading in Japanese (`lineqa.py`,
-  `languages/kana.py`); another language needs its own normalization, number words and
-  negations. Take lengths come from OmniVoice's own rule, with corrections
-  measured on Japanese → English takes; they held for the other three pairs.
-  Track and subtitle names are listed per language (`TITLES` in its module),
-  and the American voice is English by design.
+- **Hearing it.** Whisper transcribes any language, and each line keeps its
+  transcript in a field named for it (`ja`, `en`, `es`). The module lists the
+  stock phrases Whisper hallucinates in the language and names two recognisers
+  for the second opinions (`second.py`); without them a source goes without
+  that check. `draft.py` weighs Whisper's language detection against its
+  confidence, since it mistakes a language close to the target's sound (short
+  Spanish over music) for the target. The caption OCR (`subs.py`) reads
+  Chinese, Japanese and Latin letters, not always with their accents.
+- **Checking the dub.** QA transcribes each rendered line back and compares it
+  as the module says: word by word in English and Spanish (numbers spelled
+  out in each, accents aside in Spanish), by kana reading in Japanese. Another
+  language needs its own normalization, number words and negations. Take
+  lengths come from OmniVoice's own rule, with corrections measured on
+  Japanese → English takes; they held for the other three pairs. The American
+  voice is English by design.
+- **Measuring the pair.** Whether a line's own original helps as its
+  reference depends on the pair (it carried the English accent into Japanese
+  takes), so a new pair is rendered both ways before it goes into `PAIRS`.
 - **The directing notes.** [docs/directing.md](docs/directing.md) was written
-  from Japanese → English dubs, with sections on what differs dubbing English
-  into Japanese or Spanish and Spanish into English. Most of it is about
-  casting, timing and QA and carries over.
+  from Japanese → English dubs, and most of it (casting, timing, QA) carries
+  over. What differs with each language as the source and as the target is in
+  its own notes beside the languages README.
 - **Hardware.** The models run on CUDA and mostly fall back to the CPU without
   it, much slower. Video is encoded with NVENC when it's there, else x264. The
   Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)

@@ -2,9 +2,9 @@
 
 ## Where it stands
 
-dubrama dubs Japanese and Spanish video into English end to end (see
-directing.md, "Spanish → English"), and English video into Japanese or Spanish
-(the actor's voice only; see "English → Japanese" and "English → Spanish"):
+dubrama dubs Japanese and Spanish video into English end to end, and English
+video into Japanese or Spanish (the actor's voice only; see each language's
+notes in [languages/](languages/README.md)):
 
 - **Transcript and cast.** Parts are separated with Mel-Band Roformer and
   transcribed by Whisper, with two other recognisers as a second opinion and

@@ -60,8 +60,7 @@ differs.
 - `start`/`end`: the window the English line may occupy.
 - `voice`: a key in `voices.json`.
 - `ja`: the corrected original. The field is named for the source language:
-  `en` when dubbing from English (see "English → Japanese" and "English →
-  Spanish"), `es` from Spanish (see "Spanish → English").
+  `en` when dubbing from English, `es` from Spanish (see "Other languages").
 - `text`: the English that is spoken (the dub's language: Japanese or Spanish
   when dubbing into it).
 - `instruct` (optional): OmniVoice tags, comma-separated, from a fixed
@@ -137,8 +136,8 @@ render nothing and don't make a part render again; they change the delivery
 For a new show, settle one thing with the user before the first part: the
 voice, or both (see "Voice" under Render). Everything else has a default. The
 language pair is Japanese → English unless the job says otherwise (`--source
-en --target ja`, see "English → Japanese"; `--source en --target es`, see
-"English → Spanish"; `--source es`, see "Spanish → English").
+en --target ja`, `--source en --target es` or `--source es`; see "Other
+languages").
 `scripts/dubrama.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
 step does and how to direct it. The scripts are in `scripts/` and run from the
@@ -518,7 +517,7 @@ delivery of its line and ends where the actor stops:
   reference's delivery and accent, so the take follows the actor on that line
   and keeps their accent, while the clips hold the voice steady. This replaces
   sorting lines into calm and raised: the delivery comes from the line itself.
-  Dubbing into Japanese it's off by default (see "English → Japanese").
+  Dubbing into Japanese it's off by default (see [languages/ja.md](languages/ja.md)).
   A line keeps the character's reference when it has `"line_ref": false`, a
   room effect (`echo`, `pa`; the original's room would be cloned), a window too
   long to fit OmniVoice's 20 s limit alongside the clips, or a window that isn't
@@ -706,238 +705,13 @@ The English tracks are then the styled ones, and the signs-only track follows
 them, marked forced, for watching the dub with subtitles off. A player has to
 render ASS subtitles to place them (mpv and VLC do, with libass).
 
-## English → Japanese
+## Other languages
 
-dubrama also dubs English video into Japanese. Everything above applies; this
-is what differs.
-
-- **The job.** `scripts/dubrama.py new <video> --source en --target ja` (by
-  hand, `scripts/dub.py prep <video> --source en --target ja`). Each part's
-  `segments.json` records the pair and every script reads it from there:
-  Whisper listens in English (the draft, `asr_words.py`, `voices.py check`, the
-  window check), takes are made and heard in Japanese (`seg_ja_<id>.wav`), and
-  the subtitles, track names and styled signs follow. There is one voice, the
-  actor's: each actor speaks Japanese with their own accent, as the Japanese
-  actors speak English with theirs. The American voice is English only, and
-  no engine for native Japanese is wired in.
-- **No per-line references by default.** The actor's English original in a
-  line's reference carried their accent into the Japanese: on one sketch, a
-  strongly accented actor's takes went from 0.96 to 0.53 on Whisper's
-  confidence that they were Japanese, and followed her delivery less closely,
-  not more (research.md, finding 16). So a part dubbed into Japanese renders
-  each take from the character's clips alone (`"render": {"line_ref": false}`,
-  written on its first render) and the window check doesn't run. That makes the
-  character's reference the register of every line: build it from lines in
-  their usual register, and use `register.py` if one sounds wrong. A part can
-  still opt in (`"line_ref": true`, for a calmer cast whose accent is light);
-  compare by ear.
-- **The script.** A line keeps its original in `en`:
-  `{"start": 4.3, "end": 5.9, "voice": "speaker_1", "en": "Hello.", "text": "こんにちは。"}`,
-  and so do captions. The draft tags speech already in Japanese `[Japanese]`:
-  keep it and caption it. `second.py` runs Parakeet and SenseVoice in English
-  and compares them with the draft word by word.
-- **Casting** is as above. English drafts come out with clean punctuation and
-  phrase-length lines, but Whisper's word times run early here too, and the
-  VAD merges quick exchanges into one span: snap turn changes by loudness.
-- **Translate concisely.** Japanese needs more morae than English needs
-  syllables for the same meaning, so a faithful first draft runs long. In one
-  sketch 14 of 32 first drafts came out 10–35% over the actor's time in
-  `fit.py`, and only a two-word reply short.
-  Cut, don't pad: drop the subjects and pronouns the picture makes clear, and
-  prefer the short word (声 over メッセージ). `scripts/fit.py` estimates
-  Japanese takes as well as English ones: on that sketch's 32 lines, a
-  median error of +0.02 s, 84% within 0.2 s and 97% within 0.4 s.
-- **Give each character a Japanese voice.** Japanese marks who is talking
-  through first-person pronouns (俺, 僕, 私, あたし), sentence endings (だ, です,
-  じゃん, よ, ね) and politeness, which English mostly leaves to the delivery.
-  Pick them per character once and keep them in `work/NOTES.md`. Narration
-  reads like a Japanese documentary's: plain form, questions in 〜なのか.
-  Names go in katakana, spelled as on screen when a caption shows them.
-- **Spell numbers in kana** (はちじゅう年, さんじゅう年代). The clones misread
-  numbers written in kanji: in one sketch 八十年 was heard as 「1年」 and
-  七十年代 as 「40年代」, and both came out right once written in kana. Kana
-  also gives a number its real length: a kanji numeral weighs 3 in OmniVoice's
-  length rule though it is said in two or three morae. Digits are worse still:
-  VoiceStudio leaves them as digits in Japanese. QA checks a number written in
-  digits or kanji against the one it hears; one in kana, by its reading only.
-- **Mind the accent.** The clone speaks Japanese with the actor's English
-  accent, and it shows where Japanese leans on length: a small っ, a long vowel.
-  一家 (ikka) was heard as イカ ("squid") on two lines, and 家族 says the same
-  without the っ. Others were near-misses a listener may or may not catch
-  (暖炉 heard as 難路, 邸 as ディ). QA's reading match lets one mora pass, so
-  read the per-line transcripts (`scripts/lineqa.py <part> --all`) for lines
-  whose sense hangs on one word, and reword or list them for the user.
-- **Short lines.** One-word replies stretch towards 2 s as in English. A
-  0.8-s window held 「できない。」 (four morae) at natural pace; anything longer
-  needs room or stays original with a caption. Short lines are also where a
-  clone garbles most: two of one character's short lines failed QA twice
-  (幽霊 heard as ゆで, 真っ暗 as マアン) and passed reworded with plainer words
-  (おばけ, 暗い).
-- **QA** hears takes in Japanese and compares readings in hiragana (`languages/kana.py`,
-  pykakasi in its own uv environment), so kanji or kana, katakana or hiragana
-  and digits or kanji numerals don't count as differences. A take passes at
-  80% kana-level agreement (English: 85% of words). "negation differs" counts
-  ない, なかっ and ません. "English in the take" means Whisper heard Latin
-  letters in a take whose text has none: usually the per-line reference
-  leaking the actor's English, so try `"line_ref": false` on a line that does
-  it on every take.
-- **Subtitles.** Players wrap subtitles only at spaces, which Japanese doesn't
-  have, so a cue over 22 characters is broken in two at the punctuation
-  nearest its middle. Styled subtitles and signs are set in Yu Gothic (Arial
-  has no Japanese).
-- **Signs.** Japanese laid over a large English name or title can't be read:
-  put it `above` or `below` the original at `size` 1.3–1.5. Lower thirds
-  (a name and a role) translate as two lines, the name in katakana.
-
-## Spanish → English
-
-dubrama also dubs Spanish video into English. Everything above applies; this
-is what differs.
-
-- **The job.** `scripts/dubrama.py new <video> --source es` (the target is
-  English; by hand, `scripts/dub.py prep <video> --source es`). Each part's
-  `segments.json` records the pair: Whisper listens in Spanish, a line keeps
-  its original in `es` (captions too), and the delivered file carries the
-  Spanish transcript (`.es.srt`). Both voices apply: the actor's voice speaks
-  English with the actor's Spanish accent, as it keeps a Japanese actor's
-  accent from Japanese. The original audio is tagged Spanish in the
-  delivered file whatever the source's tag says: web downloads often tag
-  every track English.
-- **English that isn't.** Whisper's language detection calls short Spanish
-  phrases English, above all over music, and forced into English it
-  translates them: a one-word greeting came out "Thank you.", a two-word
-  question another English question. In the first ten minutes of a
-  telenovela it tagged nine phrases English and one Korean, and none was
-  English speech. So `draft.py` keeps a
-  target-language tag only when Whisper also transcribes the phrase more
-  surely in English than in Spanish. The rest keep their Spanish and are
-  tagged `[English?]` with the English reading: six of the nine. Check what
-  stays `[English]` as well (`asr_words.py ... --lang es` and `--lang en`, and
-  a frame): of the other three, two were crowd noise and one was a Spanish
-  exclamation, written as an unrelated English sentence.
-- **"¡Gracias!" from nowhere.** On a laugh, crowd noise or a song, Whisper
-  writes "¡Gracias!" (and "¡Suscríbete!") where it hears no words, as it
-  writes "ご視聴ありがとうございました" in Japanese. Real thanks are everywhere in
-  dialogue, so the draft only marks a recovered phrase that says nothing
-  else `[likely Whisper hallucination]`: three of the four it marked in a
-  telenovela's party scenes were noise.
-- **Songs.** Without burned-in captions there are no ♪ markers, and the draft
-  transcribes sung lyrics as dialogue: a telenovela's theme song over its
-  opening titles, a pop song at a party. Keep them original. `cast.py` puts a
-  singer's lines in a cluster of their own, which finds the theme song at
-  once.
-- **Second opinions.** `second.py` runs NVIDIA's Parakeet TDT 0.6B v3 and
-  Canary 180M Flash in Spanish (about 900 MB) and compares them with the
-  draft word by word, accents aside. On two parts of fast dialogue it flagged
-  6 of 77 and 6 of 100 lines, mostly words a draft window cut off or took from
-  the next speaker, and a few mishearings (a possessive both models heard
-  as a demonstrative). Parakeet returns nothing on some short stretches, and
-  Canary can loop on crowd noise ("sí" eighty times); no line is flagged
-  where either fails. Word-level comparison also flags a word the draft
-  writes as one and the models as two (a long adjective).
-- **Fast dialogue.** Telenovela dialogue runs from one speaker to the next
-  with no pause the VAD can find, so many windows share a boundary and many
-  reference clips can't be bounded by pauses. Cut references at a dip of
-  30 dB or more between the voices, and set a shared boundary by transcribing
-  each side of it: on one line `edges.py` moved a boundary onto a dip inside
-  the next speaker's first words, and the window check then heard only the
-  rest of her line. Look at the loudness where each reference clip ends, too:
-  one ended with the first syllable of the speaker's next phrase, which
-  Whisper left out of its transcript, so `voices.py check` passed it. At a
-  party the crowd stays in the separated vocals and keeps the VAD on past
-  the actors: 6 of 44 lines in one party scene fell back to the character's
-  reference for speech running on past their windows, and every "voice
-  sounds on" note from `edges.py` and "WET" line from `tails.py` there was
-  music or crowd at -25 to -30 dB, not the actors.
-- **Translate concisely.** OmniVoice's length rule counts Latin letters in
-  both languages, so a take of English lasts about as long as the actor took
-  for that many letters of Spanish. Spanish needs more letters than English
-  for the same meaning, so natural English fits, and padded English doesn't:
-  in one telenovela scene 7 of 15 first drafts, written out in full, came out
-  `OVER?` in `fit.py` (up to 1.6 s on a 3-s window), and all fit once
-  trimmed to natural, tight English. Write it the way an English-language
-  show would say it, and keep the forms of address the characters use
-  ("Doña" or "Don" before a name). Spanish names stay as they are; the
-  clones say them as the actors do.
-- **Per-line references stay on.** Into Japanese they carried the English
-  accent into the takes (research.md, finding 16). From Spanish they didn't:
-  over 116 lines of a telenovela, Whisper's confidence that the takes were
-  English was 0.78 with them and 0.80 without, and with them the takes
-  followed the actors' delivery more closely (arousal rank correlation 0.46
-  against 0.36), matched their voices a little better and fit their windows
-  more easily (research.md, finding 17). `fit.py`'s estimates held as for
-  Japanese → English: median error +0.02 s, 91% within 0.4 s.
-- **QA** is the same as for Japanese → English. Read the per-line
-  transcripts (`lineqa.py <part> --all`) for a meaning QA lets pass: a
-  compliment opening "My, don't you…" passed while Whisper heard "Why don't
-  you…?", a jab a listener may hear too; opening it with "Wow," instead
-  cleared it.
-- **Captions and signs.** `subs.py` and `signs.py` read with a Chinese and
-  English model: Latin letters come out right, accents not always (a title
-  card's "Adaptación" read as "Adaptacion"). Correct them in `es`.
-
-## English → Spanish
-
-dubrama also dubs English video into Spanish. Everything above applies, and
-much of "English → Japanese" too; this is what differs.
-
-- **The job.** `scripts/dubrama.py new <video> --source en --target es` (by
-  hand, `scripts/dub.py prep <video> --source en --target es`). A line keeps
-  its original in `en`, takes are made and heard in Spanish
-  (`seg_es_<id>.wav`), and the delivered file carries the Spanish dub and
-  subtitles and the English transcript. There is one voice, the actor's,
-  speaking Spanish with the actor's English accent; the American voice is
-  English only.
-- **Which Spanish.** Write neutral Latin American Spanish, as US studios dub
-  for Latin America, unless the user asks for Spain's: `ustedes`, never
-  `vosotros`. Use the established Spanish names of characters and of the
-  films and franchises a script mentions (their Latin American titles), and
-  record them in `work/NOTES.md`. People's names stay as they are, but a
-  nickname with a known Spanish form takes it. Latin American Spanish says
-  `z` and `c` like `s`, so Whisper writing "casa" for "caza" is not a fault.
-- **Per-line references stay on.** Into Japanese the actor's English original
-  carried the accent into the takes (research.md, finding 16). Into Spanish it
-  didn't: on a sketch rendered both ways (31 lines, four clones), Whisper's
-  confidence that the takes were Spanish was 0.60 with them and 0.61 without,
-  and with them the takes followed the actors' pitch far more closely, sounded
-  cleaner and passed the first QA check without a flag, against two
-  (finding 18). That confidence is low for every take, as for any clone that
-  keeps an English accent, so read the per-line transcripts
-  (`lineqa.py <part> --all`) rather than trusting the pass count.
-- **Translate concisely.** OmniVoice's length rule counts Latin letters in both
-  languages, and Spanish needs more of them than English for the same meaning,
-  so a faithful first draft runs long, as into Japanese. Cut what the picture
-  makes clear and prefer the short word, but write fuller where the actor
-  pauses mid-line: a narrator's or a hero's slow, dramatic lines came out
-  `SHORT?` in tight Spanish, and a line with two long pauses needed a third
-  more words. A slow-talking clone is the tightest: one character who spoke in
-  a low growl needed a four-word line cut to three to fit a 2-s window.
-  `fit.py`'s estimates held: with each take's reference and speed, a median
-  error of +0.06 s, 71% within 0.2 s and every take within 0.4 s. Even so,
-  eight of 31 takes ran at fill's fastest speed.
-- **Short lines.** One- and two-word replies stretch towards 2 s, and `fit.py`
-  runs short on them here too: a two-word question estimated at 1.07 s came out
-  at 1.46 s and blocked the first render, since VoiceStudio stops at an
-  overflow before fill can re-time anything. Use the shortest natural form (a
-  colloquial "¿Que qué?" for "You what?") or keep the reply original with a
-  caption.
-- **Wordplay.** Rebuild a pun from Spanish words rather than translating its
-  words: a mishearing joke between two English near-homophones works as two
-  Spanish ones, and a tagline punning on a swear word as a mild Spanish curse
-  with the same image. Note the choice in the line's `listen` so the user can
-  judge it.
-- **Numbers.** VoiceStudio spells digits out in Spanish, so a year can stay in
-  digits in the script (and the subtitles), unlike in Japanese.
-- **QA** compares Spanish word by word, as English: accents and `¿¡` aside
-  (Whisper writes "esta" or "está"), numbers spelled out in Spanish
-  (num2words), `Sr.`, `Sra.`, `Dr.` and `Ud.` expanded, and "negation differs"
-  counting no, nunca, nada, nadie, ni, ningún, jamás and tampoco. A take that
-  runs words together can still pass on letters: a cast-card line sped up to
-  fit came back as one invented word where "como" met a short name. Reword
-  such a line (shorter, or another verb) rather than re-rolling it.
-- **Subtitles and signs** stay in Arial, which has the accents, `ñ` and `¿¡`.
-  A cast card the narration reads out ("<actor> as <character>") needs no
-  sign: the viewer hears it in Spanish.
+This guide was written from Japanese → English dubs. For any other pair, read
+the notes on both its languages in [languages/](languages/README.md) as well:
+what differs with each as the source and as the target
+([ja.md](languages/ja.md), [en.md](languages/en.md),
+[es.md](languages/es.md)). Write what you learn about a language there.
 
 ## Gotchas
 
