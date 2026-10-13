@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from core import FILL_SPEED, FILL_TOL, JOBS, WORK, actor_ends, line_id, load_json, speech_length  # noqa: E402
+from core import FILL_SPEED, FILL_TOL, WORK, actor_ends, langs, line_id, load_json, speech_length, take_wav  # noqa: E402
 
 
 def main():
@@ -35,9 +35,10 @@ def main():
         ids = [line_id(line) for line in lines]
         own = sum(1 for i in ids if rendered.get(i, {}).get("line_ref"))
         speeds = [rendered.get(i, {}).get("speed", 1.0) for i in ids]
-        d = np.array([end - speech_length(JOBS / job / f"seg_en_{i}.wav")
+        tgt = langs(name)[1]
+        d = np.array([end - speech_length(take_wav(job, i, tgt))
                       for i, end in zip(ids, actor_ends(job, lines))
-                      if end is not None and (JOBS / job / f"seg_en_{i}.wav").exists()])
+                      if end is not None and take_wav(job, i, tgt).exists()])
         if not len(d):
             print(f"{name}: no rendered takes")
             continue

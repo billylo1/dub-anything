@@ -33,7 +33,7 @@ import sys
 import numpy as np
 
 import draft
-from core import JOBS, WORK, line_id, load_json, update_voices, voice_clips
+from core import JOBS, WORK, langs, line_id, load_json, said, take_wav, update_voices, voice_clips
 from gpulock import hold_gpu
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -144,7 +144,7 @@ class Show:
             for i, line in enumerate(load_json(WORK / clip / "script.json")["lines"]):
                 if line["end"] - line["start"] < MIN_LINE or line.get("voice") not in self.base:
                     continue
-                twin = (line["start"], line["end"], line["ja"], line["voice"])
+                twin = (line["start"], line["end"], said(line, langs(clip)[0]), line["voice"])
                 if twin in seen:
                     continue
                 seen.add(twin)
@@ -191,7 +191,7 @@ def clean_lines(show, base):
     spans, out = {}, []
     for clip, i, line, f in show.lines[base]:
         d = line["end"] - line["start"]
-        if not 1.2 <= d <= 6.0 or re.search(r"(…|\.\.\.)\s*$", line["ja"]):
+        if not 1.2 <= d <= 6.0 or re.search(r"(…|\.\.\.)\s*$", said(line, langs(clip)[0])):
             continue
         script = load_json(WORK / clip / "script.json")
         others = [x for x in script["lines"] + script.get("captions", []) if x is not line and x != line]
@@ -225,7 +225,7 @@ def cmd_build(args):
     centroid = draft.cast_centroids(embed, {base})[base]
     hold_gpu()
     model = draft.WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
-    strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—]", "", t)  # noqa: E731
+    strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—'\"’:;]", "", t.lower())  # noqa: E731
     picked, total = [], 0.0
     for clip, i, line, f in sorted(clean_lines(show, base), key=lambda x: abs(arousal(x[3], nm) - target)):
         a = arousal(f, nm)
@@ -233,14 +233,15 @@ def cmd_build(args):
             break
         x = vocals(clip)[int(line["start"] * SR):int(line["end"] * SR)]
         sim = float(embed(x) @ centroid)
-        heard = "".join(q["ja"] for q in draft.transcribe(model, x))
-        ref, got = strip(line["ja"]), strip(heard)
+        src = langs(clip)[0]
+        heard = "".join(q["said"] for q in draft.transcribe(model, x, language=src))
+        ref, got = strip(said(line, src)), strip(heard)
         err = cer(ref, got)
         ok = sim >= 0.5 and err <= 0.25
         print(f"  {'take' if ok else 'skip'} {clip} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} arousal {a:+.1f}"
-              f"  voice match {sim:.2f}  heard {err:.0%} off  {line['ja']}")
+              f"  voice match {sim:.2f}  heard {err:.0%} off  {said(line, src)}")
         if ok:
-            picked.append([clip, line["start"], line["end"], line["ja"], a])
+            picked.append([clip, line["start"], line["end"], said(line, src), a])
             total += line["end"] - line["start"]
     if total < 5.0:
         raise SystemExit(f"only {total:.1f} s of clean {args.band} speech for {base}: not enough for a reference")
@@ -304,7 +305,7 @@ def cmd_check(args):
         for clip, i, line, f in ls:
             if clip not in wanted:
                 continue
-            wav = JOBS / load_json(WORK / clip / "segments.json")["job_id"] / f"seg_en_{line_id(line)}.wav"
+            wav = take_wav(load_json(WORK / clip / "segments.json")["job_id"], line_id(line), langs(clip)[1])
             t = features(decode_audio(str(wav), sampling_rate=SR)) if wav.exists() else None
             if t:
                 pairs.append((arousal(f, show.norm[base]), t, line["voice"]))

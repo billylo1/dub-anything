@@ -11,9 +11,11 @@ renders (work/<part>.us, see core.voice_part). The result has:
     (its "lines" plus any caption-only "captions" left in the original audio),
     any text subtitle tracks already in the source, and any --sub files
     (timed to the source video)
-plus sidecar .srt files, and when any part has "signs" (translations of text in
-the picture) the styled English track with them, .en.ass, and the signs alone,
-.signs.ass (see ass.py). Output defaults to the parts' `dubbed` folder.
+plus sidecar .srt files named for their language (.en.srt, .ja.srt), and when
+any part has "signs" (translations of text in the picture) the styled track of
+the dub's language with them (.en.ass, or .ja.ass), and the signs alone,
+.signs.ass (see ass.py). The languages are the parts' (core.langs). Output
+defaults to the parts' `dubbed` folder.
 """
 import argparse
 import json
@@ -23,11 +25,11 @@ import subprocess
 import sys
 
 import ass
-from core import ROOT, VOICE_LABEL, WORK, load_json, out_dir, srt_time, voice_part
+from ass import subtitle_text
+from core import LANG3, NATIVE, PAIR, ROOT, TITLES, VOICE_LABEL, WORK, langs, load_json, out_dir, said, srt_time, \
+    voice_part
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu"}
-TITLES = {"eng": "English", "jpn": "日本語"}
 TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
 
 
@@ -75,12 +77,13 @@ def main():
                   "end": float(probe(source)["format"]["duration"])}]
     parts = [{**p, "name": voice_part(p["name"], args.voice)} for p in parts]
     t0, t1 = parts[0]["start"], parts[-1]["end"]
+    src, tgt = next((langs(p["name"]) for p in parts if (WORK / p["name"] / "segments.json").exists()), PAIR)
 
-    dubs, en, ja, signs = [], [], [], []
+    dubs, dubbed, original, signs = [], [], [], []
     for p in parts:
         # A part left as it is needs no prep: its own file stands in for the job's.
         doc = load_json(WORK / p["name"] / "segments.json") or {"video": p.get("file", source)}
-        mp4 = out_dir(doc) / f"{p['name']}.en.mp4"
+        mp4 = out_dir(doc) / f"{p['name']}.{tgt}.mp4"
         script = load_json(WORK / p["name"] / "script.json")
         if not mp4.exists() and script is not None and not script["lines"] and p.get("file"):
             # A part directed to stay as it is (commercials, credits): its original audio.
@@ -93,9 +96,9 @@ def main():
         # "captions": speech left in the original (another language already,
         # names, whispers) that still belongs in the subtitles.
         for line in sorted(script["lines"] + script.get("captions", []), key=lambda l: l["start"]):
-            en.append((line["start"] + off, line["end"] + off, line["text"]))
-            if line.get("ja"):
-                ja.append((line["start"] + off, line["end"] + off, line["ja"]))
+            dubbed.append((line["start"] + off, line["end"] + off, subtitle_text(line["text"], tgt)))
+            if said(line, src):
+                original.append((line["start"] + off, line["end"] + off, subtitle_text(said(line, src), src)))
         signs += [{**s, "start": s["start"] + off, "end": s["end"] + off} for s in script.get("signs", [])]
 
     first_doc = load_json(WORK / parts[0]["name"] / "segments.json") or {"video": parts[0].get("file", source)}
@@ -105,16 +108,16 @@ def main():
     out = pathlib.Path(args.out) if args.out else dest / f"{args.stem}{variant}.dubbed{suffix}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
     subs = []
-    for lang, cues in (("en", en), ("ja", ja)):
+    for lang, cues in ((tgt, dubbed), (src, original)):
         if cues:
             srt = out.with_suffix(f".{lang}.srt")
             write_srt(srt, cues)
-            subs.append((srt, LANG3[lang], TITLES[LANG3[lang]], 0.0))
-    styled = [out.with_suffix(".en.ass"), out.with_suffix(".signs.ass")]
+            subs.append((srt, LANG3[lang], NATIVE[lang], 0.0))
+    styled = [out.with_suffix(f".{tgt}.ass"), out.with_suffix(".signs.ass")]
     if signs:
         video = next(s for s in probe(source)["streams"] if s["codec_type"] == "video")
-        ass.write(styled[0], video["width"], video["height"], en, signs)
-        ass.write(styled[1], video["width"], video["height"], (), signs)
+        ass.write(styled[0], video["width"], video["height"], dubbed, signs, lang=tgt)
+        ass.write(styled[1], video["width"], video["height"], (), signs, lang=tgt)
         print(f"  {len(signs)} signs: {styled[0].name}, {styled[1].name}")
     else:
         for path in styled:     # left from an earlier assembly: they would deliver signs no part has now
@@ -125,10 +128,10 @@ def main():
             raise SystemExit(f"--sub {s}: expected FILE.srt:lang[:title]")
         path, lang, title = m.groups()
         lang3 = LANG3.get(lang or "und", lang or "und")
-        subs.append((pathlib.Path(path), lang3, title or TITLES.get(lang3, ""), -t0))
+        subs.append((pathlib.Path(path), lang3, title or NATIVE.get(lang or "", ""), -t0))
 
-    src = probe(source)
-    src_subs = [s for s in src["streams"] if s["codec_type"] == "subtitle"]
+    info = probe(source)
+    src_subs = [s for s in info["streams"] if s["codec_type"] == "subtitle"]
     skipped = [s for s in src_subs if s["codec_name"] not in TEXT_SUBS]
     src_subs = [s for s in src_subs if s["codec_name"] in TEXT_SUBS]
     if skipped:
@@ -157,7 +160,7 @@ def main():
         # MP4 players show handler_name as the track name; title for everyone else.
         return [f"-metadata:s:{spec}", f"language={lang}"] + (
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else [])
-    cmd += label("a:0", "eng", f"English dub ({VOICE_LABEL[args.voice]})") + label("a:1", "jpn", "日本語 (original)")
+    cmd += label("a:0", LANG3[tgt], TITLES[tgt]["dub"][args.voice]) + label("a:1", LANG3[src], TITLES[src]["original"])
     sub_meta = [((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs]
     sub_meta += [(lang, title) for _, lang, title, _ in subs]
     for k, (lang, title) in enumerate(sub_meta):

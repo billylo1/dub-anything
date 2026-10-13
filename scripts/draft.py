@@ -2,7 +2,8 @@
 
 Usage: scripts/draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (after `dub.py prep`)
 
-1. Whisper large-v3 (beam 5, word timings) over the separated vocals.
+1. Whisper large-v3 (beam 5, word timings) over the separated vocals, in the
+   part's source language (Japanese unless `dub.py prep --source` said otherwise).
 2. Silero VAD finds where speech really is. Whisper's times run ~0.4 s early,
    so each phrase is snapped to the VAD onset/offset near it, then pulled back
    to the true attack when the VAD missed a soft onset (see edges.py). Speech
@@ -15,26 +16,28 @@ Usage: scripts/draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (a
    its reference clips plus every line already cast to it in the show's other
    scripts, so casting gets surer with each directed part. The best match and
    runner-up are shown, and weak or short matches are flagged with '?'.
-4. Speech already in English is found by Whisper's language detection and
-   re-transcribed in English (forced Japanese, Whisper silently *translates*
-   it). Such lines are tagged [English]: keep the original, caption it. So is
-   speech in a third language (Finnish in a film set in Finland), when Whisper
-   is also surer of it in that language than in Japanese.
+4. Speech already in the target language (English in a Japanese film) is found
+   by Whisper's language detection and re-transcribed in that language (forced
+   to the source language, Whisper silently *translates* it). Such lines are
+   tagged [English]: keep the original, caption it. So is speech in a third
+   language (Finnish in a film set in Finland), when Whisper is also surer of
+   it in that language than in the source language.
 6. When subs.py has read the video's burned-in captions (work/<name>/subs.json),
    each phrase is shown with the captions on screen during it: the
    broadcaster's own text, often with the speaker's name or colour. Phrases
    during a song (♪ captions) are marked to keep the original.
 5. A long phrase that is one of Whisper's stock hallucinations usually hides
    real speech, so it's re-transcribed one stretch of speech at a time, in
-   Japanese or English, whichever Whisper is surer of.
+   the source or the target language, whichever Whisper is surer of.
 
 --recast keeps an existing draft.json's transcript and windows and only
 suggests the speakers again: for a new show, draft the first parts, build their
 voices (cast.py), then recast them without transcribing again.
 
 Prints the draft and writes work/<name>/draft.json ({"lines": [...]} with start,
-end, voice, ja, text="" plus score fields). The director still decides: fix
-mishearings, confirm the cast, merge or split lines, then write script.json.
+end, voice, the transcript under the source language's code ("ja", or "en"),
+text="" plus score fields). The director still decides: fix mishearings, confirm
+the cast, merge or split lines, then write script.json.
 """
 import argparse
 import glob
@@ -46,7 +49,7 @@ import sys
 import numpy as np
 
 import edges
-from core import HF_CACHE, JOBS, VOICE_SUFFIX, WORK, load_json, voice_clips, whisper_setup
+from core import HF_CACHE, JOBS, LANG_NAMES, VOICE_SUFFIX, WORK, langs, load_json, voice_clips, whisper_setup
 from gpulock import hold_gpu
 
 whisper_setup()
@@ -58,10 +61,10 @@ from faster_whisper.vad import VadOptions, get_speech_timestamps  # noqa: E402
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR = 16000
 EARLY = 0.35  # typical Whisper lead when no VAD span is near
-# Whisper's stock hallucinations on hums, music and silence.
-HALLUCINATIONS = ("ご視聴ありがとうございました", "チャンネル登録", "ご覧いただき", "字幕")
-LANGUAGES = {"en": "English", "fi": "Finnish", "sv": "Swedish", "de": "German", "fr": "French", "it": "Italian",
-             "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ko": "Korean"}
+# Whisper's stock hallucinations on hums, music and silence, by the language it was told.
+HALLUCINATIONS = {"ja": ("ご視聴ありがとうございました", "チャンネル登録", "ご覧いただき", "字幕"),
+                  "en": ("thank you for watching", "thanks for watching", "please subscribe", "subtitles by",
+                         "amara.org", "like and subscribe")}
 
 
 def vad_spans(audio):
@@ -69,8 +72,8 @@ def vad_spans(audio):
     return [(s["start"] / SR, s["end"] / SR) for s in get_speech_timestamps(audio, opts)]
 
 
-def hallucination(text):
-    return any(h in text for h in HALLUCINATIONS)
+def hallucination(text, lang="ja"):
+    return any(h in text.lower() for h in HALLUCINATIONS.get(lang, ()))
 
 
 def stretches(spans, a, b, pause=1.5, longest=8.0):
@@ -95,7 +98,7 @@ def spoken_language(model, clip):
 
 
 def transcribe(model, audio, offset=0.0, language="ja"):
-    """Whisper phrases with their words, as [(start, end, text)] in clip time."""
+    """Whisper phrases with their words in clip time: {start, end, said, words, logprob}."""
     segs, _ = model.transcribe(audio, language=language, beam_size=5, vad_filter=False,
                                condition_on_previous_text=False, word_timestamps=True)
     out = []
@@ -108,18 +111,19 @@ def transcribe(model, audio, offset=0.0, language="ja"):
 
 def confidence(found):
     """Whisper's mean log-probability over transcribed phrases, weighted by length."""
-    chars = sum(len(p["ja"]) for p in found)
-    return sum(p["logprob"] * len(p["ja"]) for p in found) / chars if chars else -9.0
+    chars = sum(len(p["said"]) for p in found)
+    return sum(p["logprob"] * len(p["said"]) for p in found) / chars if chars else -9.0
 
 
-def surer(model, clip, offset):
-    """Transcribe in Japanese, in English and in any third language Whisper
-    detects, and keep the language Whisper is surer of, as (language, phrases). Its language detection calls heavily
-    accented English Korean or Breton; its confidence doesn't lie that way."""
+def surer(model, clip, offset, src, tgt):
+    """Transcribe in the source language, in the target language and in any third
+    language Whisper detects, and keep the language Whisper is surer of, as
+    (language, phrases). Its language detection calls heavily accented English
+    Korean or Breton; its confidence doesn't lie that way."""
     best = None
-    # A third language competes too, or Whisper translates it into English.
+    # A third language competes too, or Whisper translates it.
     other = spoken_language(model, clip)
-    for lang in ("ja", "en") + ((other,) if other and other not in ("ja", "en") else ()):
+    for lang in (src, tgt) + ((other,) if other and other not in (src, tgt) else ()):
         found = transcribe(model, clip, offset, language=lang)
         score = confidence(found)
         if best is None or score > best[0]:
@@ -128,7 +132,7 @@ def surer(model, clip, offset):
 
 
 def phrase(words):
-    return {"start": words[0][0], "end": words[-1][1], "ja": "".join(w[2] for w in words).strip(),
+    return {"start": words[0][0], "end": words[-1][1], "said": "".join(w[2] for w in words).strip(),
             "words": words}
 
 
@@ -284,21 +288,22 @@ def main():
 def draft(name, cast, model, embed_once):
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
+    src, tgt = langs(name)
     audio = decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=SR)
     duration = len(audio) / SR
     if model is None:
         # --recast: the transcript and windows stay; only the speakers are suggested again.
-        phrases = [{k: v for k, v in line.items() if k not in ("voice", "score", "alt", "alt_score", "text")}
-                   for line in load_json(work / "draft.json")["lines"]]
+        phrases = [{**{k: v for k, v in line.items() if k not in ("voice", "score", "alt", "alt_score", "text", src)},
+                    "said": line.get(src, "")} for line in load_json(work / "draft.json")["lines"]]
         return suggest(name, work, audio, phrases, vad_spans(audio), cast, embed_once)
 
     spans = vad_spans(audio)
-    phrases = settle([snap(p, spans, duration) for p in transcribe(model, audio)])
+    phrases = settle([snap(p, spans, duration) for p in transcribe(model, audio, language=src)])
     # Focused passes (with 1 s of context) over speech the full pass skipped;
     # keep only the words that land in the gap.
     for a, b in uncovered(phrases, spans):
         lo, hi = max(0.0, a - 1.0), min(duration, b + 1.0)
-        for p in transcribe(model, audio[int(lo * SR):int(hi * SR)], lo):
+        for p in transcribe(model, audio[int(lo * SR):int(hi * SR)], lo, language=src):
             words = [w for w in p["words"] if a - 0.2 <= (w[0] + w[1]) / 2 + EARLY <= b + 0.2]
             if words:
                 phrases.append({**snap(phrase(words), spans, duration), "recovered": True})
@@ -306,32 +311,32 @@ def draft(name, cast, model, embed_once):
     # A hallucination over a long stretch hides real speech (a whole phone call
     # in accented English became "ご視聴ありがとうございました"): redo it a
     # stretch at a time, in whichever language Whisper is surer of.
-    for p in [p for p in phrases if hallucination(p["ja"]) and p["end"] - p["start"] > 3.0]:
+    for p in [p for p in phrases if hallucination(p["said"], src) and p["end"] - p["start"] > 3.0]:
         phrases.remove(p)
         for a, b in stretches(spans, p["start"], p["end"]):
-            lang, found = surer(model, audio[int(a * SR):int(b * SR)], a)
+            lang, found = surer(model, audio[int(a * SR):int(b * SR)], a, src, tgt)
             for q in found:
-                if not hallucination(q["ja"]):
+                if not hallucination(q["said"], lang):
                     phrases.append({**snap(q, spans, duration), "recovered": True,
-                                    **({"lang": lang} if lang != "ja" else {})})
+                                    **({"lang": lang} if lang != src else {})})
     phrases = settle(phrases)
-    # Speech already in English, or in a third language (a film set abroad):
-    # forced Japanese, Whisper translates it.
+    # Speech already in the target language, or in a third language (a film set
+    # abroad): forced to the source language, Whisper translates it.
     for p in phrases:
         if p.get("lang") or p["end"] - p["start"] < 1.0:
             continue
         clip = audio[int(p["start"] * SR):int(p["end"] * SR)]
         lang = spoken_language(model, clip)
-        if lang == "en":
-            p["lang"] = "en"
-            p["ja"] = " ".join(q["ja"] for q in transcribe(model, clip, language="en")) or p["ja"]
-        elif lang and lang != "ja":
+        if lang == tgt:
+            p["lang"] = tgt
+            p["said"] = " ".join(q["said"] for q in transcribe(model, clip, language=tgt)) or p["said"]
+        elif lang and lang != src:
             # Less common languages get a second opinion: kept only when Whisper
-            # transcribes the phrase more surely in that language than in Japanese.
+            # transcribes the phrase more surely in that language than in the source language.
             found = transcribe(model, clip, language=lang)
-            if found and confidence(found) > confidence(transcribe(model, clip)):
+            if found and confidence(found) > confidence(transcribe(model, clip, language=src)):
                 p["lang"] = lang
-                p["ja"] = " ".join(q["ja"] for q in found)
+                p["said"] = " ".join(q["said"] for q in found)
     # Start windows at the true attack. VAD misses soft onsets, and a window
     # that opens mid-sound chops the actor audibly (edges.py has the rule).
     db = edges.frames_db(audio)
@@ -349,6 +354,7 @@ def draft(name, cast, model, embed_once):
 
 def suggest(name, work, audio, phrases, spans, cast, embed_once):
     """Score each phrase against the cast, print the draft and write draft.json."""
+    src = langs(name)[0]
     embed = embed_once()
     cents = cast_centroids(embed, set(cast.split(",")) if cast else show_cast(name) or None, exclude=name) \
         if embed else {}
@@ -371,8 +377,8 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
         alt = f"({p['alt']} {p['alt_score']:.2f})" if "alt" in p else ""
         tag = " [recovered]" if p.get("recovered") else ""
         if p.get("lang"):
-            tag += f" [{LANGUAGES.get(p['lang'], p['lang'])}: keep the original, caption it]"
-        if hallucination(p["ja"]):
+            tag += f" [{LANG_NAMES.get(p['lang'], p['lang'])}: keep the original, caption it]"
+        if hallucination(p["said"], p.get("lang", src)):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
         if in_song(subs, p):
@@ -380,7 +386,7 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
             p["song"] = True
             print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  [song: keep the original]")
             continue
-        print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  {who} {alt:18s} {p['ja']}{tag}")
+        print(f"L{i:02d} {p['start']:7.2f}-{p['end']:7.2f}  {who} {alt:18s} {p['said']}{tag}")
         if on_screen(subs, p):
             p["cc"] = " / ".join(caption(e) for e in on_screen(subs, p))
             print(f"{'':45s}cc: {p['cc']}")
@@ -394,7 +400,7 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
     if gaps:
         print("speech not in any line (hums/laughs, or missed words):",
               " ".join(f"{a:.2f}-{b:.2f}" for a, b in gaps))
-    lines = [{"start": p["start"], "end": p["end"], "voice": p.get("voice", ""), "ja": p["ja"], "text": "",
+    lines = [{"start": p["start"], "end": p["end"], "voice": p.get("voice", ""), src: p["said"], "text": "",
               **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang", "cc", "song") if k in p}}
              for p in phrases]
     (work / "draft.json").write_text(json.dumps({"lines": lines}, ensure_ascii=False, indent=1),

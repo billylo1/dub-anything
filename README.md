@@ -2,9 +2,10 @@
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English** on Windows with an NVIDIA GPU. Other language
-pairs and hardware need changes in a few known places, a job you can hand your
-coding agent: see [Other languages and hardware](#other-languages-and-hardware).
+tested for **Japanese → English** and **English → Japanese** on Windows with an
+NVIDIA GPU. Other language pairs and hardware need changes in a few known
+places, a job you can hand your coding agent: see
+[Other languages and hardware](#other-languages-and-hardware).
 
 ## What's different
 
@@ -14,7 +15,7 @@ listener notices:
 
 - **An agent directs, line by line.** It casts each line from speaker
   embeddings, frames and the dialogue, fixes what Whisper misheard from context,
-  writes English timed to the actor, and triages every QA flag. It tells you
+  writes the translation timed to the actor, and triages every QA flag. It tells you
   which lines are guesses instead of hiding them.
 - **Each line acts like the original.** The voice is prompted with the actor's
   own delivery of that line, not one clip per character, so a shout stays a
@@ -23,7 +24,7 @@ listener notices:
 - **Each line takes the actor's time.** Every take is re-timed to end where the
   actor stops, so turns land where they did in the original instead of leaving
   dead air. Each take's length is predicted before the first render, so the
-  English is written to fill the time.
+  translation is written to fill the time.
 - **Every line is checked.** Each rendered line is transcribed back; a garbled
   one gets fresh takes, up to three rounds, and the best is kept.
 - **It reads the picture.** Burned-in closed captions become the transcript
@@ -42,23 +43,24 @@ and `AGENTS.md` tells it how:
 
 - **The scripts** do the heavy lifting: separate voices from music, transcribe,
   clone, mix, and check every line.
-- **The agent** makes the calls: who says what, what Whisper misheard, natural
-  English timed to the actor's lips, what stays in the original, which QA flags
-  are real. It tells you which lines are guesses.
+- **The agent** makes the calls: who says what, what Whisper misheard, a natural
+  translation timed to the actor's lips, what stays in the original, which QA
+  flags are real. It tells you which lines are guesses.
 - **You** listen. You judge the acting, the voices and the mix, and decide what
   may be cloned or shared.
 
 In practice:
 
 1. Set up once: [docs/setup.md](docs/setup.md).
-2. Ask, for example: *"Dub D:\movies\my-show.mkv."*
-3. Answer one question: which voice, or both (below).
+2. Ask, for example: *"Dub D:\movies\my-show.mkv."* (or *"Dub it into
+   Japanese"* for an English video).
+3. Answer one question: which voice, or both (below). Into Japanese there is
+   only the actor's voice.
 4. Wait. The agent tells you if something needs you, and at the end gives you
    a list of moments to listen to. Say what to change.
 5. Watch the result: your file itself, renamed `my-show (dubbed).mkv`. The
-   English dub plays by default (the actor's voice when you chose both), the
-   original audio is the last track, and English and Japanese subtitles are
-   included.
+   dub plays by default (the actor's voice when you chose both), the original
+   audio is the last track, and subtitles in both languages are included.
 
 ## The one choice: the voice
 
@@ -72,19 +74,23 @@ Not sure? Ask for both: each gets its own audio track, and you switch between
 them in the player. Everything else (separation, timing, voice processing) has
 defaults chosen by ear.
 
+Dubbing English into Japanese, the actor's voice is the only one: each actor
+speaks Japanese with their own (English) accent. There is no native-Japanese
+counterpart of the American voice yet.
+
 ## How it works
 
 ![How a dub gets made](docs/process.png)
 
 1. **Split** long videos into ~3-minute parts at pauses in speech.
 2. **Separate** the voices from music and effects (Mel-Band Roformer).
-3. **Transcribe** the Japanese (Whisper large-v3, with two other recognisers as a
+3. **Transcribe** the original (Whisper large-v3, with two other recognisers as a
    second opinion). If the picture has burned-in closed captions, they are read
    too: the exact words, often with the speaker's name.
 4. **Direct** (the agent): cast each line, correct the transcript, translate,
    and time every line to the actor → `work/<part>/script.json`.
-5. **Voice** each line. With the actor's voice, OmniVoice clones the actor,
-   prompted with their own delivery of that line. With American, IndexTTS
+5. **Voice** each line. With the actor's voice, OmniVoice clones the actor
+   (in English or Japanese), prompted with their own delivery of that line. With American, IndexTTS
    speaks native English following the actor's delivery, and Chatterbox then
    converts it to the actor's voice.
 6. **Fit, mix and check.** Each take is re-timed to end where the actor stops
@@ -98,24 +104,29 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Other languages and hardware
 
-Only Japanese → English on Windows with an NVIDIA GPU has been tested. The voice
-engine isn't the limit: VoiceStudio clones voices in hundreds of languages and
-runs on macOS and Linux too. What assumes Japanese, English or NVIDIA is in
-dubrama's own scripts, in these places:
+Two language pairs are built and tested, Japanese → English and English →
+Japanese, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
+VoiceStudio clones voices in hundreds of languages and runs on macOS and Linux
+too. Each part records its pair when it's prepared (`dub.py prep --source en
+--target ja`), and the scripts read it from there; `PAIRS` in `scripts/core.py`
+lists the pairs they know. Another pair needs work in these places:
 
-- **The source language.** Whisper is told the speech is Japanese
-  (`dub.py prep`, `draft.py`, `voices.py`; `asr_words.py` takes `--lang`), and
-  each line keeps its transcript in a field named `ja`.
-- **Second opinions and captions.** `second.py` checks Whisper against a
-  Japanese-only recogniser and SenseVoice, and `subs.py` reads captions with a
-  Chinese and Japanese OCR model. Another source language needs models that
-  know it, or goes without these checks.
-- **The target language.** Rendered lines are transcribed back as English
-  (`lineqa.py`), take lengths are predicted from fits made on Japanese → English
-  takes, and the American voice is English by design.
+- **The source language.** Whisper transcribes any language, and each line
+  keeps its transcript in a field named for it (`ja`, `en`). The stock
+  hallucinations `draft.py` watches for are listed per language, and the
+  second opinions (`second.py`: ReazonSpeech for Japanese, Parakeet for
+  English, SenseVoice for both) and the caption OCR (`subs.py`, a Chinese and
+  Japanese model) know only some languages. Another source language needs
+  models that know it, or goes without these checks.
+- **The target language.** Rendered lines are transcribed back and compared
+  word by word in English and by their kana reading in Japanese (`lineqa.py`,
+  `kana.py`); another language needs its own normalization. Take lengths come
+  from OmniVoice's own rule, with corrections measured on Japanese → English
+  takes. Track and subtitle names are listed per language (`TITLES` in
+  `core.py`), and the American voice is English by design.
 - **The directing notes.** [docs/directing.md](docs/directing.md) was written
-  from Japanese → English dubs. Most of it is about casting, timing and QA and
-  carries over; the parts about kana and kanji don't.
+  from Japanese → English dubs, with a section on what differs dubbing English
+  into Japanese. Most of it is about casting, timing and QA and carries over.
 - **Hardware.** The models run on CUDA and mostly fall back to the CPU without
   it, much slower. Video is encoded with NVENC when it's there, else x264. The
   Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)

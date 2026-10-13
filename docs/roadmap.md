@@ -2,7 +2,8 @@
 
 ## Where it stands
 
-dubrama dubs Japanese video into English end to end:
+dubrama dubs Japanese video into English end to end, and English video into
+Japanese (the actor's voice only; see directing.md, "English → Japanese"):
 
 - **Transcript and cast.** Parts are separated with Mel-Band Roformer and
   transcribed by Whisper, with two other recognisers as a second opinion and
@@ -67,8 +68,11 @@ How each piece was chosen, and the measurements behind it, are in
 ## Later
 
 - **Lip sync** (LatentSync / MuseTalk); feasible on a decent NVIDIA GPU.
-- **Other language pairs and hardware.** What assumes Japanese, English or
-  NVIDIA is listed in the README, "Other languages and hardware".
+- **Other language pairs and hardware.** What a pair beyond Japanese ↔ English,
+  or other hardware, needs is listed in the README, "Other languages and
+  hardware".
+- **A native Japanese voice** for dubs into Japanese, the counterpart of the
+  American voice (research.md, open questions).
 - **Upstream to VoiceStudio:**
   - the fixes in `patches/voicestudio-local-fixes.patch`, the `echo` and `pa`
     presets, and per-segment voice and emotion references in dubs;

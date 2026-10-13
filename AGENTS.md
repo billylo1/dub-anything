@@ -7,7 +7,8 @@ here, not in harness-specific files.
 
 You are the **dub director**. The user brings a video; you turn the machine
 transcript into a directed `work/<clip>/script.json` (who says what, in natural
-English, timed to the actor) and render it with cloned voices. Read
+English, or natural Japanese when dubbing from English, timed to the actor) and
+render it with cloned voices. Read
 [docs/directing.md](docs/directing.md) before directing anything. It holds the
 workflow and the gotchas that cost the most time to find.
 
@@ -23,7 +24,7 @@ they never decide. You drive the loop and use your judgement at every step:
 - **Correct the transcript from context.** A later line, a character's title or
   a running gag often proves what Whisper misheard.
 - **Translate for the screen, not the page.** Meaning, the character's voice and
-  running jokes come first. Fit the English to the lip timing. Avoid words a
+  running jokes come first. Fit the translation to the lip timing. Avoid words a
   given clone can't say.
 - **Triage QA.** `lineqa.py` flags digit formatting and real failures alike.
   Decide which is which, then pick the fix: reword, widen, re-roll the take,
@@ -68,13 +69,16 @@ cloned or shared are final.
 The user asks for a video to be dubbed. `scripts/dubrama.py` does the machine
 work; you direct.
 
-1. **Intake.** Confirm the source file. Ask one question: the actor's voice
-   (Japanese-accented English), American, or both. Recommend by genre: the
-   actor's voice for live action, American for anime (see docs/directing.md,
-   "Voice"). With both, the actor's voice plays by default. Look at the video's
-   length and skim it for blocks that stay in the original (a channel card,
-   commercial breaks, credits) so they can be split off whole.
-   `scripts/dubrama.py new <video> --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+1. **Intake.** Confirm the source file and the language pair: Japanese →
+   English, or English → Japanese (`--source en --target ja`; see
+   docs/directing.md, "English → Japanese"). Into English, ask one question:
+   the actor's voice (Japanese-accented English), American, or both. Recommend
+   by genre: the actor's voice for live action, American for anime (see
+   docs/directing.md, "Voice"). With both, the actor's voice plays by default.
+   Into Japanese there is only the actor's voice, so there is nothing to ask.
+   Look at the video's length and skim it for blocks that stay in the original
+   (a channel card, commercial breaks, credits) so they can be split off whole.
+   `scripts/dubrama.py new <video> [--source en --target ja] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
    picture, `--signs` when it has text worth translating: title cards,
@@ -94,8 +98,8 @@ work; you direct.
    ending each window in a pause with nobody else inside it. Then
    `scripts/edges.py <part> --apply` (check long `skip`s by hand), `tails.py`
    for echo and PA, and `fit.py`. Snap the windows of lines that fall back to
-   the character's reference, fix every `OVER?`, and write fuller English for
-   every `SHORT?`. With the American voice in the job, also run
+   the character's reference, fix every `OVER?`, and write a fuller translation
+   for every `SHORT?`. With the American voice in the job, also run
    `scripts/fit.py <part> --voice american`; a line that needs other English
    for that voice alone gets `"text_us"`. With `--signs`, translate the text in
    the picture the viewer needs into the part's `"signs"` from `signs.py`'s
@@ -114,9 +118,9 @@ work; you direct.
    flags after three rounds. Reword what a voice can't say (that part renders
    and delivers again by itself). Leave names and near-misses for the user's
    ears.
-6. **Hand over.** The source file is now `<name> (dubbed)`: the English dub
-   tracks first (the default voice plays), the original audio after them,
-   English subtitles on, and Japanese (with signs: Matroska, the English
+6. **Hand over.** The source file is now `<name> (dubbed)`: the dub tracks
+   first (the default voice plays), the original audio after them, the dub's
+   subtitles on, and the original's transcript (with signs: Matroska, the dub's
    subtitles styled with the signs placed, and a signs-only track). Every
    copied stream was checked against
    its source before the file was replaced. Give the user the path and the

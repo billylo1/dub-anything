@@ -63,7 +63,13 @@ def cuts(video, t0=None, t1=None, threshold=0.3):
 
 
 def bare(text):
-    return PUNCT.sub("", text)
+    return PUNCT.sub("", text).lower()
+
+
+def pair(work):
+    """(source, target) languages of a part, as dub.py prep recorded them (core.langs)."""
+    seg = json.loads((work / "segments.json").read_text(encoding="utf-8")) if (work / "segments.json").exists() else {}
+    return seg.get("source_lang") or "ja", seg.get("target_lang") or "en"
 
 
 def spoken(text, t, dialogue):
@@ -259,10 +265,12 @@ def preview(work, video, w, h, which=None):
     if not signs:
         raise SystemExit(f"{work.name}: no signs in script.json")
     pick = [(k, s) for k, s in enumerate(signs, 1) if not which or k in which]
-    dialogue = [(l["start"], l["end"], l["text"]) for l in script["lines"] + script.get("captions", [])]
+    tgt = pair(work)[1]
+    dialogue = [(l["start"], l["end"], ass.subtitle_text(l["text"], tgt))
+                for l in script["lines"] + script.get("captions", [])]
     out = work / "signs"
     out.mkdir(exist_ok=True)
-    ass.write(out / "preview.ass", w, h, dialogue, signs)
+    ass.write(out / "preview.ass", w, h, dialogue, signs, lang=tgt)
     tiles = []
     for k, s in pick:
         t = (s["start"] + s["end"]) / 2
@@ -291,13 +299,14 @@ def preview(work, video, w, h, which=None):
 
 
 def dialogue_of(work):
-    """(start, end, bare Japanese) of every line, from the script, else the draft."""
+    """(start, end, bare original) of every line, from the script, else the draft."""
+    src = pair(work)[0]
     for name in ("script.json", "draft.json"):
         p = work / name
         if p.exists():
             doc = json.loads(p.read_text(encoding="utf-8"))
             lines = doc.get("lines") or []
-            return [(l["start"], l["end"], bare(l.get("ja") or "")) for l in lines if l.get("ja")]
+            return [(l["start"], l["end"], bare(l.get(src) or "")) for l in lines if l.get(src)]
     return []
 
 

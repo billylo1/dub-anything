@@ -16,7 +16,7 @@ Run everything from the repo folder with VoiceStudio's Python
 | `videos/` | Source media (git-ignored). Split parts go in `videos/<stem>-parts/` and dubs in `.../dubbed/` |
 | `work/voices.json` | The cast: per character, clean clips of the actor plus their exact transcript |
 | `work/<clip>/script.json` | The directed dub, the real work product |
-| `work/<clip>/segments.json`, `ja.srt` | Raw machine transcript and the VoiceStudio job id (`prep` overwrites them) |
+| `work/<clip>/segments.json`, `ja.srt` | Raw machine transcript, the VoiceStudio job id and the language pair (`prep` overwrites them; the `.srt` is named for the source language) |
 | `work/NOTES.md` | Per-show notes: story, characters, running jokes, word choices |
 
 `work/` is git-ignored: it holds transcripts of the source and references to
@@ -59,8 +59,10 @@ differs.
 
 - `start`/`end`: the window the English line may occupy.
 - `voice`: a key in `voices.json`.
-- `ja`: the corrected original.
-- `text`: the English that is spoken.
+- `ja`: the corrected original. The field is named for the source language:
+  `en` when dubbing from English (see "English → Japanese").
+- `text`: the English that is spoken (the dub's language: Japanese when
+  dubbing into it).
 - `instruct` (optional): OmniVoice tags, comma-separated, from a fixed
   vocabulary only. The useful one is `whisper`; the others cover gender, age,
   pitch and accent. `dub.py` rejects anything else, because free text aborts the
@@ -109,8 +111,9 @@ A trailer for the next film or episode, recorded with the show, is different: it
 dialogue is the same cast, so dub it like the show with the same voices. Its title
 cards and on-screen text stay as they are.
 
-A top-level `"captions": [{start, end, ja, text}]` list holds speech that stays in
-the original audio but still belongs in the subtitles. Examples: dialogue already in
+A top-level `"captions": [{start, end, ja, text}]` list (`en` for `ja` dubbing
+from English) holds speech that stays in the original audio but still belongs in
+the subtitles. Examples: dialogue already in
 English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
 list to both subtitle tracks.
 
@@ -131,7 +134,9 @@ render nothing and don't make a part render again; they change the delivery
 ## Workflow
 
 For a new show, settle one thing with the user before the first part: the
-voice, or both (see "Voice" under Render). Everything else has a default.
+voice, or both (see "Voice" under Render). Everything else has a default. The
+language pair is Japanese → English unless the job says otherwise (`--source
+en --target ja`, see "English → Japanese").
 `scripts/dubrama.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
 step does and how to direct it. The scripts are in `scripts/` and run from the
@@ -200,7 +205,8 @@ faster-whisper models. Compare recognisers on your own corrected samples;
 confidence alone does not prove that a transcription is right.
 
 `scripts/second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
-flags lines where both disagree with Whisper. Re-listen with `asr_words.py`
+flags lines where both disagree with Whisper (for English speech, Parakeet and
+SenseVoice). Re-listen with `asr_words.py`
 and decide from context. It needs its own environment (see AGENTS.md).
 
 Some recordings have the broadcaster's closed captions burned into the
@@ -510,6 +516,7 @@ delivery of its line and ends where the actor stops:
   reference's delivery and accent, so the take follows the actor on that line
   and keeps their accent, while the clips hold the voice steady. This replaces
   sorting lines into calm and raised: the delivery comes from the line itself.
+  Dubbing into Japanese it's off by default (see "English → Japanese").
   A line keeps the character's reference when it has `"line_ref": false`, a
   room effect (`echo`, `pa`; the original's room would be cloned), a window too
   long to fit OmniVoice's 20 s limit alongside the clips, or a window that isn't
@@ -627,6 +634,7 @@ How these were chosen, and what else was tried, is in
   - junk at the start of lines (reference leakage, below)
   - dropped words in fast lists
   - meaning flips like "can" heard as "can't" (any change in negation is flagged)
+    or "seventy" as "forty" (so is any number heard as another)
   - words a voice can't say
   - lines that came out silent
 
@@ -695,6 +703,89 @@ signs alone (`.signs.ass`), and `deliver.py` delivers Matroska,
 The English tracks are then the styled ones, and the signs-only track follows
 them, marked forced, for watching the dub with subtitles off. A player has to
 render ASS subtitles to place them (mpv and VLC do, with libass).
+
+## English → Japanese
+
+dubrama also dubs English video into Japanese. Everything above applies; this
+is what differs.
+
+- **The job.** `scripts/dubrama.py new <video> --source en --target ja` (by
+  hand, `scripts/dub.py prep <video> --source en --target ja`). Each part's
+  `segments.json` records the pair and every script reads it from there:
+  Whisper listens in English (the draft, `asr_words.py`, `voices.py check`, the
+  window check), takes are made and heard in Japanese (`seg_ja_<id>.wav`), and
+  the subtitles, track names and styled signs follow. There is one voice, the
+  actor's: each actor speaks Japanese with their own accent, as the Japanese
+  actors speak English with theirs. The American voice is English only, and
+  no engine for native Japanese is wired in.
+- **No per-line references by default.** The actor's English original in a
+  line's reference carried their accent into the Japanese: on one sketch, a
+  strongly accented actor's takes went from 0.96 to 0.53 on Whisper's
+  confidence that they were Japanese, and followed her delivery less closely,
+  not more (research.md, finding 16). So a part dubbed into Japanese renders
+  each take from the character's clips alone (`"render": {"line_ref": false}`,
+  written on its first render) and the window check doesn't run. That makes the
+  character's reference the register of every line: build it from lines in
+  their usual register, and use `register.py` if one sounds wrong. A part can
+  still opt in (`"line_ref": true`, for a calmer cast whose accent is light);
+  compare by ear.
+- **The script.** A line keeps its original in `en`:
+  `{"start": 4.3, "end": 5.9, "voice": "speaker_1", "en": "Hello.", "text": "こんにちは。"}`,
+  and so do captions. The draft tags speech already in Japanese `[Japanese]`:
+  keep it and caption it. `second.py` runs Parakeet and SenseVoice in English
+  and compares them with the draft word by word.
+- **Casting** is as above. English drafts come out with clean punctuation and
+  phrase-length lines, but Whisper's word times run early here too, and the
+  VAD merges quick exchanges into one span: snap turn changes by loudness.
+- **Translate concisely.** Japanese needs more morae than English needs
+  syllables for the same meaning, so a faithful first draft runs long. In one
+  sketch 14 of 32 first drafts came out 10–35% over the actor's time in
+  `fit.py`, and only a two-word reply short.
+  Cut, don't pad: drop the subjects and pronouns the picture makes clear, and
+  prefer the short word (声 over メッセージ). `scripts/fit.py` estimates
+  Japanese takes as well as English ones: on that sketch's 32 lines, a
+  median error of +0.02 s, 84% within 0.2 s and 97% within 0.4 s.
+- **Give each character a Japanese voice.** Japanese marks who is talking
+  through first-person pronouns (俺, 僕, 私, あたし), sentence endings (だ, です,
+  じゃん, よ, ね) and politeness, which English mostly leaves to the delivery.
+  Pick them per character once and keep them in `work/NOTES.md`. Narration
+  reads like a Japanese documentary's: plain form, questions in 〜なのか.
+  Names go in katakana, spelled as on screen when a caption shows them.
+- **Spell numbers in kana** (はちじゅう年, さんじゅう年代). The clones misread
+  numbers written in kanji: in one sketch 八十年 was heard as 「1年」 and
+  七十年代 as 「40年代」, and both came out right once written in kana. Kana
+  also gives a number its real length: a kanji numeral weighs 3 in OmniVoice's
+  length rule though it is said in two or three morae. Digits are worse still:
+  VoiceStudio leaves them as digits in Japanese. QA checks a number written in
+  digits or kanji against the one it hears; one in kana, by its reading only.
+- **Mind the accent.** The clone speaks Japanese with the actor's English
+  accent, and it shows where Japanese leans on length: a small っ, a long vowel.
+  一家 (ikka) was heard as イカ ("squid") on two lines, and 家族 says the same
+  without the っ. Others were near-misses a listener may or may not catch
+  (暖炉 heard as 難路, 邸 as ディ). QA's reading match lets one mora pass, so
+  read the per-line transcripts (`scripts/lineqa.py <part> --all`) for lines
+  whose sense hangs on one word, and reword or list them for the user.
+- **Short lines.** One-word replies stretch towards 2 s as in English. A
+  0.8-s window held 「できない。」 (four morae) at natural pace; anything longer
+  needs room or stays original with a caption. Short lines are also where a
+  clone garbles most: two of one character's short lines failed QA twice
+  (幽霊 heard as ゆで, 真っ暗 as マアン) and passed reworded with plainer words
+  (おばけ, 暗い).
+- **QA** hears takes in Japanese and compares readings in hiragana (`kana.py`,
+  pykakasi in its own uv environment), so kanji or kana, katakana or hiragana
+  and digits or kanji numerals don't count as differences. A take passes at
+  80% kana-level agreement (English: 85% of words). "negation differs" counts
+  ない, なかっ and ません. "English in the take" means Whisper heard Latin
+  letters in a take whose text has none: usually the per-line reference
+  leaking the actor's English, so try `"line_ref": false` on a line that does
+  it on every take.
+- **Subtitles.** Players wrap subtitles only at spaces, which Japanese doesn't
+  have, so a cue over 22 characters is broken in two at the punctuation
+  nearest its middle. Styled subtitles and signs are set in Yu Gothic (Arial
+  has no Japanese).
+- **Signs.** Japanese laid over a large English name or title can't be read:
+  put it `above` or `below` the original at `size` 1.3–1.5. Lower thirds
+  (a name and a role) translate as two lines, the name in katakana.
 
 ## Gotchas
 
@@ -840,7 +931,7 @@ The loop, in the order it runs:
 |---|---|
 | `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `scripts/dub.py prep <video>` | Upload, separate, transcribe, diarize → `work/<name>/segments.json`, `ja.srt` |
+| `scripts/dub.py prep <video> [--source en --target ja]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English) |
 | `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `scripts/subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `scripts/signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
@@ -849,14 +940,14 @@ The loop, in the order it runs:
 | `scripts/voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
 | `scripts/frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `scripts/asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `scripts/second.py <clip> ... [--script]` | Two more Japanese recognisers (ReazonSpeech, SenseVoice) over each line: flags lines where both disagree with Whisper (own environment) |
+| `scripts/second.py <clip> ... [--script]` | Two more recognisers over each line (ReazonSpeech and SenseVoice for Japanese, Parakeet and SenseVoice for English): flags lines where both disagree with Whisper (own environment) |
 | `scripts/edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `scripts/tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `scripts/fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |
 | `scripts/dub.py generate <name> --match-level` | Render `script.json` in the chosen voice (per-line references and fill by default, or `"american"`), levelled against the original actors → MP4 + SRT |
-| `scripts/lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone; flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
-| `scripts/assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft EN/JA subtitles, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
-| `scripts/deliver.py <source> actor=<mp4> [american=<mp4>]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
+| `scripts/lineqa.py <name> ... [--reroll]` | Transcribe each rendered line alone (Japanese compared by its reading in kana); flag leaked, dropped or garbled words and flipped meanings; queue fresh takes |
+| `scripts/assemble.py <stem> [--voice american] [--parts 1-4]` | Join parts: dub + original audio tracks, soft subtitles in both languages, sidecar SRTs (and styled ASS with the signs); a part without lines keeps its original audio |
+| `scripts/deliver.py <source> actor=<mp4> [american=<mp4>] [--source en --target ja]` | Put the dubs and subtitles into the source file, verified, renamed `<name> (dubbed)` (Matroska when there are signs) |
 
 Used now and then:
 
@@ -868,4 +959,4 @@ Used now and then:
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 | `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
 | `scripts/backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
-| `core.py`, `gpulock.py`, `ass.py` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs |
+| `core.py`, `gpulock.py`, `ass.py`, `kana.py` | Not tools: paths, language pairs, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs; Japanese read as kana for QA (pykakasi, in its own environment) |

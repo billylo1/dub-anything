@@ -2,9 +2,10 @@
 on-screen text (a part's "signs") placed by the text they translate.
 
 assemble.py writes, when any part has signs, <out>.en.ass (dialogue and signs,
-the English track) and <out>.signs.ass (signs alone, for watching the dub
-without dialogue subtitles). deliver.py then delivers Matroska: MP4's subtitles
-can't be placed.
+the English track; .ja.ass for a dub into Japanese) and <out>.signs.ass (signs
+alone, for watching the dub without dialogue subtitles). deliver.py then
+delivers Matroska: MP4's subtitles can't be placed. Japanese is set in a font
+that has its characters (FONTS), and measured as full-width.
 
 A sign, in the part's "signs" (times in the part, like its lines):
   {"start", "end", "text", "box": [x0, y0, x1, y1]}
@@ -13,7 +14,7 @@ optionally
   "box_end": the box at the end, when the camera pans: the text moves with it,
            between the times in "seen" ([t0, t1], from the candidate) if
            given, else over the whole sign
-  "place": where the English goes: "over" the original (default), "above",
+  "place": where the translation goes: "over" the original (default), "above",
            "below", "left" or "right" of it, or "page": from the box's top
            left corner, left-aligned and wrapped in the box, for a page of text
   "size": font size relative to the usual (1.0); "\\n" in the text breaks a line
@@ -24,10 +25,32 @@ A line of dialogue that would cover a sign shown with it moves to the top,
 if the top is clear.
 """
 import re
+import unicodedata
 
 DIALOGUE_SIZE = 0.054   # of the picture's height
 SIGN_SIZE = 0.042
 PLACES = {"over": 5, "above": 2, "below": 8, "left": 6, "right": 4, "page": 7}
+# Arial has no Japanese; Yu Gothic ships with Windows (other systems fall back to a font that has it).
+FONTS = {"ja": "Yu Gothic"}
+
+
+def ems(line, latin):
+    """A line's width in ems: a full-width character (kana, kanji) is one em, others `latin`."""
+    return sum(1.0 if unicodedata.east_asian_width(c) in "WF" else latin for c in line)
+
+
+def subtitle_text(text, lang):
+    """A subtitle cue's text. Japanese has no spaces to wrap at, so a long line is
+    broken in two at the punctuation (else the character) nearest its middle."""
+    if lang != "ja" or len(text) <= 22 or "\n" in text:
+        return text
+    mid = len(text) / 2
+    stops = "、。！？!?…）」』"
+    breaks = [i + 1 for i, c in enumerate(text[:-1]) if c in stops + " 　" and text[i + 1] not in stops]
+    cut = min(breaks, key=lambda i: abs(i - mid)) if breaks else None
+    if cut is None or abs(cut - mid) > len(text) / 4:
+        cut = round(mid)
+    return text[:cut].rstrip() + "\n" + text[cut:].lstrip()
 
 
 def ass_time(t):
@@ -41,9 +64,10 @@ def escape(text):
     return re.sub(r"\s*\n\s*", r"\\N", text.strip())
 
 
-def header(w, h):
+def header(w, h, lang="en"):
     m, d, s = round(h * 0.03), round(h * DIALOGUE_SIZE), round(h * SIGN_SIZE)
     out = max(2, round(h / 360))
+    font = FONTS.get(lang, "Arial")
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -54,9 +78,9 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Dialogue,Arial,{d},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,{out},1,2,{m * 2},{m * 2},{round(h * 0.045)},1
-Style: Sign,Arial,{s},&H00FFFFFF,&H000000FF,&H00301A0A,&H80000000,-1,0,0,0,100,100,0,0,1,{out},1,5,{m},{m},{m},1
-Style: SignBoxed,Arial,{s},&H00FFFFFF,&H000000FF,&H30141414,&H00000000,0,0,0,0,100,100,0,0,3,{out * 3},0,5,{m},{m},{m},1
+Style: Dialogue,{font},{d},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,{out},1,2,{m * 2},{m * 2},{round(h * 0.045)},1
+Style: Sign,{font},{s},&H00FFFFFF,&H000000FF,&H00301A0A,&H80000000,-1,0,0,0,100,100,0,0,1,{out},1,5,{m},{m},{m},1
+Style: SignBoxed,{font},{s},&H00FFFFFF,&H000000FF,&H30141414,&H00000000,0,0,0,0,100,100,0,0,3,{out * 3},0,5,{m},{m},{m},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -65,9 +89,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 def extent(lines, size, w, h, room=None):
     """An estimate of the text's (width, height): Arial bold averages about half
-    an em a character, and the renderer wraps a line wider than its room (the
-    picture's width unless given)."""
-    widths = [len(l) * size * 0.55 for l in lines]
+    an em a character (a Japanese character takes a whole em), and the renderer
+    wraps a line wider than its room (the picture's width unless given)."""
+    widths = [ems(l, 0.55) * size for l in lines]
     room = room or w - 2 * h * 0.03
     return min(max(widths), room), sum(-(-wd // room) or 1 for wd in widths) * size * 1.2
 
@@ -131,7 +155,7 @@ def dialogue_rect(text, w, h, top=False):
     """Where a line of dialogue shows, bottom centre (or top centre)."""
     size, m = h * DIALOGUE_SIZE, h * 0.045
     lines = escape(text).split("\\N")
-    widths = [len(l) * size * 0.5 for l in lines]
+    widths = [ems(l, 0.5) * size for l in lines]
     room = w - 4 * h * 0.03
     tw, th = min(max(widths), room), sum(-(-wd // room) or 1 for wd in widths) * size * 1.2
     y0 = m if top else h - m - th
@@ -162,10 +186,10 @@ def sign_event(sign, w, h):
     return f"Dialogue: 1,{ass_time(sign['start'])},{ass_time(sign['end'])},{style},,{ml},{mr},0,,{{{tags}}}{text}"
 
 
-def write(path, w, h, dialogue=(), signs=()):
-    """dialogue: [(start, end, text)]; signs: sign dicts in the file's time.
-    A line of dialogue that would cover a sign shown with it moves to the top,
-    if the top is clear."""
+def write(path, w, h, dialogue=(), signs=(), lang="en"):
+    """dialogue: [(start, end, text)]; signs: sign dicts in the file's time; lang:
+    the language they're in. A line of dialogue that would cover a sign shown with
+    it moves to the top, if the top is clear."""
     rects = [(s["start"], s["end"], sign_rects(s, w, h)) for s in signs]
     events = []
     for a, b, t in dialogue:
@@ -176,4 +200,4 @@ def write(path, w, h, dialogue=(), signs=()):
                       + ("{\\an8}" if up else "") + escape(t))
     events += [sign_event(s, w, h) for s in sorted(signs, key=lambda s: s["start"])]
     with open(path, "w", encoding="utf-8-sig", newline="\n") as f:
-        f.write(header(w, h) + "\n".join(events) + "\n")
+        f.write(header(w, h, lang) + "\n".join(events) + "\n")

@@ -1,18 +1,21 @@
 """Put the finished dubs into the source video itself, renamed "<name> (dubbed)".
 
 Usage: scripts/deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assembled.mp4> ...] [--default VOICE]
+                          [--source ja --target en]
 
 Each <assembled.mp4> is assemble.py's output for one voice ("actor" or
-"american"), with its .en.srt and .ja.srt beside it, and its .en.ass and
-.signs.ass when the parts translate text in the picture. The result keeps every
-stream of the source as it is (video, audio, its own subtitles) and adds, in
-this order:
-  - audio: one English dub per voice, the default voice's first and marked
+"american"), with its subtitles beside it (.en.srt and .ja.srt for a dub
+between Japanese and English), and its .en.ass (.ja.ass, dubbing into
+Japanese) and .signs.ass when the parts translate text in the picture. The
+result keeps every stream of the source as it is (video, audio, its own
+subtitles) and adds, in this order:
+  - audio: one dub per voice, the default voice's first and marked
     default (some players ignore the flag and play the first track), then the
     source's own audio;
-  - subtitles: English per voice (the default voice's first and on by
-    default), the corrected Japanese transcript, then the source's own.
-With signs, the English tracks are the styled ones (signs placed by the text
+  - subtitles: the dub's per voice (the default voice's first and on by
+    default), the corrected transcript of the source, then the source's own.
+Track names are in each track's language (core.TITLES).
+With signs, the dub's tracks are the styled ones (signs placed by the text
 they translate), a signs-only track follows them, marked forced for players
 that show forced subtitles when subtitles are off, and the file becomes
 Matroska ("<name> (dubbed).mkv"): MP4's subtitles can't be placed.
@@ -28,21 +31,18 @@ import re
 import subprocess
 import sys
 
-from core import VOICE_LABEL
+from core import LANG3, PAIR, PAIRS, TITLES, VOICE_LABEL
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SUFFIX = " (dubbed)"
-JA_TITLE = "日本語 (transcript)"
-SIGNS_TITLE = "English (signs only)"
-OURS = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|English \(signs only\)|日本語 \(transcript\))$")
+LEGACY = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|English \(signs only\)|日本語 \(transcript\))$")
 
 
-def dub_title(voice):
-    return f"English dub ({VOICE_LABEL[voice]})"
-
-
-def sub_title(voice):
-    return {"actor": "English (actor-voice dub)", "american": "English (American dub)"}[voice]
+def ours(name):
+    """Whether a track is one we delivered (a dub, its subtitles, the signs, a transcript)."""
+    titles = {t for lang in TITLES.values() for kind in ("dub", "subs") for t in lang[kind].values()}
+    titles |= {lang[kind] for lang in TITLES.values() for kind in ("signs", "transcript")}
+    return name in titles or bool(LEGACY.match(name))
 
 
 def probe(path):
@@ -75,18 +75,21 @@ def delivered_name(source, mkv=False):
     return source.with_name(f"{stem}{SUFFIX}{ext}")
 
 
-def deliver(source, dubs, default, source_lang="jpn"):
-    """dubs: {voice: assembled mp4}. Returns the delivered file's path."""
+def deliver(source, dubs, default, pair=PAIR):
+    """dubs: {voice: assembled mp4}; pair: (source, target) languages. Returns the
+    delivered file's path."""
+    src, tgt = pair
+    titles = TITLES[tgt]
     source = pathlib.Path(source)
     voices = sorted(dubs, key=lambda v: v != default)
-    src = probe(source)
-    duration = float(src["format"]["duration"])
+    info = probe(source)
+    duration = float(info["format"]["duration"])
     for v in voices:
         d = float(probe(dubs[v])["format"]["duration"])
         if abs(d - duration) > 0.1:
             raise SystemExit(f"{dubs[v]} runs {d:.2f} s, the source {duration:.2f} s: assemble it from the same video")
-    keep = [s for s in src["streams"] if not OURS.match(name_of(s))]
-    dropped = len(src["streams"]) - len(keep)
+    keep = [s for s in info["streams"] if not ours(name_of(s))]
+    dropped = len(info["streams"]) - len(keep)
     vids = [s for s in keep if s["codec_type"] == "video"]
     auds = [s for s in keep if s["codec_type"] == "audio"]
     subs = [s for s in keep if s["codec_type"] == "subtitle"]
@@ -99,12 +102,13 @@ def deliver(source, dubs, default, source_lang="jpn"):
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(source)]
     for v in voices:
         cmd += ["-i", str(dubs[v])]
-    srts = [(dubs[v].with_suffix(".en.ass" if signs else ".en.srt"), "eng", sub_title(v)) for v in voices]
+    srts = [(dubs[v].with_suffix(f".{tgt}.ass" if signs else f".{tgt}.srt"), LANG3[tgt], titles["subs"][v])
+            for v in voices]
     if signs:
-        srts.append((signs, "eng", SIGNS_TITLE))
-    ja = dubs[voices[0]].with_suffix(".ja.srt")
-    if ja.exists():
-        srts.append((ja, "jpn", JA_TITLE))
+        srts.append((signs, LANG3[tgt], titles["signs"]))
+    transcript = dubs[voices[0]].with_suffix(f".{src}.srt")
+    if transcript.exists():
+        srts.append((transcript, LANG3[src], TITLES[src]["transcript"]))
     for path, _, _ in srts:
         if not path.exists():
             raise SystemExit(f"no subtitles at {path}")
@@ -130,14 +134,14 @@ def deliver(source, dubs, default, source_lang="jpn"):
         return [f"-metadata:s:{spec}", f"language={lang}", f"-metadata:s:{spec}", f"title={title}",
                 f"-metadata:s:{spec}", f"handler_name={title}"]
     for k, v in enumerate(voices):
-        cmd += label(f"a:{k}", "eng", dub_title(v)) + [f"-disposition:a:{k}", "default" if k == 0 else "0"]
+        cmd += label(f"a:{k}", LANG3[tgt], titles["dub"][v]) + [f"-disposition:a:{k}", "default" if k == 0 else "0"]
     for k, s in enumerate(auds, len(voices)):
         tags = s.get("tags") or {}
-        lang = tags.get("language") if tags.get("language") not in (None, "und") else source_lang
-        cmd += label(f"a:{k}", lang, name_of(s) or "日本語 (original)") + [f"-disposition:a:{k}", "0"]
+        lang = tags.get("language") if tags.get("language") not in (None, "und") else LANG3[src]
+        cmd += label(f"a:{k}", lang, name_of(s) or TITLES[src]["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
         cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else
-                                               "forced" if title == SIGNS_TITLE else "0"]
+                                               "forced" if title == titles["signs"] else "0"]
     for k, s in enumerate(subs, len(srts)):
         cmd += [f"-disposition:s:{k}", "0"]
     if not mkv:
@@ -171,10 +175,14 @@ def deliver(source, dubs, default, source_lang="jpn"):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("source")
+    ap.add_argument("source_video")
     ap.add_argument("dubs", nargs="+", metavar="voice=assembled.mp4")
     ap.add_argument("--default", help="the voice that plays first (default: actor if given, else the first)")
+    ap.add_argument("--source", default="ja", help="language the source speaks (default ja)")
+    ap.add_argument("--target", default="en", help="language of the dubs (default en)")
     args = ap.parse_args()
+    if (args.source, args.target) not in PAIRS:
+        raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
     dubs = {}
     for d in args.dubs:
         voice, _, path = d.partition("=")
@@ -182,7 +190,7 @@ def main():
             raise SystemExit(f"{d}: expected actor=FILE or american=FILE")
         dubs[voice] = pathlib.Path(path)
     default = args.default or ("actor" if "actor" in dubs else next(iter(dubs)))
-    deliver(args.source, dubs, default)
+    deliver(args.source_video, dubs, default, (args.source, args.target))
 
 
 if __name__ == "__main__":

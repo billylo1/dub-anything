@@ -52,6 +52,59 @@ def srt_time(t):
     return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
 
 
+# The language pair: what the source speaks and what the dub speaks, as ISO 639-1 codes.
+# `dub.py prep` records it in each part's segments.json; parts prepped before it was
+# recorded are Japanese -> English. A line keeps its original words in the field named
+# for the source language ("ja": "...", or "en": "..." when dubbing from English) and
+# the dub's words in "text".
+PAIR = ("ja", "en")
+LANG_NAMES = {"ja": "Japanese", "en": "English", "zh": "Chinese", "ko": "Korean", "es": "Spanish",
+              "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
+              "fi": "Finnish", "sv": "Swedish"}
+LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu",
+         "it": "ita", "pt": "por", "ru": "rus", "fi": "fin", "sv": "swe"}
+NATIVE = {"en": "English", "ja": "日本語"}  # a language's name in itself, for track titles
+PAIRS = {("ja", "en"), ("en", "ja")}       # the pairs the scripts know
+
+
+def langs(name):
+    """(source, target) of a part, from its segments.json, or from the part a voice's
+    copy (<part>.us) was made from."""
+    if name not in _langs:
+        for n in (name, base_part(name)):
+            seg = load_json(WORK / n / "segments.json")
+            if seg:
+                _langs[name] = (seg.get("source_lang") or PAIR[0], seg.get("target_lang") or PAIR[1])
+                break
+        else:
+            return PAIR  # not prepped (yet): not remembered
+    return _langs[name]
+
+
+_langs = {}
+
+
+def line_ref_default(tgt):
+    """Whether a part dubbed into `tgt` renders with per-line references unless its
+    script says otherwise. Not into Japanese: there the actor's English original
+    carried their accent into the takes (Whisper's confidence that one actor's
+    takes were Japanese fell from 0.96 to 0.53), and without it the takes followed
+    the actors' delivery as closely and matched their voices as well."""
+    return tgt != "ja"
+
+
+def said(line, src):
+    """A line's original words: its field named for the source language."""
+    return line.get(src) or ""
+
+
+def take_wav(job_id, lid, tgt, kind="seg"):
+    """A line's take in VoiceStudio's job folder: seg_<target>_<id>.wav (the take
+    mixed in), or src_<target>_<id>.wav (the engine's own take, kept beside a
+    voice-converted copy)."""
+    return JOBS / job_id / f"{kind}_{tgt}_{lid}.wav"
+
+
 LINE_REF_MAX = 19.5  # s; OmniVoice refuses a reference over 20 s that has a transcript
 ROOM_EFFECTS = {"echo", "pa"}  # their original carries the room, which a reference would clone
 
@@ -88,25 +141,27 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
     """Whether each line's window can be its own reference, as (why, cut) per line.
     `why` says why it can't, or is None if it can: speech running on past the
     window's end (the reference would end mid-sound, which OmniVoice finishes at
-    the start of the take), Whisper hearing something else than the line's `ja`
-    (crosstalk, another voice), or a voice nearer another of the clip's
-    characters. With `dips`, speech running on doesn't count where the voice dips
+    the start of the take), Whisper hearing something else than the line's
+    original words (crosstalk, another voice), or a voice nearer another of the
+    clip's characters. With `dips`, speech running on doesn't count where the voice dips
     to near silence right at the end (end_dip); `cut` is then where the line's
     reference ends, instead of the window's end. With `cast_lines`, a voice is
     only nearer another character when the characters' cast centroids (their clips
     plus lines cast to them in the show's other parts, draft.cast_centroids) say so
     too: a reference alone can miss much of a character's range. Cached in
-    refs/clean.json by what the check reads (window, voice and its clips, `ja`, and
-    the clips of every voice it's compared with), not by the take: rewording the
-    English keeps it, and rebuilding another of the clip's voices checks its lines
+    refs/clean.json by what the check reads (window, voice and its clips, original
+    words, and the clips of every voice it's compared with), not by the take: rewording the
+    dub's text keeps it, and rebuilding another of the clip's voices checks its lines
     again. Lines cast in other parts aren't in the key, so a decision stays put
-    while the show's other parts are directed."""
+    while the show's other parts are directed. Whisper listens in the part's source
+    language, and the line's original words are its field named for it."""
+    src = langs(work.name)[0]
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
     rivals = hashlib.sha1("|".join(f"{v}:{voice_sig(v)}" for v in sorted({line["voice"] for line in lines}))
                           .encode()).hexdigest()[:8]
     keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
-            f"{line['voice']}|{voice_sig(line['voice'])}|{line['ja']}".encode()).hexdigest()[:12]
+            f"{line['voice']}|{voice_sig(line['voice'])}|{said(line, src)}".encode()).hexdigest()[:12]
             + f"_{rivals}" + ("_dips" if dips else "") + ("_cast" if cast_lines else "") for line in lines]
     if any(k not in cache for k in keys):
         import draft
@@ -130,7 +185,8 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
         # Exclude this part's own lines: a line mustn't vouch for itself.
         cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
         # Katakana as hiragana: Whisper writes a name or a word in either ("タロウ", "ナニ").
-        strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—]", "", t).translate(KANA)  # noqa: E731
+        # English is compared by its letters, whatever the case and punctuation.
+        strip = lambda t: re.sub(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—'\"’:;]", "", t.lower()).translate(KANA)  # noqa: E731
         for line, key in zip(lines, keys):
             if key in cache:
                 continue
@@ -142,8 +198,8 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
                     why = "speech runs on past the window's end"
             x = audio[int(a * sr):int((cut or b) * sr)]
             if why is None:
-                heard = "".join(p["ja"] for p in draft.transcribe(model, x))
-                err = cer(strip(line["ja"]), strip(heard))
+                heard = "".join(p["said"] for p in draft.transcribe(model, x, language=src))
+                err = cer(strip(said(line, src)), strip(heard))
                 if err > LINE_REF_CER:
                     why = f"heard as '{heard}' ({err:.0%} off)"
                 elif b - a >= 0.6:
@@ -161,7 +217,8 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
 def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=False):
     """Per-line references: the voice's own clips (work/voices/<key>.wav), a 0.3 s
     pause, then this line's original from the job's separated vocals, with the
-    line's `ja` after the voice's transcript. OmniVoice copies its reference's
+    line's original words (`ja`, or the field of the part's source language) after
+    the voice's transcript. OmniVoice copies its reference's
     delivery, so the take follows the actor on this line while the clips hold the
     voice steady. Lines with a room effect or "line_ref": false keep the voice's
     reference, as do lines whose window isn't clean (unclean_windows; with `dips`,
@@ -170,6 +227,7 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
     the clips. Returns {id: (path, transcript)}; the path's name ends with the
     window (and the cut), which dub.py records as how the take was made."""
     voices = load_json(WORK / "voices.json", {})
+    src = langs(work.name)[0]
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
     (work / "refs").mkdir(exist_ok=True)
     refs = {}
@@ -194,7 +252,7 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
         if not path.exists():
             gap = np.zeros((int(0.3 * sr),) + own.shape[1:], dtype="float32")
             sf.write(path, np.concatenate([base, gap, own]), sr)
-        refs[i] = (str(path), f"{voices[line['voice']]['ref_text']} {line['ja']}")
+        refs[i] = (str(path), f"{voices[line['voice']]['ref_text']} {said(line, src)}")
     return refs
 
 
@@ -348,20 +406,22 @@ def _ref_frames(path, mtime):
     return wav.size(-1) * OMNIVOICE_FPS // OMNIVOICE_SR
 
 
-def take_length(ref_audio, ref_text, text, speed=1.0):
-    """How long a take of `text` cloned from this reference will be, in seconds of
-    trimmed speech (as speech_length measures it). OmniVoice fixes a take's length
-    before generating it (omnivoice/utils/duration.py): the reference's length
-    times the text's weight over the transcript's weight. A kanji weighs 3, kana
-    2.2, a digit 3.5, a Latin letter 1 and a space 0.2, so English follows how
-    dense the actor's Japanese is and how fast they said it. Anything under 2 s
-    is stretched towards 2 s; takes speak about half of that stretch. Fitted on
-    about 1,000 takes: typically within 0.2 s, nine in ten within 0.4 s, about
-    as close as two takes of one line are to each other."""
+def take_length(ref_audio, ref_text, text, speed=1.0, lang="en"):
+    """How long a take of `text` (in language `lang`) cloned from this reference
+    will be, in seconds of trimmed speech (as speech_length measures it). OmniVoice
+    fixes a take's length before generating it (omnivoice/utils/duration.py): the
+    reference's length times the text's weight over the transcript's weight. A
+    kanji weighs 3, kana 2.2, a digit 3.5, a Latin letter 1 and a space 0.2, so
+    English follows how dense the actor's Japanese is and how fast they said it
+    (and Japanese how many letters the actor's English took, and how fast).
+    Anything under 2 s is stretched towards 2 s; takes speak about half of that
+    stretch. Fitted on about 1,000 Japanese -> English takes: typically within
+    0.2 s, nine in ten within 0.4 s, about as close as two takes of one line are
+    to each other."""
     estimator, add_punctuation, _, normalize = _omnivoice()
     ref = pathlib.Path(ref_audio)
     frames = _ref_frames(str(ref), ref.stat().st_mtime)
-    text, ref_text = normalize(text, "en"), add_punctuation(ref_text)
+    text, ref_text = normalize(text, lang), add_punctuation(ref_text)
     plain = estimator.estimate_duration(text, ref_text, frames, low_threshold=None)
     stretched = estimator.estimate_duration(text, ref_text, frames)
     return at_speed((stretched - STRETCH_USED * (stretched - plain)) / OMNIVOICE_FPS, speed)
@@ -426,6 +486,7 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
     "text_us"): its takes are ignored and every line is estimated."""
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
+    tgt = langs(name)[1]
     script = load_json(work / "script.json")
     lines = script["lines"]
     rendered = load_json(work / "rendered.json", {})
@@ -445,16 +506,16 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
     own, base = {}, {}  # per-line references by line id, voices' references by key
     if predict and not american:
         voices = load_json(WORK / "voices.json", {})
-        todo = [k for k, i in enumerate(ids) if not (JOBS / job / f"seg_en_{i}.wav").exists()
+        todo = [k for k, i in enumerate(ids) if not take_wav(job, i, tgt).exists()
                 and "clips" in voices[lines[k]["voice"]]]
         base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
-        if todo and mode.get("line_ref", not rendered):
+        if todo and mode.get("line_ref", not rendered and line_ref_default(tgt)):
             own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
                             dips=mode.get("dips", not rendered), cast_lines=mode.get("cast_lines", not rendered))
     spans = actor_spans(job, lines) if short or (predict and american) else [None] * len(lines)
     rows = []
     for i, (line, sid, span) in enumerate(zip(lines, ids, spans)):
-        wav = JOBS / job / f"seg_en_{sid}.wav"
+        wav = take_wav(job, sid, tgt)
         if other:
             wav = JOBS / job / "none"
         end = span and span[1] if short else None
@@ -474,7 +535,7 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
             if american and predict:
                 length = row["est"] = indextts_length(line["text"], span[1] - span[0] if span else row["window"])
             elif ref:
-                length = row["est"] = take_length(*ref, line["text"])
+                length = row["est"] = take_length(*ref, line["text"], lang=tgt)
             if length:
                 row["flag"] = "OVER?" if at_speed(length, fastest, exponent) > row["room"] else (
                     "risk" if at_speed(length, fastest, exponent) > row["room"] - 0.3 else "")
@@ -491,10 +552,24 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
 # derives from it (a line's "text_us" replaces its text for that voice only).
 VOICE_SUFFIX = {"actor": "", "american": ".us"}
 VOICE_LABEL = {"actor": "actor's voice", "american": "American"}
+# Our tracks' names in the delivered file, in the track's own language: the dub's audio
+# and subtitles per voice, the signs alone, the source's transcript and its own audio.
+TITLES = {
+    "en": {"dub": {"actor": "English dub (actor's voice)", "american": "English dub (American)"},
+           "subs": {"actor": "English (actor-voice dub)", "american": "English (American dub)"},
+           "signs": "English (signs only)", "transcript": "English (transcript)", "original": "English (original)"},
+    "ja": {"dub": {"actor": "日本語吹替（俳優の声）"}, "subs": {"actor": "日本語（俳優の声の吹替）"},
+           "signs": "日本語（画面の文字のみ）", "transcript": "日本語 (transcript)", "original": "日本語 (original)"},
+}
 
 
 def voice_part(name, voice):
     return name + VOICE_SUFFIX[voice]
+
+
+def base_part(name):
+    """The part a voice's copy (<part>.us) was made from; the name itself otherwise."""
+    return next((name[:-len(s)] for s in VOICE_SUFFIX.values() if s and name.endswith(s)), name)
 
 
 def line_id(line):

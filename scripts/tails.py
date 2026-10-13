@@ -18,7 +18,7 @@ import sys
 import numpy as np
 import soundfile as sf
 
-from core import JOBS, WORK, line_id, load_json
+from core import JOBS, WORK, langs, line_id, load_json, take_wav
 from edges import HOP, SR, frames_db
 from faster_whisper.audio import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -63,7 +63,7 @@ def main():
             continue
         ms, capped = got
         take = ""
-        wav = JOBS / job / f"seg_en_{line_id(line)}.wav"
+        wav = take_wav(job, line_id(line), langs(args.name)[1])
         if wav.exists():
             x, sr = sf.read(wav, dtype="float32")
             x = x.mean(1) if x.ndim > 1 else x

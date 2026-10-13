@@ -1,16 +1,18 @@
 """Run a dub from source video to the delivered file: the machine work, around the director's.
 
 Usage:
-  scripts/dubrama.py new <video> [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
+  scripts/dubrama.py new <video> [--source ja --target en] [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
   scripts/dubrama.py run <slug> [--watch]       do every step that can run now (see below)
   scripts/dubrama.py status <slug>              where each part stands, and what blocks it
   scripts/dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
   scripts/dubrama.py report <slug>              write and print the report (work/jobs/<slug>/report.md)
   scripts/dubrama.py cleanup <slug>             after delivery, move the bulk to videos/_to-delete/<slug>/
 
-A job (work/jobs/<slug>/job.json) is one source video and the voices to dub it in
-("both" plays the actor's voice by default). The source is hard-linked into
-videos/<slug>.<ext> so the split keeps working after delivery renames it.
+A job (work/jobs/<slug>/job.json) is one source video, the language pair (Japanese
+-> English unless --source/--target say otherwise; the American voice is English
+only) and the voices to dub it in ("both" plays the actor's voice by default). The
+source is hard-linked into videos/<slug>.<ext> so the split keeps working after
+delivery renames it.
 
 run does, in order and only what isn't done yet: split; dub.py prep, then
 separate.py, subs.py (with --captions or --subtitles) and draft.py, first over the first part to
@@ -48,7 +50,8 @@ import sys
 import time
 
 import backend
-from core import JOBS, ROOT, VOICE_LABEL, WORK, actor_ends, line_id, load_json, speech_length, voice_part
+from core import (JOBS, LANG_NAMES, PAIR, PAIRS, ROOT, VOICE_LABEL, WORK, actor_ends, langs, line_id, line_ref_default,
+                  load_json, speech_length, take_wav, voice_part)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 JOB_DIR = WORK / "jobs"
@@ -87,6 +90,11 @@ def load_job(slug):
 
 def save_job(job):
     job_file(job["slug"]).write_text(json.dumps(job, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def job_langs(job):
+    """(source, target) of a job; jobs made before the pair was recorded are Japanese -> English."""
+    return tuple(job.get("langs", PAIR))
 
 
 def parts(job):
@@ -175,7 +183,9 @@ def prepare_step(job, ps):
     label = names[0] if len(names) == 1 else f"{names[0]}..{names[-1].rsplit('-', 1)[-1]}"
     for p in chunk:
         if not (WORK / p["name"] / "segments.json").exists():
-            ok, out = tool(job, f"prep {p['name']}", [PY, "scripts/dub.py", "prep", p["file"]], f"prep-{p['name']}")
+            src, tgt = job_langs(job)
+            ok, out = tool(job, f"prep {p['name']}", [PY, "scripts/dub.py", "prep", p["file"], "--source", src,
+                                                      "--target", tgt], f"prep-{p['name']}")
             if not ok and "produced no segments" in out:
                 # No speech at all (a silent channel card): nothing to dub, so it stays original.
                 (WORK / p["name"]).mkdir(exist_ok=True)
@@ -285,7 +295,7 @@ def variant(job, p, voice):
     base = WORK / p["name"]
     script = load_json(base / "script.json")
     if voice == "actor":
-        want = dict(ACTOR_RENDER)
+        want = {**ACTOR_RENDER, "line_ref": line_ref_default(langs(p["name"])[1])}
         if load_json(base / "rendered.json"):
             # Rendered before "cast_lines" existed: dub.py reads it missing as off, and
             # writing it would change the script's record and render the part again.
@@ -438,7 +448,7 @@ def deliver_job(job, ps):
             return problem(job, f"assemble.py failed for the {voice} voice: {last_error(out)}")
         dubs[voice] = pathlib.Path(m.group(1).strip())
     log(f"deliver into {pathlib.Path(job['source']).name}")
-    out = deliver.deliver(job["source"], dubs, job["default"])
+    out = deliver.deliver(job["source"], dubs, job["default"], job_langs(job))
     job["source"] = str(out)
     job["delivered"] = {"path": str(out), "at": time.strftime("%Y-%m-%d %H:%M"), "state": sha}
     job.pop("problems", None)
@@ -451,7 +461,9 @@ def report(job, ps, quiet=False):
     md = [f"# {job['title']}", ""]
     if job.get("delivered"):
         md += [f"Delivered: `{job['delivered']['path']}` ({job['delivered']['at']})", ""]
-    md += [f"Voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} (default: {VOICE_LABEL[job['default']]})", ""]
+    src, tgt = job_langs(job)
+    md += [f"{LANG_NAMES[src]} -> {LANG_NAMES[tgt]}; voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} "
+           f"(default: {VOICE_LABEL[job['default']]})", ""]
     problems = list(job.get("problems", []))
     listen, original, flags = [], [], {v: [] for v in job["voices"]}
     timing = {v: [] for v in job["voices"]}
@@ -479,7 +491,7 @@ def report(job, ps, quiet=False):
             if seg and st.get("stage") == "final":
                 lines = load_json(WORK / name / "script.json")["lines"]
                 for line, end in zip(lines, actor_ends(seg["job_id"], lines)):
-                    wav = JOBS / seg["job_id"] / f"seg_en_{line_id(line)}.wav"
+                    wav = take_wav(seg["job_id"], line_id(line), langs(name)[1])
                     if end is not None and wav.exists():
                         timing[voice].append(end - speech_length(wav))
     if problems:
@@ -528,6 +540,11 @@ def cmd_new(args):
     if job_file(slug).exists():
         raise SystemExit(f"job {slug!r} exists: scripts/dubrama.py status {slug}")
     voices = {"both": ["actor", "american"], "actor": ["actor"], "american": ["american"]}[args.voices]
+    if (args.source, args.target) not in PAIRS:
+        raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
+    if "american" in voices and args.target != "en":
+        raise SystemExit(f"the American voice speaks English only: use --voices actor for a dub into "
+                         f"{LANG_NAMES[args.target]}")
     VIDEOS.mkdir(exist_ok=True)
     link = VIDEOS / f"{slug}{src.suffix.lower()}"
     if not link.exists():
@@ -536,12 +553,14 @@ def cmd_new(args):
         except OSError:
             print(f"(can't hard-link across drives: copying the source to {link})")
             shutil.copy2(src, link)
-    job = {"slug": slug, "title": src.stem, "source": str(src), "video": str(link), "voices": voices,
+    job = {"slug": slug, "title": src.stem, "source": str(src), "video": str(link),
+           "langs": [args.source, args.target], "voices": voices,
            "default": voices[0], "split": {"minutes": args.minutes, "whole": args.whole}, "captions": "open" if args.subtitles else args.captions,
            "signs": args.signs, "created": time.strftime("%Y-%m-%d %H:%M")}
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
-    print(f"job {slug}: {src.name}, {' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
+    print(f"job {slug}: {src.name}, {LANG_NAMES[args.source]} -> {LANG_NAMES[args.target]}, "
+          f"{' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
     print(f"next: scripts/dubrama.py run {slug} --watch   (in the background), then direct the parts")
 
 
@@ -561,7 +580,8 @@ def cmd_ready(args):
 def cmd_status(args):
     job = load_job(args.slug)
     ps = parts(job)
-    print(f"{job['slug']}: {pathlib.Path(job['source']).name}; voices {', '.join(job['voices'])}"
+    print(f"{job['slug']}: {pathlib.Path(job['source']).name}; {' -> '.join(job_langs(job))}; "
+          f"voices {', '.join(job['voices'])}"
           + (f"; delivered {job['delivered']['at']}" if job.get("delivered") else ""))
     if not ps:
         print("  not split yet")
@@ -704,6 +724,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("new")
     a.add_argument("video")
+    a.add_argument("--source", default="ja", help="language the video speaks (default ja)")
+    a.add_argument("--target", default="en", help="language to dub it into (default en)")
     a.add_argument("--voices", choices=["actor", "american", "both"], default="actor")
     a.add_argument("--slug")
     a.add_argument("--minutes", type=float, default=3)

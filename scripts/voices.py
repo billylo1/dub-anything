@@ -31,7 +31,7 @@ lines already cast to them in its other parts, best three first.
 import json
 import sys
 
-from core import JOBS, WORK, load_json, update_voices, voice_clips, voice_wav, whisper_setup
+from core import JOBS, WORK, langs, load_json, update_voices, voice_clips, voice_wav, whisper_setup
 
 sys.stdout.reconfigure(encoding="utf-8")
 SR = 16000
@@ -84,7 +84,7 @@ def check(keys):
         t = 0.0
         for clip, a, b in voice_clips(voices[k]):
             piece = audio[int(t * SR):int((t + b - a) * SR)]
-            segs, _ = model.transcribe(piece, language="ja", beam_size=5, vad_filter=False,
+            segs, _ = model.transcribe(piece, language=langs(clip)[0], beam_size=5, vad_filter=False,
                                        condition_on_previous_text=False)
             print(f"   {clip} {a:.2f}-{b:.2f} ({b - a:.1f} s): {''.join(s.text for s in segs).strip()}")
             t += b - a + 0.3

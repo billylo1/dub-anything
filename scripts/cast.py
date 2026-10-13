@@ -17,7 +17,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
 import draft
-from core import JOBS, WORK, load_json
+from core import JOBS, WORK, langs, load_json, said
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -65,7 +65,8 @@ def main():
         print(f"\n=== C{c}  {len(members)} lines  {hint}")
         for k in sorted(members, key=lambda k: (items[k][0], items[k][2]["start"])):
             name, i, line, v = items[k]
-            print(f"  {name} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} {float(v @ centre):4.2f}  {line['ja']}")
+            print(f"  {name} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} {float(v @ centre):4.2f}  "
+                  f"{said(line, langs(name)[0])}")
 
 
 if __name__ == "__main__":

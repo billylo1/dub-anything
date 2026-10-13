@@ -1,7 +1,7 @@
-"""Compare each generated English clip's speech length with its script window,
+"""Compare each generated clip's speech length with its script window,
 and with how long the actor actually speaks in it.
 
-Usage: scripts/fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job's seg_en_L*.wav)
+Usage: scripts/fit.py <name> [--only-flags]   (reads work/<name>/script.json and the job's seg_<lang>_L*.wav)
 Lines not rendered yet get an estimate (~): the length OmniVoice itself will give
 them, computed with its own rule from the reference the render will use (the
 line's own original, or the voice's clips for the lines listed as falling back).
@@ -20,7 +20,7 @@ its speaker's lines: lines on that reference inherit its pace (OmniVoice only).
 import argparse
 import statistics
 
-from core import WORK, _omnivoice, fit_rows, load_json, voice_clips
+from core import WORK, _omnivoice, fit_rows, langs, load_json, said, voice_clips
 
 ap = argparse.ArgumentParser()
 ap.add_argument("name")
@@ -37,14 +37,15 @@ def pace_check(name, tolerance=0.15):
     talks (a read-out intro, an excited burst) makes those takes run short."""
     weight = _omnivoice()[0].calculate_total_weight
     voices = load_json(WORK / "voices.json", {})
+    src = langs(name)[0]  # a voice's lines are all its show's, in one language
     scripts = [load_json(p) for p in WORK.glob("*/script.json")]
     for key in sorted({ln["voice"] for ln in load_json(WORK / name / "script.json")["lines"]}):
         spec = voices.get(key)
         if not spec:
             continue
         ref = weight(spec["ref_text"]) / sum(b - a for _, a, b in voice_clips(spec))
-        rates = [weight(ln["ja"]) / (ln["end"] - ln["start"]) for s in scripts for ln in s["lines"]
-                 if ln.get("voice") == key and ln.get("ja") and ln["end"] - ln["start"] >= 1.5]
+        rates = [weight(said(ln, src)) / (ln["end"] - ln["start"]) for s in scripts for ln in s["lines"]
+                 if ln.get("voice") == key and said(ln, src) and ln["end"] - ln["start"] >= 1.5]
         if len(rates) < 5:
             continue
         typical = statistics.median(rates)

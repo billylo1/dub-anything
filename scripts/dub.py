@@ -1,17 +1,20 @@
 """Drive VoiceStudio's dubbing backend (http://127.0.0.1:3900) headlessly.
 
-  prep <video> [--speakers N]   upload, separate vocals, transcribe + diarize;
-                                writes work/<name>/segments.json and prints the transcript.
-                                A voice variant (<part>.us) is the same audio as its
-                                prepped part: only uploaded, with the part's transcript
+  prep <video> [--speakers N] [--source ja --target en]
+                                upload, separate vocals, transcribe + diarize;
+                                writes work/<name>/segments.json (with the language
+                                pair, Japanese -> English by default) and prints the
+                                transcript. A voice variant (<part>.us) is the same
+                                audio as its prepped part: only uploaded, with the
+                                part's transcript and pair
   generate <name>               reads work/<name>/script.json (hand-directed lines:
                                 start/end/voice/text, optional instruct/effect;
-                                voices from work/voices.json) or else en.json
-                                ({segment_id: English text}), synthesizes cloned
-                                English speech, exports MP4 + SRT. By default (the
-                                script's "render" block) each line's reference ends
-                                with the actor's own original of it, and takes are
-                                re-timed to end where the actor stops.
+                                voices from work/voices.json) or else <target>.json
+                                ({segment_id: text}), synthesizes cloned speech in
+                                the part's target language, exports MP4 + SRT. By
+                                default (the script's "render" block) each line's
+                                reference ends with the actor's own original of it,
+                                and takes are re-timed to end where the actor stops.
 """
 import argparse
 import hashlib
@@ -28,9 +31,10 @@ import numpy as np
 import requests
 import soundfile as sf
 
-from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_spans, fit_rows,
-                  VOICE_SUFFIX, indextts_length, line_id, line_refs, load_json, out_dir, speech_length, srt_time,
-                  take_length, voice_sig, voice_wav)
+from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, LANG_NAMES, PAIRS, SPEED_EXPONENT, WORK, actor_spans,
+                  base_part, fit_rows, indextts_length, langs, line_id, line_ref_default, line_refs, load_json, out_dir,
+                  speech_length,
+                  srt_time, take_length, take_wav, voice_sig, voice_wav)
 from gpulock import hold_gpu
 
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
@@ -142,26 +146,31 @@ def cmd_prep(args):
     video = pathlib.Path(args.video)
     work = WORK / video.stem
     work.mkdir(parents=True, exist_ok=True)
+    base = base_part(video.stem)
+    variant = base != video.stem and (WORK / base / "segments.json").exists()
+    if variant:
+        args.source, args.target = langs(base)
+    if (args.source, args.target) not in PAIRS:
+        raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
 
-    print(f"upload {video.name}")
+    print(f"upload {video.name} ({LANG_NAMES[args.source]} -> {LANG_NAMES[args.target]})")
     with open(video, "rb") as f:
         r = requests.post(f"{API}/dub/upload",
                           files={"video": (video.name, f, "video/mp4")},
-                          data={"source_lang": "ja", "input_type": "video"}, timeout=300)
+                          data={"source_lang": args.source, "input_type": "video"}, timeout=300)
     r.raise_for_status()
     job = r.json()
     job_id = job["job_id"]
     print(f"  job {job_id}")
     wait_task(job["task_id"], {"ready"})
 
-    base = next((video.stem[:-len(sfx)] for sfx in VOICE_SUFFIX.values() if sfx and video.stem.endswith(sfx)), None)
-    if base and (WORK / base / "segments.json").exists():
+    if variant:
         # Another voice of a prepped part: same audio, so its transcript (the renders
         # send their own lines) instead of transcribing and diarizing again.
         doc = {**load_json(WORK / base / "segments.json"), "job_id": job_id, "video": str(video)}
         (work / "segments.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-        if (WORK / base / "ja.srt").exists():
-            shutil.copy2(WORK / base / "ja.srt", work / "ja.srt")
+        if (WORK / base / f"{args.source}.srt").exists():
+            shutil.copy2(WORK / base / f"{args.source}.srt", work / f"{args.source}.srt")
         print(f"  transcript from {base} ({len(doc['segments'])} segments)")
         return
 
@@ -189,11 +198,11 @@ def cmd_prep(args):
         raise RuntimeError("transcription ended without a final event")
     print(f"  [{time.time() - t0:5.0f}s] final: {len(final['segments'])} segments")
 
-    doc = {"job_id": job_id, "video": str(video), "source_lang": final.get("source_lang"),
+    doc = {"job_id": job_id, "video": str(video), "source_lang": args.source, "target_lang": args.target,
            "speaker_clones": final.get("speaker_clones"), "segments": final["segments"]}
     (work / "segments.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    with open(work / "ja.srt", "w", encoding="utf-8") as f:
+    with open(work / f"{args.source}.srt", "w", encoding="utf-8") as f:
         for i, s in enumerate(final["segments"], 1):
             f.write(f"{i}\n{srt_time(s['start'])} --> {srt_time(s['end'])}\n"
                     f"[{s.get('speaker_id')}] {s['text']}\n\n")
@@ -242,14 +251,14 @@ def speech_db(audio):
     return 10 * np.log10(np.mean(10 ** (active / 10)))
 
 
-def match_gains(job_id, lines, ids):
+def match_gains(job_id, lines, ids, tgt):
     """Per-line gain toward the original actor's level: the clip-wide offset is
     matched fully, each line's deviation from it by half, so whispered lines stay
     quieter than shouted ones without dropping out."""
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
     diffs = []
     for line, sid in zip(lines, ids):
-        clip = JOBS / job_id / f"seg_en_{sid}.wav"
+        clip = take_wav(job_id, sid, tgt)
         orig = speech_db(vocals[int(line["start"] * sr):int(line["end"] * sr)])
         gen = speech_db(sf.read(clip, dtype="float32")[0]) if clip.exists() else None
         diffs.append(None if orig is None or gen is None else orig - gen)
@@ -290,7 +299,7 @@ def check_instruct(line):
 FILL_PASSES = 2  # re-timing passes after the natural-pace render; a third changed nothing in trials
 # The render's "voice": "actor" (OmniVoice clones the actor, accent and all) or "american"
 # (IndexTTS speaks native English, following each line's original delivery, and vc.py
-# then gives every take the actor's timbre).
+# then gives every take the actor's timbre; English dubs only).
 VOICES = ("actor", "american")
 
 
@@ -298,23 +307,25 @@ def file_sha(path):
     return hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:16]
 
 
-def render_mode(work, script, args):
+def render_mode(work, script, args, tgt="en"):
     """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
     "dips": .., "cast_lines": .., "predict_speed": .., "voice": "actor" | "american"}. A
     part without one gets the defaults (per-line references, fill, references cut at
     a dip when speech runs on past a window, and the window check's voice test against
     the characters' cast lines too: core.unclean_windows) if it has never been
-    rendered, and the earlier behaviour (all off) if it has, so approved takes don't
-    change under a new default; the block is then written so later runs agree. The
-    --[no-]line-ref, --[no-]fill, --[no-]predict-speed and --voice flags override it
-    for one run."""
+    rendered (per-line references only where core.line_ref_default says so for the
+    target language), and the earlier behaviour (all off) if it has, so approved
+    takes don't change under a new default; the block is then written so later runs
+    agree. The --[no-]line-ref, --[no-]fill, --[no-]predict-speed and --voice flags
+    override it for one run."""
     mode = script.get("render")
     fresh = not load_json(work / "rendered.json")
     if mode is None or "dips" not in mode or ("cast_lines" not in mode and fresh):
         # "dips" and "cast_lines" came after the others: a part rendered without them keeps its
         # takes. A rendered part's block isn't rewritten for "cast_lines" (missing reads as off),
         # so its script, and dubrama.py's record of it, stay as they were.
-        mode = script["render"] = {"line_ref": fresh, "fill": fresh, "dips": fresh, **(mode or {})}
+        mode = script["render"] = {"line_ref": fresh and line_ref_default(tgt), "fill": fresh, "dips": fresh,
+                                   **(mode or {})}
         if fresh:
             mode.setdefault("cast_lines", True)
         (work / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -327,6 +338,8 @@ def render_mode(work, script, args):
             mode[key] = getattr(args, key)
     if mode["voice"] not in VOICES:
         raise SystemExit(f"render voice {mode['voice']!r}: use one of {VOICES}")
+    if mode["voice"] == "american" and tgt != "en":
+        raise SystemExit(f"the american voice speaks English only; this part is dubbed into {LANG_NAMES[tgt]}")
     if mode["voice"] == "american" and mode["line_ref"]:
         # IndexTTS takes the actor's delivery from its emotion reference instead.
         mode["line_ref"] = False
@@ -337,16 +350,17 @@ def cmd_generate(args):
     work = WORK / args.name
     doc = json.loads((work / "segments.json").read_text(encoding="utf-8"))
     job_id = doc["job_id"]
+    tgt = langs(args.name)[1]
     script = load_json(work / "script.json")
-    mode = render_mode(work, script, args) if script else {"line_ref": False, "fill": False, "predict_speed": False,
-                                                           "voice": "actor"}
+    mode = render_mode(work, script, args, tgt) if script else {"line_ref": False, "fill": False,
+                                                                "predict_speed": False, "voice": "actor"}
     american = mode["voice"] == "american"
     if args.engine is None:
         args.engine = "indextts2" if american else "omnivoice"
     if args.emo_alpha is None:
         args.emo_alpha = 0.9 if american and args.engine != "omnivoice" else 0.0
-    # Takes whose seg_en file holds a voice-converted copy (id -> its hash); the
-    # engine's own take is kept beside it as src_en_<id>.wav.
+    # Takes whose seg_<target> file holds a voice-converted copy (id -> its hash); the
+    # engine's own take is kept beside it as src_<target>_<id>.wav.
     converted_path = work / "converted.json"
     converted = load_json(converted_path, {})
     rendered_path = work / "rendered.json"  # synthesis settings each cached line was made with
@@ -365,7 +379,7 @@ def cmd_generate(args):
     def engine_take(i):
         """The engine's own take. A converted copy can start or end a little
         differently, so fill judges timing by the take it was made from."""
-        seg, src = JOBS / job_id / f"seg_en_{i}.wav", JOBS / job_id / f"src_en_{i}.wav"
+        seg, src = take_wav(job_id, i, tgt), take_wav(job_id, i, tgt, "src")
         if src.exists() and seg.exists() and converted.get(i) == file_sha(seg):
             return src
         return seg
@@ -376,7 +390,7 @@ def cmd_generate(args):
         import vc
         todo = []
         for line, i in zip(script["lines"], ids):
-            seg, src = JOBS / job_id / f"seg_en_{i}.wav", JOBS / job_id / f"src_en_{i}.wav"
+            seg, src = take_wav(job_id, i, tgt), take_wav(job_id, i, tgt, "src")
             if not seg.exists():
                 continue
             if converted.get(i) != file_sha(seg):
@@ -403,19 +417,19 @@ def cmd_generate(args):
         with, and the ids to synthesize (None: all)."""
         segments, ids, settings = [], [], {}
         if not script:
-            english = json.loads((work / "en.json").read_text(encoding="utf-8"))
+            dubbed = json.loads((work / f"{tgt}.json").read_text(encoding="utf-8"))
             for s in doc["segments"]:
-                text = english.get(s["id"], "").strip()
+                text = dubbed.get(s["id"], "").strip()
                 if text:
                     segments.append({"start": s["start"], "end": s["end"], "text": text,
-                                     "profile_id": s.get("profile_id") or "", "target_lang": "en"})
+                                     "profile_id": s.get("profile_id") or "", "target_lang": tgt})
                     ids.append(s["id"])
             return segments, ids, settings, None
-        # Hand-directed lines: own timing, speaker and English text per line.
+        # Hand-directed lines: own timing, speaker and text per line.
         voices = load_json(WORK / "voices.json", {})
         for line in script["lines"]:
             seg = {"start": line["start"], "end": line["end"], "text": line["text"],
-                   "profile_id": ensure_voice(line["voice"]), "target_lang": "en",
+                   "profile_id": ensure_voice(line["voice"]), "target_lang": tgt,
                    "effect_preset": line.get("effect", args.effect)}
             if check_instruct(line):
                 seg["instruct"] = check_instruct(line)
@@ -457,7 +471,7 @@ def cmd_generate(args):
                 elif length is None and end and mode["predict_speed"] and (i in refs or "clips" in voices[line["voice"]]):
                     ref = refs.get(i) or (voice_wav(line["voice"]), voices[line["voice"]].get("ref_text", ""))
                     # The prediction is at natural pace, whatever speed a lost take had.
-                    length, prev, speed = take_length(*ref, line["text"]), None, None
+                    length, prev, speed = take_length(*ref, line["text"], lang=tgt), None, None
                 if end and length and abs(length - end) > FILL_TOL:
                     speed = min(max((prev or 1.0) * (length / end) ** power, FILL_SPEED[0]), FILL_SPEED[1])
                 if speed and abs(speed - 1) >= 0.01:
@@ -483,13 +497,13 @@ def cmd_generate(args):
             return segments, ids, settings, None
         # Missing clips, clips made with other settings, or queued re-rolls;
         # an empty list re-mixes cached speech without synthesizing anything.
-        regen = [i for i in ids if not (JOBS / job_id / f"seg_en_{i}.wav").exists() or (first and i in reroll)
+        regen = [i for i in ids if not take_wav(job_id, i, tgt).exists() or (first and i in reroll)
                  or i in stuck or rendered.get(i, {"steps": 16, "effect": "broadcast", "instruct": ""}) != settings[i]]
         return segments, ids, settings, regen
 
     def request(segments, ids, regen):
-        body = {"segments": segments, "segment_ids": ids, "language": "English",
-                "language_code": "en", "timing_strategy": args.timing,
+        body = {"segments": segments, "segment_ids": ids, "language": LANG_NAMES[tgt],
+                "language_code": tgt, "timing_strategy": args.timing,
                 "voice_match": args.voice_match, "num_step": args.steps}
         if args.timing == "concise":
             body["overflow_budget_s"] = args.overflow
@@ -499,7 +513,7 @@ def cmd_generate(args):
 
     def level(segments, ids):
         """Level each line against the actor, from the takes on disk."""
-        for seg, gain in zip(segments, match_gains(job_id, script["lines"], ids)):
+        for seg, gain in zip(segments, match_gains(job_id, script["lines"], ids, tgt)):
             if gain is not None:
                 seg["gain"] = gain
 
@@ -535,7 +549,7 @@ def cmd_generate(args):
                 # Record what each clip was made with, even when assembly fails after
                 # synthesis (e.g. dub_timing_overflow), so a retry doesn't redo them.
                 for i, s in settings.items():
-                    wav = JOBS / job_id / f"seg_en_{i}.wav"
+                    wav = take_wav(job_id, i, tgt)
                     if wav.exists() and (wav.stat().st_mtime >= t0 - 1 or (regen is not None and i not in regen)):
                         rendered[i] = s
                 if settings:
@@ -578,15 +592,15 @@ def cmd_generate(args):
     suffix = f".{args.tag}" if args.tag else ""
     print("export mp4")
     r = requests.get(f"{API}/dub/download/{job_id}",
-                     params={"include_tracks": "en", "default_track": "en", "preserve_bg": "true"},
+                     params={"include_tracks": tgt, "default_track": tgt, "preserve_bg": "true"},
                      timeout=1800)
     if r.status_code >= 400:
         raise RuntimeError(f"download {r.status_code}: {r.text[:500]}")
-    mp4 = out / f"{args.name}.en{suffix}.mp4"
+    mp4 = out / f"{args.name}.{tgt}{suffix}.mp4"
     mp4.write_bytes(r.content)
-    r = requests.get(f"{API}/dub/srt/{job_id}", params={"lang": "en"}, timeout=120)
+    r = requests.get(f"{API}/dub/srt/{job_id}", params={"lang": tgt}, timeout=120)
     r.raise_for_status()
-    (out / f"{args.name}.en{suffix}.srt").write_text(r.text, encoding="utf-8")
+    (out / f"{args.name}.{tgt}{suffix}.srt").write_text(r.text, encoding="utf-8")
     print(f"  wrote {mp4}")
 
 
@@ -596,6 +610,8 @@ def main():
     a = sub.add_parser("prep")
     a.add_argument("video")
     a.add_argument("--speakers", type=int)
+    a.add_argument("--source", default="ja", help="language the video speaks (default ja)")
+    a.add_argument("--target", default="en", help="language to dub it into (default en)")
     a.set_defaults(fn=cmd_prep)
     b = sub.add_parser("generate")
     b.add_argument("name")
@@ -622,7 +638,7 @@ def main():
     b.add_argument("--voice", choices=VOICES, default=None,
                    help="override the script's render voice for this run: 'actor' clones the actor (their "
                         "accent too); 'american' speaks native English (IndexTTS) and converts each take to "
-                        "the actor's timbre (vc.py)")
+                        "the actor's timbre (vc.py; English dubs only)")
     b.add_argument("--line-ref", action=argparse.BooleanOptionalAction, default=None,
                    help="override the script's render mode for this run: give each line a reference of its "
                         "voice's clips plus its own original, so the take follows the actor's delivery on that "

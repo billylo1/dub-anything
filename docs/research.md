@@ -241,6 +241,23 @@ originals per part.
     the silence around a take into sound, a stray "and" before the line,
     which once made a take longer than its window, so converted takes are now
     silenced outside the original take's speech.
+16. **Into Japanese, the per-line reference carries the English accent.** A
+    live-action sketch was dubbed from English into Japanese (32 lines, three
+    clones) twice from the same script, with per-line references and
+    without. Whisper's confidence that a take is Japanese held at 0.99 for the
+    narrator either way, but the most expressive and most strongly accented
+    actor's takes fell from a median 0.96 without her own English original in
+    the reference to 0.53 with it, half of them under 0.5. Without per-line
+    references the takes followed the actors' arousal more closely, not less
+    (rank correlation 0.84 against 0.58), matched their voices as well
+    (WeSpeaker 0.53 against 0.52) and ended as near the actor (median 0.06
+    against 0.05 s). The first QA check flagged none of them against three
+    with per-line references. Dubbing into Japanese now leaves per-line
+    references off (`core.line_ref_default`). One sketch is little to go on:
+    it awaits a listener, and a calmer show could come out the other way.
+    OmniVoice's length rule held for Japanese takes as it did for English:
+    with each take's reference and speed, a median error of +0.02 s, 84%
+    within 0.2 s and 97% within 0.4 s.
 
 ## What the pipeline does now
 
@@ -256,9 +273,16 @@ emotion reference and fill, then `vc.py` converts each settled take to the
 actor's timbre. Fill re-times its seeded takes exactly through IndexTTS's
 duration factor, `fit.py` predicts their length from the English and the
 actor's speech, and `lineqa.py` converts a take again when only the
-conversion garbled it.
+conversion garbled it. A part dubbed from English into Japanese renders
+without per-line references (finding 16), and `lineqa.py` compares its takes by
+their reading in kana.
 
 ## Open questions
+
+- **A native Japanese voice.** Dubbing into Japanese, every clone keeps its
+  actor's English accent; the counterpart of the `"american"` voice would be
+  an engine that speaks native Japanese (CosyVoice 3 is in VoiceStudio's
+  catalogue, not installed here) converted to the actor's timbre.
 
 - **Steadier short takes.** Most fill passes, overflows and re-rolls come
   from lines under about 1.5 s, whose takes vary most from roll to roll (see

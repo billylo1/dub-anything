@@ -6,11 +6,16 @@ Full-mix QA (qa.py) hides problems that show up clearly per line:
   - extra words before the first expected one: voice-reference leakage
     (a voice clip in voices.json that cuts a word off or holds someone else)
   - dropped or changed words (fast lists), and flipped meanings ("can" heard
-    as "can't": any change in negation is flagged)
+    as "can't": any change in negation is flagged, and so is a number heard as
+    another, which a long line otherwise hides)
   - words a voice can't say, and silent takes
 Both sides are normalized before comparing (numbers spelled out, contractions
 expanded, "Dr." = "doctor", compounds joined), so digits and spelling don't
-count as failures. --reroll writes the flagged lines to work/<name>/reroll.json;
+count as failures. Takes are heard in the part's target language. Japanese is
+compared by its reading in kana (kana.py), so kanji or kana, katakana or
+hiragana and digits or kanji numerals don't count either; a take with English
+in it (the actor's original leaking from the per-line reference) is flagged.
+--reroll writes the flagged lines to work/<name>/reroll.json;
 the next `dub.py generate` gives them fresh takes. That fixes random glitches,
 but a word a voice can't say needs rewording. A fresh take can also come out
 worse, so each take a re-roll replaces is kept (work/<name>/takes/), and the
@@ -32,7 +37,7 @@ import sys
 
 import soundfile as sf
 
-from core import JOBS, WORK, line_id, load_json, whisper_setup
+from core import WORK, langs, line_id, load_json, take_wav, whisper_setup
 from gpulock import hold_gpu
 
 whisper_setup()
@@ -47,6 +52,9 @@ ABBREV = {"dr": "doctor", "mr": "mister", "mrs": "missus", "ms": "miss", "ok": "
           "nope": "no", "nah": "no", "cm": "centimeter", "mm": "millimeter", "km": "kilometer",
           "kg": "kilogram", "centimeters": "centimeter", "millimeters": "millimeter"}
 NEGATIONS = {"not", "no", "never", "nothing", "nobody", "none", "neither", "nor"}
+# Words that say a number; "one" and "zero" are left out, as words too ("this one").
+NUMBER_WORDS = set(ONES[2:] + TENS[2:] + ["hundred", "thousand", "million", "billion"])
+NUMBER_WORDS |= {w[:-1] + "ies" for w in TENS[2:]} | {w + "s" for w in ("hundred", "thousand", "million", "billion")}
 
 
 def spell(n):
@@ -80,6 +88,9 @@ def words(text, reading="plain"):
     t = re.sub(r"\bno\.\s*(?=\d)", "number ", t)  # "No.1" is "number one", not a negation
     t = re.sub(r"(?<=\d),(?=\d{3})", "", t)
     t = re.sub(r"(\d)\.(\d)", r"\1 point \2", t)
+    # Decades: "the 70s" and "the 1970s" are "the seventies" and "the nineteen seventies".
+    t = re.sub(r"\b(1[0-9]|20)?([2-9]0)'?s\b",
+               lambda m: (spell(int(m.group(1))) + " " if m.group(1) else "") + spell(int(m.group(2)))[:-1] + "ies", t)
     t = re.sub(r"(?<=[a-z])(?=\d)|(?<=\d)(?=[a-z])", " ", t)  # "a2.5cm" -> "a 2.5 cm"
     t = re.sub(r"\bnevermind\b", "never mind", t)  # one word or two, same meaning
     t = re.sub(r"\b(" + "|".join(COLLOQUIAL) + r")\b", lambda m: COLLOQUIAL[m.group(1)], t)
@@ -98,9 +109,44 @@ def words(text, reading="plain"):
     return out
 
 
-def compare(want, got):
+JA_PUNCT = re.compile(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—:：;；\"'’“”]")
+JA_NEGATION = re.compile(r"ない|なかっ|ません")
+JA_MATCH = 0.8  # kana are finer than words: one misheard mora in a short line costs more
+
+
+def compare_ja(want, got):
+    """compare() for Japanese, by reading: leading junk, the kana-level match, a
+    flipped negation (ない, ません), and English heard in the take."""
+    import kana
+    want_k, got_k = (JA_PUNCT.sub("", r) for r in kana.readings([want, got]))
+    notes = []
+    head = want_k[:3]
+    k = got_k.find(head) if len(head) == 3 else -1
+    if 1 < k <= 8:
+        notes.append(f"leading extra: '{got_k[:k]}'")
+    ratio = difflib.SequenceMatcher(None, want_k, got_k).ratio()
+    if not got_k:
+        notes.append("silent or unintelligible")
+    elif ratio < JA_MATCH:
+        notes.append(f"match {ratio:.2f}")
+    # Negative endings are written in kana: counted in the text, as readings run words together
+    # (ほな、行って reads ほないって).
+    if got_k and len(JA_NEGATION.findall(want)) != len(JA_NEGATION.findall(got)):
+        notes.append("negation differs")
+    # Numbers the script writes in digits or kanji (a number spelled in kana is compared by its reading only).
+    if got_k and kana.numbers(want) and sorted(kana.numbers(want)) != sorted(kana.numbers(got)):
+        notes.append(f"number differs: {kana.numbers(want)} -> {kana.numbers(got)}")
+    latin = re.findall(r"[A-Za-z]+", got)
+    if sum(map(len, latin)) >= 3 and not re.search(r"[A-Za-z]{3}", want):
+        notes.append(f"English in the take: '{' '.join(latin)}'")
+    return notes, ratio
+
+
+def compare(want, got, lang="en"):
     """(notes, similarity): leading junk, and the better of word- or letter-level match.
     Numbers count in any reading ("1979" is "nineteen seventy nine", "03" "zero three")."""
+    if lang == "ja":
+        return compare_ja(want, got)
     readings = ("plain", "pairs", "digits")
     want_w, got_w = max(((words(want, a), words(got, b)) for a in readings for b in readings),
                         key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio())
@@ -113,9 +159,12 @@ def compare(want, got):
         notes.append("silent or unintelligible")
     elif ratio < 0.85:
         notes.append(f"match {ratio:.2f}")
-    # A close match can still flip the meaning ("can" heard as "can't").
+    # A close match can still flip the meaning ("can" heard as "can't", "seventy" as "forty").
     if got_w and sum(w in NEGATIONS for w in want_w) != sum(w in NEGATIONS for w in got_w):
         notes.append("negation differs")
+    nums = lambda ws: [w for w in ws if w in NUMBER_WORDS]  # noqa: E731
+    if got_w and nums(want_w) != nums(got_w):
+        notes.append(f"number differs: '{' '.join(nums(want_w))}' -> '{' '.join(nums(got_w))}'")
     return notes, ratio
 
 
@@ -131,6 +180,7 @@ def better(a, b):
 def check(name, model, show_all, reroll):
     work = WORK / name
     job = json.loads((work / "segments.json").read_text(encoding="utf-8"))["job_id"]
+    tgt = langs(name)[1]
     lines = json.loads((work / "script.json").read_text(encoding="utf-8"))["lines"]
     # Takes re-rolled before, so a worse roll never replaces a better one: before a
     # flagged line is re-rolled its take is kept in takes/, with the settings it was
@@ -142,13 +192,12 @@ def check(name, model, show_all, reroll):
     flagged, restored = [], []
     for i, line in enumerate(lines):
         lid = line_id(line)
-        wav = JOBS / job / f"seg_en_{lid}.wav"
-        src = JOBS / job / f"src_en_{lid}.wav"
+        wav, src = take_wav(job, lid, tgt), take_wav(job, lid, tgt, "src")
         if not wav.exists():
             print(f"L{i:02d} {line['start']:7.2f}  (not rendered)  {line['text']}")
             continue
-        got = hear(model, wav)
-        notes, ratio = compare(line["text"], got)
+        got = hear(model, wav, tgt)
+        notes, ratio = compare(line["text"], got, tgt)
         take = {"notes": notes, "ratio": round(ratio, 3), "got": got, "sha": file_sha(wav),
                 "settings": rendered.get(lid, {})}
         # Only takes made the same way count (a moved window re-renders the line anyway);
@@ -171,8 +220,8 @@ def check(name, model, show_all, reroll):
             seed = take["settings"].get("seed")
             tries = sum(k.get("reconverted", 0) for k in kept.get(lid, []) if k["settings"].get("seed") == seed)
             if reroll and lid in converted and src.exists() and tries < RECONVERTS:
-                engine_got = hear(model, src)
-                if not compare(line["text"], engine_got)[0]:
+                engine_got = hear(model, src, tgt)
+                if not compare(line["text"], engine_got, tgt)[0]:
                     flagged[-1]["reconvert"] = True
                     notes = notes + [f"IndexTTS's take is fine ({engine_got!r}): converting it again"]
             if reroll and not any(k["sha"] == take["sha"] for k in kept.get(lid, [])):
@@ -211,10 +260,10 @@ def check(name, model, show_all, reroll):
 RECONVERTS = 2  # conversions of one IndexTTS take tried again before it gets a fresh take
 
 
-def hear(model, wav):
-    segs, _ = model.transcribe(str(wav), language="en", beam_size=5, vad_filter=False,
+def hear(model, wav, lang="en"):
+    segs, _ = model.transcribe(str(wav), language=lang, beam_size=5, vad_filter=False,
                                condition_on_previous_text=False)
-    return " ".join(s.text.strip() for s in segs)
+    return ("" if lang == "ja" else " ").join(s.text.strip() for s in segs)
 
 
 def main():

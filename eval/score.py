@@ -18,8 +18,9 @@ Per variant:
   |end|     mean distance from it (s)
   PESQ, SDR   torchaudio SQUIM estimates of each take's quality
   floor     quietest vs loud frames inside the speech (dB): noise between words
-  P(en)     Whisper's confidence that the take is English: near 1 for native
-            speech, well below for a clone that keeps a non-native accent
+  P(lang)   Whisper's confidence that the take is in the dub's language (P(en),
+            or P(ja) dubbing into Japanese): near 1 for native speech, well
+            below for a clone that keeps a non-native accent
 The actor's reference for likeness comes from their lines in the show's main
 parts (named <show>-NN); A/B copies (a name with a further suffix) are left out.
 """
@@ -33,7 +34,7 @@ import torch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 import draft  # noqa: E402
 import register as R  # noqa: E402
-from core import JOBS, WORK, line_id, load_json, speech_length  # noqa: E402
+from core import WORK, langs, line_id, load_json, speech_length, take_wav  # noqa: E402
 from gpulock import hold_gpu  # noqa: E402
 from faster_whisper.audio import decode_audio  # noqa: E402
 
@@ -61,6 +62,7 @@ def main():
     if not variants:
         raise SystemExit(__doc__)
     origs = next(iter(variants.values()))
+    tgt = langs(origs[0])[1]
     show = R.Show()
     base = lambda v: show.base.get(v, v)  # noqa: E731  (a register key counts as its character)
 
@@ -97,13 +99,13 @@ def main():
     print(f"{','.join(origs)}: {len(keep)} lines; "
           + ", ".join(f"{b} {sum(1 for k in keep if orig[k][0] == b)}" for b in chars))
     print(f"{'variant':12s} {'arousal':>7s} {'pitch':>6s} {'effort':>6s} {'like':>5s} {'early':>5s} {'late':>4s} "
-          f"{'|end|':>5s} {'PESQ':>4s} {'SDR':>5s} {'floor':>6s} {'P(en)':>5s}   per character arousal")
+          f"{'|end|':>5s} {'PESQ':>4s} {'SDR':>5s} {'floor':>6s} {f'P({tgt})':>5s}   per character arousal")
     for name, clips in variants.items():
         jobs = [load_json(WORK / c / "segments.json")["job_id"] for c in clips]
         take_lines = {k: vmaps[name][lines[k][0]][round(lines[k][1]["start"], 2)] for k in keep}
         feats, sims, ends, q = {}, [], [], []
         for k in keep:
-            wav = JOBS / jobs[lines[k][0]] / f"seg_en_{line_id(take_lines[k])}.wav"
+            wav = take_wav(jobs[lines[k][0]], line_id(take_lines[k]), tgt)
             t = decode_audio(str(wav), sampling_rate=SR)
             feats[k] = R.features(t)
             b = orig[k][0]
@@ -114,7 +116,7 @@ def main():
             with torch.no_grad():
                 _, pesq, sdr = (float(v) for v in squim(torch.from_numpy(t)[None].cuda()))
             _, info = whisper.transcribe(t, language=None, beam_size=1, without_timestamps=True)
-            q.append((pesq, sdr, floor_db(t), dict(info.all_language_probs or []).get("en", 0)))
+            q.append((pesq, sdr, floor_db(t), dict(info.all_language_probs or []).get(tgt, 0)))
         rho, prh, erh, n, per = [], [], [], [], []
         for b in chars:
             idx = [k for k in keep if orig[k][0] == b and orig[k][1] and feats[k]]
