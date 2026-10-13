@@ -6,33 +6,33 @@ Usage (needs sherpa-onnx, so run it in its own env):
   ... scripts/second.py <clip> <t0>:<t1> [<t0>:<t1> ...]      any stretches of the clip
 It runs on the CPU, so it can run beside GPU work (drafting, rendering).
 
-Runs ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice over each line of
+Runs the two recognisers the part's source language names (its segments.json's
+source_lang; SECOND_OPINIONS in languages/<code>.py) over each line of
 work/<clip>/draft.json (or script.json with --script) on the separated vocals,
-and compares them with the line's `ja` as kana, so spelling choices don't count.
-A part dubbed from English (its segments.json's source_lang) gets NVIDIA's
-Parakeet TDT 0.6B v2 and SenseVoice in English instead, and a part dubbed from
-Spanish gets Parakeet TDT 0.6B v3 and Canary 180M Flash in Spanish. Those two
-are compared with the line's `en` or `es` word by word, accents aside. A line is flagged when
-the two agree with each other more than either agrees with Whisper, and differ
-from it by 30% or more. Treat agreement as a review signal: re-listen with
-asr_words.py and decide from context. The models (~850 MB for Japanese, ~1 GB
-for English, ~900 MB for Spanish) download to VoiceStudio's model cache on first
-use.
+and compares them with the line's original (`ja`, or the field of the source
+language) as the language's module says (units): Japanese as kana, so spelling
+choices don't count, English and Spanish word by word, accents aside. Japanese
+gets ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice, English NVIDIA's
+Parakeet TDT 0.6B v2 and SenseVoice, Spanish Parakeet TDT 0.6B v3 and Canary
+180M Flash. A line is flagged when the two agree with each other more than
+either agrees with Whisper, and differ from it by 30% or more. Treat agreement
+as a review signal: re-listen with asr_words.py and decide from context. The
+models (~850 MB for Japanese, ~1 GB for English, ~900 MB for Spanish) download
+to VoiceStudio's model cache on first use.
 """
 import argparse
 import json
 import os
 import pathlib
-import re
 import sys
-import unicodedata
 
 import numpy as np
-import pykakasi
 import sherpa_onnx
 import soundfile as sf
 from huggingface_hub import snapshot_download
 from scipy.signal import resample_poly
+
+from languages import LANGUAGES, pair_of
 
 # Same resolution as core.py.
 WORK = pathlib.Path(__file__).resolve().parents[1] / "work"
@@ -43,61 +43,47 @@ HF_CACHE = (os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DI
 SR = 16000
 PAD = 0.15  # s around each line
 FLAG = 0.3
-PUNCT = "、。,.!?！？…・「」『』()（）ー〜~-—:：;；\"' 　"
 sys.stdout.reconfigure(encoding="utf-8")
-kks = pykakasi.kakasi()
 
 
 def recognisers(lang):
-    """Two recognisers for the language, by name."""
-    part = lambda d, f: os.path.join(d, f)  # noqa: E731
+    """The two recognisers the language names (its SECOND_OPINIONS), by name."""
+    return {kind: recogniser(kind, repo, lang) for kind, repo in LANGUAGES[lang].SECOND_OPINIONS.items()}
 
-    def parakeet(repo):
+
+def recogniser(kind, repo, lang):
+    """A sherpa-onnx recogniser of one of the families second.py knows, from its
+    Hugging Face repo, listening for `lang`."""
+    part = lambda d, f: os.path.join(d, f)  # noqa: E731
+    if kind == "parakeet":
         pk = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*.int8.onnx", "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_transducer(
             encoder=part(pk, "encoder.int8.onnx"), decoder=part(pk, "decoder.int8.onnx"),
             joiner=part(pk, "joiner.int8.onnx"), tokens=part(pk, "tokens.txt"), num_threads=8, sample_rate=SR,
             feature_dim=128, model_type="nemo_transducer", decoding_method="greedy_search")
-    if lang == "es":
-        cn = snapshot_download("csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8", cache_dir=HF_CACHE,
-                               allow_patterns=["*.int8.onnx", "tokens.txt"])
-        return {"parakeet": parakeet("csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"),
-                "canary": sherpa_onnx.OfflineRecognizer.from_nemo_canary(
-                    encoder=part(cn, "encoder.int8.onnx"), decoder=part(cn, "decoder.int8.onnx"),
-                    tokens=part(cn, "tokens.txt"), src_lang="es", tgt_lang="es", num_threads=8)}
-    sv = snapshot_download("csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", cache_dir=HF_CACHE,
-                           allow_patterns=["model.int8.onnx", "tokens.txt"])
-    sensevoice = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-        model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang, use_itn=True)
-    if lang == "en":
-        return {"parakeet": parakeet("csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"), "sensevoice": sensevoice}
-    rz = snapshot_download("reazon-research/reazonspeech-k2-v2", cache_dir=HF_CACHE,
-                           allow_patterns=["*-epoch-99-avg-1.onnx", "tokens.txt"])
-    return {
-        "reazon": sherpa_onnx.OfflineRecognizer.from_transducer(
+    if kind == "canary":
+        cn = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*.int8.onnx", "tokens.txt"])
+        return sherpa_onnx.OfflineRecognizer.from_nemo_canary(
+            encoder=part(cn, "encoder.int8.onnx"), decoder=part(cn, "decoder.int8.onnx"),
+            tokens=part(cn, "tokens.txt"), src_lang=lang, tgt_lang=lang, num_threads=8)
+    if kind == "sensevoice":
+        sv = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["model.int8.onnx", "tokens.txt"])
+        return sherpa_onnx.OfflineRecognizer.from_sense_voice(
+            model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang,
+            use_itn=True)
+    if kind == "reazon":
+        rz = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*-epoch-99-avg-1.onnx", "tokens.txt"])
+        return sherpa_onnx.OfflineRecognizer.from_transducer(
             encoder=part(rz, "encoder-epoch-99-avg-1.onnx"), decoder=part(rz, "decoder-epoch-99-avg-1.onnx"),
             joiner=part(rz, "joiner-epoch-99-avg-1.onnx"), tokens=part(rz, "tokens.txt"), num_threads=8,
-            sample_rate=SR, feature_dim=80, decoding_method="modified_beam_search", max_active_paths=4),
-        "sensevoice": sensevoice,
-    }
-
-
-def kana(text):
-    return "".join(c for c in "".join(x["hira"] for x in kks.convert(text)) if c not in PUNCT)
-
-
-def units(text, lang):
-    """What two transcripts are compared by: kana for Japanese, lowercase words else,
-    without their accents (Whisper writes "esta" where another model writes "está")."""
-    if lang == "ja":
-        return kana(text)
-    text = unicodedata.normalize("NFD", text.lower().replace("'", "").replace("’", ""))
-    return re.findall(r"[a-z0-9]+", "".join(c for c in text if not unicodedata.combining(c)))
+            sample_rate=SR, feature_dim=80, decoding_method="modified_beam_search", max_active_paths=4)
+    raise SystemExit(f"second.py knows no {kind!r} recogniser (SECOND_OPINIONS in languages/{lang}.py)")
 
 
 def dist(a, b, lang="ja"):
-    """Edit distance between two texts (as kana, or words), relative to the longer."""
-    a, b = units(a, lang), units(b, lang)
+    """Edit distance between two texts (as the language's units: kana, or words),
+    relative to the longer."""
+    a, b = LANGUAGES[lang].units(a), LANGUAGES[lang].units(b)
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
         cur = [i]
@@ -121,7 +107,7 @@ def main():
     recs = {}
     for clip in clips:
         lang = source_lang(clip)
-        if lang not in ("ja", "en", "es"):
+        if lang not in LANGUAGES or not LANGUAGES[lang].SECOND_OPINIONS:
             print(f"{clip}: no second opinions for {lang}")
             continue
         if lang not in recs:
@@ -131,7 +117,7 @@ def main():
 
 def source_lang(clip):
     """The language a part speaks, as dub.py prep recorded it (core.langs)."""
-    return json.loads((WORK / clip / "segments.json").read_text(encoding="utf-8")).get("source_lang") or "ja"
+    return pair_of(json.loads((WORK / clip / "segments.json").read_text(encoding="utf-8")))[0]
 
 
 def decode(rec, audio):

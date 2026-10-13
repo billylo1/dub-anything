@@ -253,7 +253,7 @@ originals per part.
     (WeSpeaker 0.53 against 0.52) and ended as near the actor (median 0.06
     against 0.05 s). The first QA check flagged none of them against three
     with per-line references. Dubbing into Japanese now leaves per-line
-    references off (`core.line_ref_default`). One sketch is little to go on:
+    references off (`PAIRS` in `scripts/languages/`). One sketch is little to go on:
     it awaits a listener, and a calmer show could come out the other way.
     OmniVoice's length rule held for Japanese takes as it did for English:
     with each take's reference and speed, a median error of +0.02 s, 84%

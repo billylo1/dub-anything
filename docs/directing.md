@@ -773,7 +773,7 @@ is what differs.
   clone garbles most: two of one character's short lines failed QA twice
   (幽霊 heard as ゆで, 真っ暗 as マアン) and passed reworded with plainer words
   (おばけ, 暗い).
-- **QA** hears takes in Japanese and compares readings in hiragana (`kana.py`,
+- **QA** hears takes in Japanese and compares readings in hiragana (`languages/kana.py`,
   pykakasi in its own uv environment), so kanji or kana, katakana or hiragana
   and digits or kanji numerals don't count as differences. A take passes at
   80% kana-level agreement (English: 85% of words). "negation differs" counts
@@ -1111,4 +1111,4 @@ Used now and then:
 | `onsets.py`, `energy.py`, `pitch.py`, `contour.py` | Onset, loudness and pitch checks (the last two need librosa) |
 | `eval/timing.py`, `eval/score.py` | Compare renders of the same part (A/B variants): timing against the actor; delivery, likeness, quality and accent. See [research.md](research.md) |
 | `scripts/backend.py status\|start\|stop\|restart` | Keep the VoiceStudio backend running, detached from the agent's shell |
-| `core.py`, `gpulock.py`, `ass.py`, `kana.py` | Not tools: paths, language pairs, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs; Japanese read as kana for QA (pykakasi, in its own environment) |
+| `core.py`, `gpulock.py`, `ass.py`, `languages/` | Not tools: paths, voices, line ids, takes and length prediction shared by the scripts; the lock that keeps GPU jobs from overlapping; the styled subtitles that place the signs; what the scripts know of each language (one module per language: Whisper's hallucinations, the second opinions, how QA compares a take, subtitles and track names; `kana.py` reads Japanese as kana, with pykakasi in its own environment) and the pairs they know |

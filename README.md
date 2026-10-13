@@ -108,7 +108,7 @@ Four language pairs are built and tested, Japanese → English, Spanish →
 English, English → Japanese and English → Spanish, on Windows with an NVIDIA GPU. The voice engine isn't the limit:
 VoiceStudio clones voices in hundreds of languages and runs on macOS and Linux
 too. Each part records its pair when it's prepared (`dub.py prep --source en
---target ja`), and the scripts read it from there; `PAIRS` in `scripts/core.py`
+--target ja`), and the scripts read it from there; `PAIRS` in `scripts/languages/`
 lists the pairs they know. Another pair needs work in these places:
 
 - **The source language.** Whisper transcribes any language, and each line
@@ -125,10 +125,10 @@ lists the pairs they know. Another pair needs work in these places:
 - **The target language.** Rendered lines are transcribed back and compared
   word by word in English and Spanish (numbers spelled out in each, accents
   aside in Spanish) and by their kana reading in Japanese (`lineqa.py`,
-  `kana.py`); another language needs its own normalization, number words and
+  `languages/kana.py`); another language needs its own normalization, number words and
   negations. Take lengths come from OmniVoice's own rule, with corrections
   measured on Japanese → English takes; they held for the other three pairs.
-  Track and subtitle names are listed per language (`TITLES` in `core.py`),
+  Track and subtitle names are listed per language (`TITLES` in its module),
   and the American voice is English by design.
 - **The directing notes.** [docs/directing.md](docs/directing.md) was written
   from Japanese → English dubs, with sections on what differs dubbing English

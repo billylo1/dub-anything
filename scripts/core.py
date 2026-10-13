@@ -18,6 +18,8 @@ import unicodedata
 import numpy as np
 import soundfile as sf
 
+from languages import PAIR, PAIRS, pair_of
+
 HERE = pathlib.Path(__file__).resolve().parent     # the scripts
 ROOT = HERE.parent                                  # the repo: work/, videos/, vendor/
 WORK = ROOT / "work"
@@ -53,29 +55,19 @@ def srt_time(t):
     return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
 
 
-# The language pair: what the source speaks and what the dub speaks, as ISO 639-1 codes.
-# `dub.py prep` records it in each part's segments.json; parts prepped before it was
-# recorded are Japanese -> English. A line keeps its original words in the field named
-# for the source language ("ja": "...", or "en" or "es" when dubbing from English or
+# The language pair: what the source speaks and what the dub speaks, as ISO 639-1 codes
+# (what the scripts know of each language is in languages/). `dub.py prep` records it
+# in each part's segments.json. A line keeps its original words in the field named for
+# the source language ("ja": "...", or "en" or "es" when dubbing from English or
 # Spanish) and the dub's words in "text".
-PAIR = ("ja", "en")
-LANG_NAMES = {"ja": "Japanese", "en": "English", "zh": "Chinese", "ko": "Korean", "es": "Spanish",
-              "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
-              "fi": "Finnish", "sv": "Swedish"}
-LANG3 = {"en": "eng", "ja": "jpn", "zh": "zho", "ko": "kor", "es": "spa", "fr": "fra", "de": "deu",
-         "it": "ita", "pt": "por", "ru": "rus", "fi": "fin", "sv": "swe"}
-NATIVE = {"en": "English", "ja": "日本語", "es": "Español"}  # a language's name in itself, for track titles
-PAIRS = {("ja", "en"), ("en", "ja"), ("es", "en"), ("en", "es")}  # the pairs the scripts know
-
-
 def langs(name):
-    """(source, target) of a part, from its segments.json, or from the part a voice's
-    copy (<part>.us) was made from."""
+    """(source, target) of a part, from its segments.json (languages.pair_of), or
+    from the part a voice's copy (<part>.us) was made from."""
     if name not in _langs:
         for n in (name, base_part(name)):
             seg = load_json(WORK / n / "segments.json")
             if seg:
-                _langs[name] = (seg.get("source_lang") or PAIR[0], seg.get("target_lang") or PAIR[1])
+                _langs[name] = pair_of(seg)
                 break
         else:
             return PAIR  # not prepped (yet): not remembered
@@ -83,19 +75,6 @@ def langs(name):
 
 
 _langs = {}
-
-
-def line_ref_default(tgt):
-    """Whether a part dubbed into `tgt` renders with per-line references unless its
-    script says otherwise. Not into Japanese: there the actor's English original
-    carried their accent into the takes (Whisper's confidence that one actor's
-    takes were Japanese fell from 0.96 to 0.53), and without it the takes followed
-    the actors' delivery as closely and matched their voices as well. Into English
-    from Spanish, as from Japanese, they help: the takes followed the actors more
-    closely, and their English hardly changed (P(en) 0.78 against 0.80). Into
-    Spanish from English too: the takes followed the actors' pitch far more
-    closely and their Spanish didn't change (P(es) 0.60 against 0.61)."""
-    return tgt != "ja"
 
 
 def said(line, src):
@@ -500,7 +479,8 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
     "text_us"): its takes are ignored and every line is estimated."""
     work = WORK / name
     job = load_json(work / "segments.json")["job_id"]
-    tgt = langs(name)[1]
+    pair = langs(name)
+    tgt = pair[1]
     script = load_json(work / "script.json")
     lines = script["lines"]
     rendered = load_json(work / "rendered.json", {})
@@ -523,7 +503,7 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
         todo = [k for k, i in enumerate(ids) if not take_wav(job, i, tgt).exists()
                 and "clips" in voices[lines[k]["voice"]]]
         base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
-        if todo and mode.get("line_ref", not rendered and line_ref_default(tgt)):
+        if todo and mode.get("line_ref", not rendered and PAIRS[pair]["line_ref"]):
             own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
                             dips=mode.get("dips", not rendered), cast_lines=mode.get("cast_lines", not rendered))
     spans = actor_spans(job, lines) if short or (predict and american) else [None] * len(lines)
@@ -563,20 +543,10 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
 
 # A part's work folder per voice: <show>-NN for the actor's voice (the director's
 # script lives there), <show>-NN.us for the American voice, whose script dubrama.py
-# derives from it (a line's "text_us" replaces its text for that voice only).
+# derives from it (a line's "text_us" replaces its text for that voice only). Which
+# voices a dub into a language can have is its module's VOICES (languages/).
 VOICE_SUFFIX = {"actor": "", "american": ".us"}
 VOICE_LABEL = {"actor": "actor's voice", "american": "American"}
-# Our tracks' names in the delivered file, in the track's own language: the dub's audio
-# and subtitles per voice, the signs alone, the source's transcript and its own audio.
-TITLES = {
-    "en": {"dub": {"actor": "English dub (actor's voice)", "american": "English dub (American)"},
-           "subs": {"actor": "English (actor-voice dub)", "american": "English (American dub)"},
-           "signs": "English (signs only)", "transcript": "English (transcript)", "original": "English (original)"},
-    "ja": {"dub": {"actor": "日本語吹替（俳優の声）"}, "subs": {"actor": "日本語（俳優の声の吹替）"},
-           "signs": "日本語（画面の文字のみ）", "transcript": "日本語 (transcript)", "original": "日本語 (original)"},
-    "es": {"dub": {"actor": "Doblaje en español (voz del actor)"}, "subs": {"actor": "Español (doblaje con la voz del actor)"},
-           "signs": "Español (solo textos en pantalla)", "transcript": "Español (transcript)", "original": "Español (original)"},
-}
 
 
 def voice_part(name, voice):

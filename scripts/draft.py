@@ -54,8 +54,9 @@ import sys
 import numpy as np
 
 import edges
-from core import HF_CACHE, JOBS, LANG_NAMES, VOICE_SUFFIX, WORK, langs, load_json, voice_clips, whisper_setup
+from core import HF_CACHE, JOBS, VOICE_SUFFIX, WORK, langs, load_json, voice_clips, whisper_setup
 from gpulock import hold_gpu
+from languages import LANGUAGES, NAMES
 
 whisper_setup()
 import torch  # noqa: E402
@@ -66,17 +67,6 @@ from faster_whisper.vad import VadOptions, get_speech_timestamps  # noqa: E402
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR = 16000
 EARLY = 0.35  # typical Whisper lead when no VAD span is near
-# Whisper's stock hallucinations on hums, music and silence, by the language it was told.
-HALLUCINATIONS = {"ja": ("ご視聴ありがとうございました", "チャンネル登録", "ご覧いただき", "字幕"),
-                  "en": ("thank you for watching", "thanks for watching", "please subscribe", "subtitles by",
-                         "amara.org", "like and subscribe"),
-                  "es": ("subtítulos realizados por", "subtitulado por", "amara.org", "gracias por ver el",
-                         "suscríbete", "suscribete", "no olvides suscribirte")}
-
-# Whole phrases it writes on a breath, a laugh or crowd noise. Real thanks are common in
-# dialogue, so only a recovered phrase (speech the full pass skipped) that says nothing
-# else is suspect: in one telenovela's party scenes, three of four were crowd or lyrics.
-BARE = {"en": ("thank you", "thanks"), "es": ("gracias", "muchas gracias")}
 
 
 def vad_spans(audio):
@@ -85,8 +75,13 @@ def vad_spans(audio):
 
 
 def hallucination(text, lang="ja", recovered=False):
-    return any(h in text.lower() for h in HALLUCINATIONS.get(lang, ())) or (
-        recovered and re.sub(r"[^\w\s]", "", text).strip().lower() in BARE.get(lang, ()))
+    """Whether a phrase holds one of Whisper's stock hallucinations on hums, music
+    and silence, told the language (its module's HALLUCINATIONS), or is a recovered
+    phrase (speech the full pass skipped) that only says thanks (THANKS): real
+    thanks are common in dialogue, so only those are suspect."""
+    known = LANGUAGES.get(lang)
+    return bool(known) and (any(h in text.lower() for h in known.HALLUCINATIONS) or (
+        recovered and re.sub(r"[^\w\s]", "", text).strip().lower() in known.THANKS))
 
 
 def stretches(spans, a, b, pause=1.5, longest=8.0):
@@ -391,10 +386,10 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
         alt = f"({p['alt']} {p['alt_score']:.2f})" if "alt" in p else ""
         tag = " [recovered]" if p.get("recovered") else ""
         if p.get("lang"):
-            tag += f" [{LANG_NAMES.get(p['lang'], p['lang'])}: keep the original, caption it]"
+            tag += f" [{NAMES.get(p['lang'], p['lang'])}: keep the original, caption it]"
         elif p.get("maybe"):
-            tag += (f" [{LANG_NAMES.get(p['maybe']['lang'], p['maybe']['lang'])}?: \"{p['maybe']['said']}\", "
-                    f"but Whisper is surer of it in {LANG_NAMES.get(src, src)}; re-listen]")
+            tag += (f" [{NAMES.get(p['maybe']['lang'], p['maybe']['lang'])}?: \"{p['maybe']['said']}\", "
+                    f"but Whisper is surer of it in {NAMES.get(src, src)}; re-listen]")
         if hallucination(p["said"], p.get("lang", src), p.get("recovered")):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"

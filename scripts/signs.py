@@ -43,6 +43,7 @@ import numpy as np
 
 import ass
 import subs
+from languages import LANGUAGES, pair_of
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 W, H = subs.W, subs.H
@@ -69,7 +70,7 @@ def bare(text):
 def pair(work):
     """(source, target) languages of a part, as dub.py prep recorded them (core.langs)."""
     seg = json.loads((work / "segments.json").read_text(encoding="utf-8")) if (work / "segments.json").exists() else {}
-    return seg.get("source_lang") or "ja", seg.get("target_lang") or "en"
+    return pair_of(seg)
 
 
 def spoken(text, t, dialogue):
@@ -266,7 +267,7 @@ def preview(work, video, w, h, which=None):
         raise SystemExit(f"{work.name}: no signs in script.json")
     pick = [(k, s) for k, s in enumerate(signs, 1) if not which or k in which]
     tgt = pair(work)[1]
-    dialogue = [(l["start"], l["end"], ass.subtitle_text(l["text"], tgt))
+    dialogue = [(l["start"], l["end"], LANGUAGES[tgt].subtitle(l["text"]))
                 for l in script["lines"] + script.get("captions", [])]
     out = work / "signs"
     out.mkdir(exist_ok=True)

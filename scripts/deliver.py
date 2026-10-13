@@ -15,7 +15,7 @@ as it is (video, audio, its own subtitles) and adds, in this order:
     tagged with the source language);
   - subtitles: the dub's per voice (the default voice's first and on by
     default), the corrected transcript of the source, then the source's own.
-Track names are in each track's language (core.TITLES).
+Track names are in each track's language (TITLES in languages/<code>.py).
 With signs, the dub's tracks are the styled ones (signs placed by the text
 they translate), a signs-only track follows them, marked forced for players
 that show forced subtitles when subtitles are off, and the file becomes
@@ -32,7 +32,8 @@ import re
 import subprocess
 import sys
 
-from core import LANG3, PAIR, PAIRS, TITLES, VOICE_LABEL
+from core import VOICE_LABEL
+from languages import ISO3, LANGUAGES, PAIR, PAIRS
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SUFFIX = " (dubbed)"
@@ -41,8 +42,9 @@ LEGACY = re.compile(r"^(English dub \(.*\)|English \(.* dub\)|English \(signs on
 
 def ours(name):
     """Whether a track is one we delivered (a dub, its subtitles, the signs, a transcript)."""
-    titles = {t for lang in TITLES.values() for kind in ("dub", "subs") for t in lang.get(kind, {}).values()}
-    titles |= {lang[kind] for lang in TITLES.values() for kind in ("signs", "transcript") if kind in lang}
+    every = [m.TITLES for m in LANGUAGES.values()]
+    titles = {t for lang in every for kind in ("dub", "subs") for t in lang.get(kind, {}).values()}
+    titles |= {lang[kind] for lang in every for kind in ("signs", "transcript") if kind in lang}
     return name in titles or bool(LEGACY.match(name))
 
 
@@ -80,7 +82,7 @@ def deliver(source, dubs, default, pair=PAIR):
     """dubs: {voice: assembled mp4}; pair: (source, target) languages. Returns the
     delivered file's path."""
     src, tgt = pair
-    titles = TITLES[tgt]
+    titles = LANGUAGES[tgt].TITLES
     source = pathlib.Path(source)
     voices = sorted(dubs, key=lambda v: v != default)
     info = probe(source)
@@ -103,13 +105,13 @@ def deliver(source, dubs, default, pair=PAIR):
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(source)]
     for v in voices:
         cmd += ["-i", str(dubs[v])]
-    srts = [(dubs[v].with_suffix(f".{tgt}.ass" if signs else f".{tgt}.srt"), LANG3[tgt], titles["subs"][v])
+    srts = [(dubs[v].with_suffix(f".{tgt}.ass" if signs else f".{tgt}.srt"), ISO3[tgt], titles["subs"][v])
             for v in voices]
     if signs:
-        srts.append((signs, LANG3[tgt], titles["signs"]))
+        srts.append((signs, ISO3[tgt], titles["signs"]))
     transcript = dubs[voices[0]].with_suffix(f".{src}.srt")
     if transcript.exists():
-        srts.append((transcript, LANG3[src], TITLES[src]["transcript"]))
+        srts.append((transcript, ISO3[src], LANGUAGES[src].TITLES["transcript"]))
     for path, _, _ in srts:
         if not path.exists():
             raise SystemExit(f"no subtitles at {path}")
@@ -135,16 +137,16 @@ def deliver(source, dubs, default, pair=PAIR):
         return [f"-metadata:s:{spec}", f"language={lang}", f"-metadata:s:{spec}", f"title={title}",
                 f"-metadata:s:{spec}", f"handler_name={title}"]
     for k, v in enumerate(voices):
-        cmd += label(f"a:{k}", LANG3[tgt], titles["dub"][v]) + [f"-disposition:a:{k}", "default" if k == 0 else "0"]
+        cmd += label(f"a:{k}", ISO3[tgt], titles["dub"][v]) + [f"-disposition:a:{k}", "default" if k == 0 else "0"]
     for k, s in enumerate(auds, len(voices)):
         tags = s.get("tags") or {}
-        lang = tags.get("language") if tags.get("language") not in (None, "und") else LANG3[src]
-        if k == len(voices) and lang != LANG3[src]:
+        lang = tags.get("language") if tags.get("language") not in (None, "und") else ISO3[src]
+        if k == len(voices) and lang != ISO3[src]:
             # The track the parts were cut from speaks the source language, whatever its tag
             # says (a web download can tag every track with the uploader's default).
-            print(f"  the original audio was tagged {lang!r}: tagging it {LANG3[src]!r}")
-            lang = LANG3[src]
-        cmd += label(f"a:{k}", lang, name_of(s) or TITLES[src]["original"]) + [f"-disposition:a:{k}", "0"]
+            print(f"  the original audio was tagged {lang!r}: tagging it {ISO3[src]!r}")
+            lang = ISO3[src]
+        cmd += label(f"a:{k}", lang, name_of(s) or LANGUAGES[src].TITLES["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
         cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else
                                                "forced" if title == titles["signs"] else "0"]

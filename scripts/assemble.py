@@ -14,7 +14,8 @@ renders (work/<part>.us, see core.voice_part). The result has:
 plus sidecar .srt files named for their language (.en.srt, .ja.srt), and when
 any part has "signs" (translations of text in the picture) the styled track of
 the dub's language with them (.en.ass, or .ja.ass), and the signs alone,
-.signs.ass (see ass.py). The languages are the parts' (core.langs). Output
+.signs.ass (see ass.py). The languages are the parts' (core.langs), and the
+track names theirs (TITLES in languages/<code>.py). Output
 defaults to the parts' `dubbed` folder.
 """
 import argparse
@@ -25,9 +26,8 @@ import subprocess
 import sys
 
 import ass
-from ass import subtitle_text
-from core import LANG3, NATIVE, PAIR, ROOT, TITLES, VOICE_LABEL, WORK, langs, load_json, out_dir, said, srt_time, \
-    voice_part
+from core import ROOT, VOICE_LABEL, WORK, langs, load_json, out_dir, said, srt_time, voice_part
+from languages import ISO3, LANGUAGES, PAIR
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
@@ -96,9 +96,9 @@ def main():
         # "captions": speech left in the original (another language already,
         # names, whispers) that still belongs in the subtitles.
         for line in sorted(script["lines"] + script.get("captions", []), key=lambda l: l["start"]):
-            dubbed.append((line["start"] + off, line["end"] + off, subtitle_text(line["text"], tgt)))
+            dubbed.append((line["start"] + off, line["end"] + off, LANGUAGES[tgt].subtitle(line["text"])))
             if said(line, src):
-                original.append((line["start"] + off, line["end"] + off, subtitle_text(said(line, src), src)))
+                original.append((line["start"] + off, line["end"] + off, LANGUAGES[src].subtitle(said(line, src))))
         signs += [{**s, "start": s["start"] + off, "end": s["end"] + off} for s in script.get("signs", [])]
 
     first_doc = load_json(WORK / parts[0]["name"] / "segments.json") or {"video": parts[0].get("file", source)}
@@ -112,7 +112,7 @@ def main():
         if cues:
             srt = out.with_suffix(f".{lang}.srt")
             write_srt(srt, cues)
-            subs.append((srt, LANG3[lang], NATIVE[lang], 0.0))
+            subs.append((srt, ISO3[lang], LANGUAGES[lang].NATIVE, 0.0))
     styled = [out.with_suffix(f".{tgt}.ass"), out.with_suffix(".signs.ass")]
     if signs:
         video = next(s for s in probe(source)["streams"] if s["codec_type"] == "video")
@@ -127,8 +127,9 @@ def main():
         if not m:
             raise SystemExit(f"--sub {s}: expected FILE.srt:lang[:title]")
         path, lang, title = m.groups()
-        lang3 = LANG3.get(lang or "und", lang or "und")
-        subs.append((pathlib.Path(path), lang3, title or NATIVE.get(lang or "", ""), -t0))
+        lang3 = ISO3.get(lang or "und", lang or "und")
+        native = LANGUAGES[lang].NATIVE if lang in LANGUAGES else ""
+        subs.append((pathlib.Path(path), lang3, title or native, -t0))
 
     info = probe(source)
     src_subs = [s for s in info["streams"] if s["codec_type"] == "subtitle"]
@@ -160,7 +161,8 @@ def main():
         # MP4 players show handler_name as the track name; title for everyone else.
         return [f"-metadata:s:{spec}", f"language={lang}"] + (
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else [])
-    cmd += label("a:0", LANG3[tgt], TITLES[tgt]["dub"][args.voice]) + label("a:1", LANG3[src], TITLES[src]["original"])
+    cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + \
+        label("a:1", ISO3[src], LANGUAGES[src].TITLES["original"])
     sub_meta = [((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs]
     sub_meta += [(lang, title) for _, lang, title, _ in subs]
     for k, (lang, title) in enumerate(sub_meta):

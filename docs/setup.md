@@ -143,7 +143,7 @@ VoiceStudio's:
 - `subs.py`: RapidOCR.
 - `vc.py`: Chatterbox, which `scripts/dub.py generate` starts itself for the
   `"american"` voice.
-- `kana.py`: pykakasi, which `lineqa.py` starts itself to read takes in
+- `languages/kana.py`: pykakasi, which `lineqa.py` starts itself to read takes in
   Japanese as kana (dubs into Japanese).
 
 The commands are in [AGENTS.md](../AGENTS.md).

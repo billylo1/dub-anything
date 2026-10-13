@@ -50,8 +50,9 @@ import sys
 import time
 
 import backend
-from core import (JOBS, LANG_NAMES, PAIR, PAIRS, ROOT, VOICE_LABEL, WORK, actor_ends, langs, line_id, line_ref_default,
-                  load_json, speech_length, take_wav, voice_part)
+from core import (JOBS, ROOT, VOICE_LABEL, WORK, actor_ends, langs, line_id, load_json, speech_length, take_wav,
+                  voice_part)
+from languages import LANGUAGES, NAMES, PAIR, PAIRS
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 JOB_DIR = WORK / "jobs"
@@ -295,7 +296,7 @@ def variant(job, p, voice):
     base = WORK / p["name"]
     script = load_json(base / "script.json")
     if voice == "actor":
-        want = {**ACTOR_RENDER, "line_ref": line_ref_default(langs(p["name"])[1])}
+        want = {**ACTOR_RENDER, "line_ref": PAIRS[langs(p["name"])]["line_ref"]}
         if load_json(base / "rendered.json"):
             # Rendered before "cast_lines" existed: dub.py reads it missing as off, and
             # writing it would change the script's record and render the part again.
@@ -462,7 +463,7 @@ def report(job, ps, quiet=False):
     if job.get("delivered"):
         md += [f"Delivered: `{job['delivered']['path']}` ({job['delivered']['at']})", ""]
     src, tgt = job_langs(job)
-    md += [f"{LANG_NAMES[src]} -> {LANG_NAMES[tgt]}; voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} "
+    md += [f"{NAMES[src]} -> {NAMES[tgt]}; voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} "
            f"(default: {VOICE_LABEL[job['default']]})", ""]
     problems = list(job.get("problems", []))
     listen, original, flags = [], [], {v: [] for v in job["voices"]}
@@ -542,9 +543,10 @@ def cmd_new(args):
     voices = {"both": ["actor", "american"], "actor": ["actor"], "american": ["american"]}[args.voices]
     if (args.source, args.target) not in PAIRS:
         raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
-    if "american" in voices and args.target != "en":
-        raise SystemExit(f"the American voice speaks English only: use --voices actor for a dub into "
-                         f"{LANG_NAMES[args.target]}")
+    unknown = [VOICE_LABEL[v] for v in voices if v not in LANGUAGES[args.target].VOICES]
+    if unknown:
+        raise SystemExit(f"a dub into {NAMES[args.target]} can't have the {' or '.join(unknown)} voice: "
+                         f"use --voices actor")
     VIDEOS.mkdir(exist_ok=True)
     link = VIDEOS / f"{slug}{src.suffix.lower()}"
     if not link.exists():
@@ -559,7 +561,7 @@ def cmd_new(args):
            "signs": args.signs, "created": time.strftime("%Y-%m-%d %H:%M")}
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
-    print(f"job {slug}: {src.name}, {LANG_NAMES[args.source]} -> {LANG_NAMES[args.target]}, "
+    print(f"job {slug}: {src.name}, {NAMES[args.source]} -> {NAMES[args.target]}, "
           f"{' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
     print(f"next: scripts/dubrama.py run {slug} --watch   (in the background), then direct the parts")
 

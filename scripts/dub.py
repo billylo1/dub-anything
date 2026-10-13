@@ -31,11 +31,11 @@ import numpy as np
 import requests
 import soundfile as sf
 
-from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, LANG_NAMES, PAIRS, SPEED_EXPONENT, WORK, actor_spans,
-                  base_part, fit_rows, indextts_length, langs, line_id, line_ref_default, line_refs, load_json, out_dir,
-                  speech_length,
-                  srt_time, take_length, take_wav, voice_sig, voice_wav)
+from core import (FILL_SPEED, FILL_TOL, HERE, HF_CACHE, JOBS, SPEED_EXPONENT, WORK, actor_spans, base_part, fit_rows,
+                  indextts_length, langs, line_id, line_refs, load_json, out_dir, speech_length, srt_time, take_length,
+                  take_wav, voice_sig, voice_wav)
 from gpulock import hold_gpu
+from languages import LANGUAGES, NAMES, PAIR, PAIRS
 
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 
@@ -153,7 +153,7 @@ def cmd_prep(args):
     if (args.source, args.target) not in PAIRS:
         raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
 
-    print(f"upload {video.name} ({LANG_NAMES[args.source]} -> {LANG_NAMES[args.target]})")
+    print(f"upload {video.name} ({NAMES[args.source]} -> {NAMES[args.target]})")
     with open(video, "rb") as f:
         r = requests.post(f"{API}/dub/upload",
                           files={"video": (video.name, f, "video/mp4")},
@@ -299,7 +299,8 @@ def check_instruct(line):
 FILL_PASSES = 2  # re-timing passes after the natural-pace render; a third changed nothing in trials
 # The render's "voice": "actor" (OmniVoice clones the actor, accent and all) or "american"
 # (IndexTTS speaks native English, following each line's original delivery, and vc.py
-# then gives every take the actor's timbre; English dubs only).
+# then gives every take the actor's timbre). Which a dub into a language can have is
+# its module's VOICES (languages/): the American voice is English only.
 VOICES = ("actor", "american")
 
 
@@ -307,14 +308,14 @@ def file_sha(path):
     return hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:16]
 
 
-def render_mode(work, script, args, tgt="en"):
+def render_mode(work, script, args, pair=PAIR):
     """How a part is rendered: script.json's "render" block, {"line_ref": .., "fill": ..,
     "dips": .., "cast_lines": .., "predict_speed": .., "voice": "actor" | "american"}. A
     part without one gets the defaults (per-line references, fill, references cut at
     a dip when speech runs on past a window, and the window check's voice test against
     the characters' cast lines too: core.unclean_windows) if it has never been
-    rendered (per-line references only where core.line_ref_default says so for the
-    target language), and the earlier behaviour (all off) if it has, so approved
+    rendered (per-line references only where languages.PAIRS says so for the
+    part's pair), and the earlier behaviour (all off) if it has, so approved
     takes don't change under a new default; the block is then written so later runs
     agree. The --[no-]line-ref, --[no-]fill, --[no-]predict-speed and --voice flags
     override it for one run."""
@@ -324,7 +325,7 @@ def render_mode(work, script, args, tgt="en"):
         # "dips" and "cast_lines" came after the others: a part rendered without them keeps its
         # takes. A rendered part's block isn't rewritten for "cast_lines" (missing reads as off),
         # so its script, and dubrama.py's record of it, stay as they were.
-        mode = script["render"] = {"line_ref": fresh and line_ref_default(tgt), "fill": fresh, "dips": fresh,
+        mode = script["render"] = {"line_ref": fresh and PAIRS[pair]["line_ref"], "fill": fresh, "dips": fresh,
                                    **(mode or {})}
         if fresh:
             mode.setdefault("cast_lines", True)
@@ -338,8 +339,9 @@ def render_mode(work, script, args, tgt="en"):
             mode[key] = getattr(args, key)
     if mode["voice"] not in VOICES:
         raise SystemExit(f"render voice {mode['voice']!r}: use one of {VOICES}")
-    if mode["voice"] == "american" and tgt != "en":
-        raise SystemExit(f"the american voice speaks English only; this part is dubbed into {LANG_NAMES[tgt]}")
+    if mode["voice"] not in LANGUAGES[pair[1]].VOICES:
+        raise SystemExit(f"the {mode['voice']} voice doesn't dub into {NAMES[pair[1]]}, which this part is dubbed "
+                         f"into (it has: {', '.join(LANGUAGES[pair[1]].VOICES)})")
     if mode["voice"] == "american" and mode["line_ref"]:
         # IndexTTS takes the actor's delivery from its emotion reference instead.
         mode["line_ref"] = False
@@ -352,7 +354,7 @@ def cmd_generate(args):
     job_id = doc["job_id"]
     tgt = langs(args.name)[1]
     script = load_json(work / "script.json")
-    mode = render_mode(work, script, args, tgt) if script else {"line_ref": False, "fill": False,
+    mode = render_mode(work, script, args, langs(args.name)) if script else {"line_ref": False, "fill": False,
                                                                 "predict_speed": False, "voice": "actor"}
     american = mode["voice"] == "american"
     if args.engine is None:
@@ -502,7 +504,7 @@ def cmd_generate(args):
         return segments, ids, settings, regen
 
     def request(segments, ids, regen):
-        body = {"segments": segments, "segment_ids": ids, "language": LANG_NAMES[tgt],
+        body = {"segments": segments, "segment_ids": ids, "language": NAMES[tgt],
                 "language_code": tgt, "timing_strategy": args.timing,
                 "voice_match": args.voice_match, "num_step": args.steps}
         if args.timing == "concise":

@@ -2,13 +2,16 @@
 what is said, not by how it is written (漢字 or かな, カタカナ or ひらがな, 3 or 三).
 
 Usage: as a module, kana.readings(["今日は3人", ...]) -> ["きょうはさんにん", ...]
-       scripts/kana.py     a worker in its own environment (UV_RUN): a JSON list of
-                           texts per line in, a JSON list of readings per line out
+       scripts/languages/kana.py   a worker in its own environment (UV_RUN): a JSON
+                                   list of texts per line in, a JSON list of
+                                   readings per line out
 
 The readings come from pykakasi's dictionary. It isn't in VoiceStudio's
 environment, so readings() starts this file once as a worker in a throwaway uv
 environment when it can't import it (uv on PATH, as for vc.py). Digits are read
 as kanji numerals first ("3人" as "三人"), as Whisper writes numbers either way.
+hiragana() reads a text as it is written, and needs pykakasi where it runs
+(second.py's environment has it).
 """
 import json
 import pathlib
@@ -75,11 +78,16 @@ def numerals(text):
                   else "".join(DIGITS[int(d)] for d in m.group()), text)
 
 
-def _convert(texts):
+def hiragana(text):
+    """pykakasi's reading of a text as it is written (digits stay digits)."""
     import pykakasi
-    if not hasattr(_convert, "kks"):
-        _convert.kks = pykakasi.kakasi()
-    return ["".join(x["hira"] for x in _convert.kks.convert(numerals(t))) for t in texts]
+    if not hasattr(hiragana, "kks"):
+        hiragana.kks = pykakasi.kakasi()
+    return "".join(x["hira"] for x in hiragana.kks.convert(text))
+
+
+def _convert(texts):
+    return [hiragana(numerals(t)) for t in texts]
 
 
 _cache, _worker = {}, []
