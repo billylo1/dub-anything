@@ -82,13 +82,13 @@ differs.
   instead of its own original (see "Render").
 - `text_us` (optional): the English for the American voice when it needs to
   differ, usually fuller text for a line `scripts/fit.py --voice american` calls
-  `SHORT?`. `dubrama.py` renders that voice from a copy of the script in
+  `SHORT?`. `dub_anything.py` renders that voice from a copy of the script in
   `<part>.us`.
 - `listen` (optional): why the user should check this line (a casting guess, a
-  misheard word); `dubrama.py` puts it in the report with the film time.
+  misheard word); `dub_anything.py` puts it in the report with the film time.
 
-A top-level `"ready": true` tells `dubrama.py` the part is directed
-(`scripts/dubrama.py ready <slug> <NN>`); it renders nothing before that.
+A top-level `"ready": true` tells `dub_anything.py` the part is directed
+(`scripts/dub_anything.py ready <slug> <NN>`); it renders nothing before that.
 
 A top-level `"render": {"line_ref": true, "fill": true, "dips": true, "cast_lines": true}`
 records how the part is rendered (see "Render"). `scripts/dub.py generate`
@@ -104,7 +104,7 @@ original soundtrack plays.
 A part with no lines at all (a commercial break recorded with the show, the
 closing credits) gets a `script.json` with an empty `"lines"` list, and
 `assemble.py` uses its original audio. Such a part needs no `prep`; a part
-without any speech (a silent channel card) gets one from `dubrama.py` itself
+without any speech (a silent channel card) gets one from `dub_anything.py` itself
 when VoiceStudio finds nothing to transcribe. A scene
 entirely in a third language is the same, with its `captions` (below) still in
 the subtitles.
@@ -139,7 +139,7 @@ voice, or both (see "Voice" under Render). Everything else has a default. The
 language pair is Japanese → English unless the job says otherwise (`--source
 en --target ja`, `--source en --target es`, `--source es`, `--source ko` or `--source zh`; see "Other
 languages").
-`scripts/dubrama.py` runs the machine steps below for a whole video, around
+`scripts/dub_anything.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
 step does and how to direct it. The scripts are in `scripts/` and run from the
 repo root.
@@ -233,7 +233,7 @@ the colour).
 A film set abroad subtitles its foreign-language speech in the picture
 itself: white text with a dark outline at the bottom, no box.
 `scripts/subs.py <clip> --open` reads those instead (only the bottom band, 2
-frames a second), and `scripts/dubrama.py new --subtitles` runs it on every
+frames a second), and `scripts/dub_anything.py new --subtitles` runs it on every
 part. The subtitles are the film's own translation, so use them for the
 captions' `ja`; for the English, read Whisper's transcript of the speech as
 well, which keeps puns and names the Japanese subtitle drops. A short line Whisper doesn't tag (under 1 s, or
@@ -447,7 +447,7 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   narration fragments into full sentences. Short sentence fragments can be
   harder to synthesize clearly.
 - **Translate the text in the picture the viewer needs** (`"signs"`, with
-  `scripts/dubrama.py new --signs` or by hand): title cards and disclaimers, the
+  `scripts/dub_anything.py new --signs` or by hand): title cards and disclaimers, the
   labels of a diagram the narration explains, a letter or a screen a character
   reads, a page put up to be read with the pause button. Leave the clutter: shop
   signs in passing, posters, number plates, the channel's logo.
@@ -475,7 +475,7 @@ against it. Rebuilt from lines at his usual level, it pulled nothing.
   A handwritten letter in close-up fills most of the frame: put its English in
   the clear area beside it (`place: "page"` with a `box` drawn over that area
   and `width` to fit), in short lines, rather than over the writing.
-  `dubrama.py` runs `signs.py` only when no part is waiting to render, so on
+  `dub_anything.py` runs `signs.py` only when no part is waiting to render, so on
   a long video with parts marked ready, delivery waits for it after the last
   render. Run `signs.py` on the parts yourself while the renders go (it takes
   turns with them on the GPU) and place the signs meanwhile.
@@ -593,7 +593,7 @@ above has a default.
   some of the intonation, a little lower in pitch. Per-line references don't
   apply.
 
-Recommend one by genre, or both: `scripts/dubrama.py new --voices both` renders
+Recommend one by genre, or both: `scripts/dub_anything.py new --voices both` renders
 every part in each voice and delivers both tracks, the actor's playing by
 default. In trials, `"american"` came out closer to the actors than the clones on an
 animated series. On a live-action drama it stayed less like the actors than the
@@ -696,7 +696,7 @@ track first (the default voice's plays; with both, the actor's), then the
 source's own audio and subtitles untouched, with English subtitles per voice and
 the Japanese transcript. Every copied stream is checked against its input before
 the new file replaces the source, renamed `<name> (dubbed)`. Delivering again
-replaces the dub tracks a "(dubbed)" file already has. `dubrama.py` does both
+replaces the dub tracks a "(dubbed)" file already has. `dub_anything.py` does both
 steps when every part is done.
 
 When any part has `signs`, `assemble.py` also writes the English track styled
@@ -828,13 +828,13 @@ language there.
   Prepping a whole video fills it too: transcription, diarisation and
   separation stay cached, and the first render then fails with "out of memory",
   even in the flush itself. Only a restart (`scripts/backend.py restart`) frees
-  that; `dubrama.py` restarts the backend before the first render after a prep, and
+  that; `dub_anything.py` restarts the backend before the first render after a prep, and
   when a render runs out of memory. With both voices, the backend keeps the
   American voice's engine loaded after its render, and the next part's actor
   render ran out of memory on a long per-line reference about one part in six;
   the restart cleared it each time. A program outside the dub using the GPU
   (another project's job) makes the retry fail too: two failures block the
-  part, and the next `scripts/dubrama.py run` retries it.
+  part, and the next `scripts/dub_anything.py run` retries it.
 - **After an NVIDIA driver update, restart the backend.** A backend that was
   running during the update keeps "CUDA out of memory" errors on an empty GPU
   and silently runs Whisper on the CPU.
@@ -858,7 +858,7 @@ The loop, in the order it runs:
 
 | Script | Does |
 |---|---|
-| `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
+| `scripts/dub_anything.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
 | `scripts/dub.py prep <video> [--source en\|es\|ko\|zh --target ja\|en\|es]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), source-language `.srt` |
 | `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |

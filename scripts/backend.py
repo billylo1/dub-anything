@@ -6,7 +6,7 @@ start launches the backend detached from the shell that asks (on Windows through
 the process service, so it outlives an agent's session), with OMNIVOICE_DATA_DIR,
 OMNIVOICE_CACHE_DIR and the full PATH set, and waits until /health says ok. The
 log goes to backend.log beside the data folder (or $VOICESTUDIO_LOG). The
-checkout is $VOICESTUDIO_DIR, or VoiceStudio beside this repo. dubrama.py calls
+checkout is $VOICESTUDIO_DIR, or VoiceStudio beside this repo. dub_anything.py calls
 ensure() before GPU work and restarts a backend that stopped answering.
 """
 
@@ -43,7 +43,7 @@ def user_env(name):
 
 
 def full_env():
-    """This process's environment plus the user's dubrama variables and the machine and
+    """This process's environment plus the user's Dub Anything variables and the machine and
     user PATH (an agent's shell may predate uv or ffmpeg being installed)."""
     env = dict(os.environ)
     for name in ("OMNIVOICE_DATA_DIR", "OMNIVOICE_CACHE_DIR"):

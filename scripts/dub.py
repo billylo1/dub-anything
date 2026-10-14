@@ -385,7 +385,7 @@ def render_mode(work, script, args, pair=PAIR):
     if mode is None or "dips" not in mode or ("cast_lines" not in mode and fresh):
         # "dips" and "cast_lines" came after the others: a part rendered without them keeps its
         # takes. A rendered part's block isn't rewritten for "cast_lines" (missing reads as off),
-        # so its script, and dubrama.py's record of it, stay as they were.
+        # so its script, and dub_anything.py's record of it, stay as they were.
         mode = script["render"] = {
             "line_ref": fresh and PAIRS[pair]["line_ref"],
             "fill": fresh,

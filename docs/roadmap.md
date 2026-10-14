@@ -2,7 +2,7 @@
 
 ## Where it stands
 
-dubrama dubs Japanese, Spanish and Korean video into English end to end, and
+Dub Anything dubs Japanese, Spanish and Korean video into English end to end, and
 English video into Japanese or Spanish (the actor's voice only; see each
 language's notes in [languages/](languages/README.md)):
 
@@ -19,7 +19,7 @@ language's notes in [languages/](languages/README.md)):
   to three rounds of fresh takes for what fails. The dubs go into the source
   file itself, renamed "(dubbed)": one dub track per voice, the original
   audio, and subtitles in both languages.
-- **Running it.** `dubrama.py` runs a whole dub around the agent's directing:
+- **Running it.** `dub_anything.py` runs a whole dub around the agent's directing:
   the machine steps in order, each part rendered as soon as its script is
   ready, one GPU job at a time, delivery and a report of what to listen for.
   The agent directs; on a long video, helper agents can direct batches of

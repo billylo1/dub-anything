@@ -1,4 +1,4 @@
-"""Shared by the dubrama scripts: where things live (work/, VoiceStudio's job
+"""Shared by the Dub Anything scripts: where things live (work/, VoiceStudio's job
 folders, the model cache), voices and their reference clips, line ids, takes and
 their lengths, each actor's last sound in a window, per-line references and the
 check that a window is clean, and the length OmniVoice will give a take
@@ -583,7 +583,7 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
 
 
 # A part's work folder per voice: <show>-NN for the actor's voice (the director's
-# script lives there), <show>-NN.us for the American voice, whose script dubrama.py
+# script lives there), <show>-NN.us for the American voice, whose script dub_anything.py
 # derives from it (a line's "text_us" replaces its text for that voice only). Which
 # voices a dub into a language can have is its module's VOICES (languages/).
 VOICE_SUFFIX = {"actor": "", "american": ".us"}

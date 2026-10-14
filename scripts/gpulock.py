@@ -6,7 +6,7 @@ before it loads a model (or asks the backend to run one), waits there while
 another tool holds the GPU, and keeps it until it exits. Child processes it
 starts (dub.py's voice conversion) share its hold. Waiters take turns in the
 order they arrived (a ticket each in work/gpu.queue), so a tool started while
-dubrama.py goes from one job to the next gets the card after the current job,
+dub_anything.py goes from one job to the next gets the card after the current job,
 not after the whole batch. Standard library only, so tools in other
 environments (separate.py) can import it too.
 """
@@ -76,7 +76,7 @@ def owner():
 def hold_gpu(what=None):
     """Wait until no other tool holds the GPU, then hold it until this process exits."""
     global _held
-    if _held is not None or os.environ.get("DUBRAMA_GPU") == "held":
+    if _held is not None or os.environ.get("DUB_ANYTHING_GPU") == "held":
         return
     QUEUE.mkdir(parents=True, exist_ok=True)
     ticket = QUEUE / f"{time.time_ns():020d}-{os.getpid()}"
@@ -105,7 +105,7 @@ def hold_gpu(what=None):
         except OSError:  # another waiter is checking it (Windows won't delete an open file); it removes it
             pass
     _held = f
-    os.environ["DUBRAMA_GPU"] = "held"
+    os.environ["DUB_ANYTHING_GPU"] = "held"
     what = what or pathlib.Path(sys.argv[0]).name
     OWNER.write_text(
         json.dumps({"what": " ".join([what] + sys.argv[1:2]), "pid": os.getpid(), "since": time.strftime("%H:%M:%S")}),

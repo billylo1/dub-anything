@@ -6,7 +6,7 @@ language's notes ([en.md](en.md)). The code is `scripts/languages/ko.py`.
 
 ## As the source: Korean → English
 
-- **The job.** `scripts/dubrama.py new <video> --source ko` (the target is
+- **The job.** `scripts/dub_anything.py new <video> --source ko` (the target is
   English; by hand, `scripts/dub.py prep <video> --source ko`). Each part's
   `segments.json` records the pair: Whisper listens in Korean, a line keeps its
   original in `ko` (captions too), and the delivered file carries the Korean

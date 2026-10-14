@@ -15,7 +15,7 @@ are on (research.md, findings 6 and 8).
 
 ## As the target: English → Japanese
 
-- **The job.** `scripts/dubrama.py new <video> --source en --target ja` (by
+- **The job.** `scripts/dub_anything.py new <video> --source en --target ja` (by
   hand, `scripts/dub.py prep <video> --source en --target ja`). Each part's
   `segments.json` records the pair and every script reads it from there:
   Whisper listens in English (the draft, `asr_words.py`, `voices.py check`, the

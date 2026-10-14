@@ -6,7 +6,7 @@ language's notes ([en.md](en.md)). The code is `scripts/languages/es.py`.
 
 ## As the source: Spanish → English
 
-- **The job.** `scripts/dubrama.py new <video> --source es` (the target is
+- **The job.** `scripts/dub_anything.py new <video> --source es` (the target is
   English; by hand, `scripts/dub.py prep <video> --source es`). Each part's
   `segments.json` records the pair: Whisper listens in Spanish, a line keeps
   its original in `es` (captions too), and the delivered file carries the
@@ -93,7 +93,7 @@ language's notes ([en.md](en.md)). The code is `scripts/languages/es.py`.
 Much of what dubbing into Japanese needs applies here too ([ja.md](ja.md), "As
 the target").
 
-- **The job.** `scripts/dubrama.py new <video> --source en --target es` (by
+- **The job.** `scripts/dub_anything.py new <video> --source en --target es` (by
   hand, `scripts/dub.py prep <video> --source en --target es`). A line keeps
   its original in `en`, takes are made and heard in Spanish
   (`seg_es_<id>.wav`), and the delivered file carries the Spanish dub and

@@ -6,7 +6,7 @@ What differs when Chinese is the source. Read beside
 
 ## As the source: Chinese → English
 
-- **The job.** `scripts/dubrama.py new <video> --source zh --voices actor`
+- **The job.** `scripts/dub_anything.py new <video> --source zh --voices actor`
   (English is the default target), or `scripts/dub.py prep <video> --source zh`
   by hand. Each part records `zh` → `en`; original dialogue and captions use
   the `zh` field. Delivery includes a Chinese transcript (`.zh.srt`) and tags

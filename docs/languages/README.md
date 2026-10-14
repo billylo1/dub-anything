@@ -31,7 +31,7 @@ pykakasi through `kana.py`).
 | `SECOND_OPINIONS` | Two sherpa-onnx recognisers, `{family: Hugging Face repo}`, the family one that `second.py` builds (`parakeet`, `canary`, `sensevoice`, `reazon`, `zipformer`, `zipformer_ctc`). `{}` for none | `second.py` |
 | `units(text)` | What two transcripts are compared by: a list of words, or a string of characters (the edit distance runs over its items) | `second.py` |
 | `OCR` | The recogniser that reads captions and signs in the language: RapidOCR's PP-OCRv5 `(LangRec, ModelType)`, `("CH", "SERVER")` for Chinese, Japanese, English and Spanish, `("KOREAN", "MOBILE")` for Korean | `subs.py`, `signs.py` |
-| `VOICES` | The render voices a dub into the language can have: `("actor",)`, plus `"american"` for English | `dubrama.py new`, `dub.py` |
+| `VOICES` | The render voices a dub into the language can have: `("actor",)`, plus `"american"` for English | `dub_anything.py new`, `dub.py` |
 | `JOIN` | What joins Whisper's segments of a take: `" "`, or `""` for a language written without spaces | `lineqa.py` |
 | `compare(want, got)` | QA's check of a take's transcript against its line: `(notes, similarity)`, one note per problem (`match 0.71`, `negation differs`, `number differs: ...`), none when it passes | `lineqa.py` |
 | `TITLES` | Track names in the language: `dub` and `subs` per voice, `signs`, `transcript` and `original` | `assemble.py`, `deliver.py` |
@@ -67,7 +67,7 @@ needs no module: its English name and ISO 639-2 code go in `OTHERS`.
   to 20).
 
 A pair goes into `PAIRS` once a video has been dubbed in it end to end and
-checked. `dub.py prep`, `dubrama.py new` and `deliver.py` refuse any pair that
+checked. `dub.py prep`, `dub_anything.py new` and `deliver.py` refuse any pair that
 isn't there.
 
 ## Adding a language

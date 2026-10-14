@@ -9,7 +9,7 @@
     "width": 1000,
     "height": 50
    },
-   "label": "dubrama  —  how a dub gets made",
+   "label": "Dub Anything  —  how a dub gets made",
    "shape": "text",
    "labelColor": "#ECEFF1"
   },
@@ -525,7 +525,7 @@
     "width": 200,
     "height": 40
    },
-   "label": "dubrama script",
+   "label": "Dub Anything script",
    "shape": "pill",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",

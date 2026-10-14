@@ -1,6 +1,6 @@
 # Setup (Windows + NVIDIA)
 
-dubrama needs a running [VoiceStudio](https://github.com/debpalash/VoiceStudio)
+Dub Anything needs a running [VoiceStudio](https://github.com/debpalash/VoiceStudio)
 backend, its models, and ffmpeg. The paths below are the ones used so far; any
 others work.
 
@@ -33,7 +33,7 @@ $d = "C:\VoiceStudioData"
 [Environment]::SetEnvironmentVariable("HF_TOKEN_PATH", "$env:USERPROFILE\.cache\huggingface\token", "User")
 ```
 
-dubrama's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR`, so it
+Dub Anything's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR`, so it
 must be set in any shell that runs them.
 
 ## 3. VoiceStudio, pinned, with local fixes
@@ -41,7 +41,7 @@ must be set in any shell that runs them.
 ```powershell
 git clone https://github.com/debpalash/VoiceStudio.git C:\git\VoiceStudio
 git -C C:\git\VoiceStudio checkout -b local-fixes c52618af
-git -C C:\git\VoiceStudio apply <path-to-dubrama>\patches\voicestudio-local-fixes.patch
+git -C C:\git\VoiceStudio apply <path-to-dub-anything>\patches\voicestudio-local-fixes.patch
 cd C:\git\VoiceStudio; uv sync; uv run --no-sync python scripts/setup.py
 uv run --no-sync python -c "import torch; print(torch.cuda.is_available())"   # True
 ```
@@ -78,7 +78,7 @@ It starts the backend detached (it keeps running after the terminal or the
 agent's session closes), logs to `backend.log` beside the data folder, and
 waits until `http://127.0.0.1:3900/health` returns
 `{"status":"ok","device":"cuda (...)"}`. `scripts/backend.py status`, `stop` and
-`restart` do what they say; `scripts/dubrama.py run` starts it when it's down.
+`restart` do what they say; `scripts/dub_anything.py run` starts it when it's down.
 Or run it yourself in a terminal you leave open:
 
 ```powershell
@@ -131,7 +131,7 @@ cache (`HF_HUB_CACHE`, else `OMNIVOICE_CACHE_DIR`) on the first conversion.
 ## 6. Check
 
 ```powershell
-cd <path-to-dubrama>
+cd <path-to-dub-anything>
 $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
 & $py scripts\dub.py prep <some short clip>.mp4      # prints a Japanese transcript
 ```

@@ -1,4 +1,4 @@
-# dubrama
+# Dub Anything
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
@@ -12,7 +12,7 @@ places, a job you can hand your coding agent: see
 ## What's different
 
 Most dubbing tools run a fixed pipeline: transcribe, translate, clone each
-speaker from one clip, speed up whatever runs long. dubrama differs where a
+speaker from one clip, speed up whatever runs long. Dub Anything differs where a
 listener notices:
 
 - **An agent directs, line by line.** It casts each line from speaker
@@ -149,14 +149,14 @@ needs:
 ## Doing it by hand
 
 With VoiceStudio's Python (`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`),
-`scripts/dubrama.py` runs the machine work of a whole dub; you write the scripts:
+`scripts/dub_anything.py` runs the machine work of a whole dub; you write the scripts:
 
 ```powershell
-& $py scripts\dubrama.py new D:\movies\my-show.mkv --voices both   # a job named my_show
-& $py scripts\dubrama.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
+& $py scripts\dub_anything.py new D:\movies\my-show.mkv --voices both   # a job named my_show
+& $py scripts\dub_anything.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
 # write work\my_show-NN\script.json for each part, then:
-& $py scripts\dubrama.py ready my_show 01
-& $py scripts\dubrama.py status my_show
+& $py scripts\dub_anything.py ready my_show 01
+& $py scripts\dub_anything.py status my_show
 ```
 
 Or step by step, with the backend running (`scripts/backend.py start`):
@@ -188,7 +188,7 @@ them, and use invented examples in docs and commit messages.
 
 ## License
 
-dubrama is MIT-licensed ([LICENSE](LICENSE)). It talks to
+Dub Anything is MIT-licensed ([LICENSE](LICENSE)). It talks to
 [VoiceStudio](https://github.com/debpalash/VoiceStudio) over HTTP and does not
 include its code. VoiceStudio is AGPL-3.0, and so is
 `patches/voicestudio-local-fixes.patch`, a change to VoiceStudio's source. Models have

@@ -1,4 +1,4 @@
-# dubrama: instructions for the AI agent
+# Dub Anything: instructions for the AI agent
 
 These are the instructions for whichever coding agent runs this repo. Agent
 harnesses that follow the `AGENTS.md` convention load this file themselves;
@@ -52,8 +52,8 @@ cloned or shared are final.
 - The VoiceStudio backend must be up: `scripts/backend.py status`.
   `scripts/backend.py start` starts it detached from your shell, so it outlives
   your session, and waits until it answers (`restart` after an NVIDIA driver
-  update, or when renders crawl). `scripts/dubrama.py run` starts it too.
-- Tools in their own environments (`scripts/dubrama.py run` starts them itself):
+  update, or when renders crawl). `scripts/dub_anything.py run` starts it too.
+- Tools in their own environments (`scripts/dub_anything.py run` starts them itself):
   - `separate.py`: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python scripts/separate.py <clip> ...`
   - `second.py`: `uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy --with pykakasi --with huggingface_hub python scripts/second.py <clip> ...`
   - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python scripts/subs.py <clip>`;
@@ -64,11 +64,11 @@ cloned or shared are final.
     (see [docs/setup.md](docs/setup.md)).
 - One GPU job at a time is enforced: every GPU tool waits for the GPU lock
   (`gpulock.py`) before it loads a model, and prints who holds it. So you can run
-  `asr_words.py` or `fit.py` while `scripts/dubrama.py run` renders; they queue.
+  `asr_words.py` or `fit.py` while `scripts/dub_anything.py run` renders; they queue.
 
 ## A dub, start to finish
 
-The user asks for a video to be dubbed. `scripts/dubrama.py` does the machine
+The user asks for a video to be dubbed. `scripts/dub_anything.py` does the machine
 work; you direct.
 
 1. **Intake.** Confirm the source file and the language pair: Japanese →
@@ -85,19 +85,19 @@ work; you direct.
    nothing to ask.
    Look at the video's length and skim it for blocks that stay in the original
    (a channel card, commercial breaks, credits) so they can be split off whole.
-   `scripts/dubrama.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+   `scripts/dub_anything.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
    picture, `--signs` when it has text worth translating: title cards,
    explainer diagrams, pages to read). Record the
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
-   `scripts/dubrama.py run <slug> --watch`. It splits; preps, separates and
+   `scripts/dub_anything.py run <slug> --watch`. It splits; preps, separates and
    drafts the first part (a few minutes: start casting and directing it), then
    the rest four parts at a time, so drafts keep coming; runs `second.py` on the
    CPU; renders each part in each voice as soon as you mark its script ready,
    with QA rounds, ahead of any prep still to do; and delivers when every part
-   is done. Follow it with `scripts/dubrama.py status <slug>` and the logs in
+   is done. Follow it with `scripts/dub_anything.py status <slug>` and the logs in
    `work/jobs/<slug>/logs/`.
 3. **Direct, part by part** ([docs/directing.md](docs/directing.md)). Cast the
    voices (`cast.py`, `frames.py`, `work/voices.json`) from the first parts.
@@ -113,7 +113,7 @@ work; you direct.
    sheets, and check them with `scripts/signs.py <part> --preview`. Give each
    guess a `"listen"` note (who says it, a misheard word): it goes into the
    report. A part that stays original gets `"lines": []`. Then
-   `scripts/dubrama.py ready <slug> <NN>`: it renders by itself.
+   `scripts/dub_anything.py ready <slug> <NN>`: it renders by itself.
 4. **When `run --watch` stops.** Exit 0: delivered. Exit 2: a part is blocked
    (`status` says why: lines that don't fit their window, or a render that
    failed twice). Fix the script and start `run --watch` again; the part
@@ -133,7 +133,7 @@ work; you direct.
    its source before the file was replaced. Give the user the path and the
    listen list with film times, and send a notification if they may be away.
 7. **Clean up** only when the user is happy with it:
-   `scripts/dubrama.py cleanup <slug>` moves the VoiceStudio jobs, parts and
+   `scripts/dub_anything.py cleanup <slug>` moves the VoiceStudio jobs, parts and
    takes to `videos/_to-delete/<slug>/` for the user to delete. The scripts,
    notes and report stay, so a line can be fixed later.
 
@@ -170,7 +170,7 @@ backend won't start, the source can't be split or prepped, the disk is
 filling, or a part is blocked and you can't fix it. At the end: the delivered
 file and the listen list.
 
-**By hand.** The steps `scripts/dubrama.py run` takes can be run one by one
+**By hand.** The steps `scripts/dub_anything.py run` takes can be run one by one
 (docs/directing.md, "Workflow"): `split.py`, `dub.py prep`, `separate.py`,
 `subs.py`, `draft.py`, `second.py`, then per part `dub.py generate
 --match-level` and `lineqa.py --reroll`, and `assemble.py` and `deliver.py` at

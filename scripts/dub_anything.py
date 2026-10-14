@@ -1,12 +1,12 @@
 """Run a dub from source video to the delivered file: the machine work, around the director's.
 
 Usage:
-  scripts/dubrama.py new <video> [--source ja --target en] [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
-  scripts/dubrama.py run <slug> [--watch]       do every step that can run now (see below)
-  scripts/dubrama.py status <slug>              where each part stands, and what blocks it
-  scripts/dubrama.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
-  scripts/dubrama.py report <slug>              write and print the report (work/jobs/<slug>/report.md)
-  scripts/dubrama.py cleanup <slug>             after delivery, move the bulk to videos/_to-delete/<slug>/
+  scripts/dub_anything.py new <video> [--source ja --target en] [--voices actor|american|both] [--slug NAME] [--minutes 3] [--whole A-B ...] [--captions|--subtitles] [--signs]
+  scripts/dub_anything.py run <slug> [--watch]       do every step that can run now (see below)
+  scripts/dub_anything.py status <slug>              where each part stands, and what blocks it
+  scripts/dub_anything.py ready <slug> <NN> [...]    mark parts' scripts as directed (same as "ready": true)
+  scripts/dub_anything.py report <slug>              write and print the report (work/jobs/<slug>/report.md)
+  scripts/dub_anything.py cleanup <slug>             after delivery, move the bulk to videos/_to-delete/<slug>/
 
 A job (work/jobs/<slug>/job.json) is one source video, the language pair (Japanese
 -> English unless --source/--target say otherwise; the American voice is English
@@ -134,7 +134,7 @@ def job_file(slug):
 def load_job(slug):
     job = load_json(job_file(slug))
     if not job:
-        raise SystemExit(f"no job {slug!r} (scripts/dubrama.py new <video>)")
+        raise SystemExit(f"no job {slug!r} (scripts/dub_anything.py new <video>)")
     return job
 
 
@@ -635,7 +635,7 @@ def cmd_new(args):
     if not re.fullmatch(r"[a-z0-9_]+", slug or ""):
         raise SystemExit("give the job a --slug of lowercase letters, digits and _ (no hyphens)")
     if job_file(slug).exists():
-        raise SystemExit(f"job {slug!r} exists: scripts/dubrama.py status {slug}")
+        raise SystemExit(f"job {slug!r} exists: scripts/dub_anything.py status {slug}")
     voices = {"both": ["actor", "american"], "actor": ["actor"], "american": ["american"]}[args.voices]
     if (args.source, args.target) not in PAIRS:
         raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
@@ -671,7 +671,7 @@ def cmd_new(args):
         f"job {slug}: {src.name}, {NAMES[args.source]} -> {NAMES[args.target]}, "
         f"{' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})"
     )
-    print(f"next: scripts/dubrama.py run {slug} --watch   (in the background), then direct the parts")
+    print(f"next: scripts/dub_anything.py run {slug} --watch   (in the background), then direct the parts")
 
 
 def cmd_ready(args):
@@ -787,7 +787,7 @@ def cmd_run(args):
             log(f"delivered {job['delivered']['path']}; report {path}")
             return 0
         if (new_block and args.watch) or (blocked and not busy and not args.watch):
-            log("waiting on the director: see scripts/dubrama.py status " + job["slug"])
+            log("waiting on the director: see scripts/dub_anything.py status " + job["slug"])
             report(job, ps, quiet=True)
             return 2
         if not args.watch and not busy:
