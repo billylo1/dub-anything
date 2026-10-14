@@ -26,6 +26,7 @@ Every copied stream is checked against its input (MD5) before the new file
 replaces the source; the source's name gets " (dubbed)" (once). Delivering
 again to a "(dubbed)" file replaces the dub tracks it already has.
 """
+
 import argparse
 import json
 import pathlib
@@ -50,15 +51,34 @@ def ours(name):
 
 
 def probe(path):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                          "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name"
-                          ":stream_disposition=attached_pic", "-of", "json", str(path)],
-                         capture_output=True, encoding="utf-8", check=True).stdout
+    out = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name"
+            ":stream_disposition=attached_pic",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
     return json.loads(out)
 
 
-GENERIC = {"SoundHandler", "VideoHandler", "SubtitleHandler", "Core Media Audio", "Core Media Video",
-           "ISO Media file produced by Google Inc.", "Mainconcept MP4 Sound Media Handler"}
+GENERIC = {
+    "SoundHandler",
+    "VideoHandler",
+    "SubtitleHandler",
+    "Core Media Audio",
+    "Core Media Video",
+    "ISO Media file produced by Google Inc.",
+    "Mainconcept MP4 Sound Media Handler",
+}
 
 
 def name_of(stream):
@@ -69,12 +89,16 @@ def name_of(stream):
 
 
 def md5(path, index):
-    return subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-map", f"0:{index}", "-c", "copy", "-f", "md5", "-"],
-                          capture_output=True, encoding="utf-8", check=True).stdout.strip()
+    return subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", f"0:{index}", "-c", "copy", "-f", "md5", "-"],
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
 
 
 def delivered_name(source, mkv=False):
-    stem = source.stem[:-len(SUFFIX)] if source.stem.endswith(SUFFIX) else source.stem
+    stem = source.stem[: -len(SUFFIX)] if source.stem.endswith(SUFFIX) else source.stem
     ext = source.suffix.lower() if source.suffix.lower() in (".mp4", ".m4v", ".mov", ".mkv") and not mkv else ".mkv"
     return source.with_name(f"{stem}{SUFFIX}{ext}")
 
@@ -106,8 +130,9 @@ def deliver(source, dubs, default, pair=PAIR):
     cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(source)]
     for v in voices:
         cmd += ["-i", str(dubs[v])]
-    srts = [(dubs[v].with_suffix(f".{tgt}.ass" if signs else f".{tgt}.srt"), ISO3[tgt], titles["subs"][v])
-            for v in voices]
+    srts = [
+        (dubs[v].with_suffix(f".{tgt}.ass" if signs else f".{tgt}.srt"), ISO3[tgt], titles["subs"][v]) for v in voices
+    ]
     if signs:
         srts.append((signs, ISO3[tgt], titles["signs"]))
     transcript = dubs[voices[0]].with_suffix(f".{src}.srt")
@@ -135,8 +160,15 @@ def deliver(source, dubs, default, pair=PAIR):
             cmd += [f"-c:s:{k}", "srt"]
 
     def label(spec, lang, title):
-        return [f"-metadata:s:{spec}", f"language={lang}", f"-metadata:s:{spec}", f"title={title}",
-                f"-metadata:s:{spec}", f"handler_name={title}"]
+        return [
+            f"-metadata:s:{spec}",
+            f"language={lang}",
+            f"-metadata:s:{spec}",
+            f"title={title}",
+            f"-metadata:s:{spec}",
+            f"handler_name={title}",
+        ]
+
     for k, v in enumerate(voices):
         cmd += label(f"a:{k}", ISO3[tgt], titles["dub"][v]) + [f"-disposition:a:{k}", "default" if k == 0 else "0"]
     for k, s in enumerate(auds, len(voices)):
@@ -149,14 +181,19 @@ def deliver(source, dubs, default, pair=PAIR):
             lang = ISO3[src]
         cmd += label(f"a:{k}", lang, name_of(s) or LANGUAGES[src].TITLES["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
-        cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "default" if k == 0 else
-                                               "forced" if title == titles["signs"] else "0"]
+        cmd += label(f"s:{k}", lang, title) + [
+            f"-disposition:s:{k}",
+            "default" if k == 0 else "forced" if title == titles["signs"] else "0",
+        ]
     for k, s in enumerate(subs, len(srts)):
         cmd += [f"-disposition:s:{k}", "0"]
     if not mkv:
         cmd += ["-movflags", "+faststart"]
     cmd.append(str(tmp))
-    print(f"deliver {', '.join(voices)} into {source.name}" + (f" (replacing {dropped} earlier dub tracks)" if dropped else ""))
+    print(
+        f"deliver {', '.join(voices)} into {source.name}"
+        + (f" (replacing {dropped} earlier dub tracks)" if dropped else "")
+    )
     subprocess.run(cmd, check=True)
 
     # Every stream copied, not converted, must match its input exactly.
@@ -176,8 +213,10 @@ def deliver(source, dubs, default, pair=PAIR):
     if out != source:
         source.unlink()
     for s in got:
-        print(f"  #{s['index']} {s['codec_type']:8s} {s['codec_name']:10s} {(s.get('tags') or {}).get('language', ''):4s}"
-              f" {name_of(s)}")
+        print(
+            f"  #{s['index']} {s['codec_type']:8s} {s['codec_name']:10s} {(s.get('tags') or {}).get('language', ''):4s}"
+            f" {name_of(s)}"
+        )
     print(f"  wrote {out} (every copied stream verified)")
     return out
 

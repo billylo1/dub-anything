@@ -2,6 +2,7 @@
 
 Usage: scripts/qa.py <name> [tag]
 """
+
 import json
 import pathlib
 import subprocess
@@ -28,8 +29,9 @@ hold_gpu()
 model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
 heard = []
 for lang in (tgt, None):
-    segs, info = model.transcribe(str(wav), language=lang, beam_size=5, vad_filter=True,
-                                  word_timestamps=True, condition_on_previous_text=False)
+    segs, info = model.transcribe(
+        str(wav), language=lang, beam_size=5, vad_filter=True, word_timestamps=True, condition_on_previous_text=False
+    )
     words = [w for s in segs for w in s.words]
     if lang == tgt:
         heard = words
@@ -38,8 +40,7 @@ for lang in (tgt, None):
 
 for line in script["lines"]:
     got = "".join(w.word for w in heard if line["start"] - 0.1 <= w.start < line["end"] + 0.3).strip()
-    print(f"{line['start']:6.2f}-{line['end']:6.2f} {line['voice']:9s} want: {line['text']}\n"
-          f"{'':26s} got:  {got}")
+    print(f"{line['start']:6.2f}-{line['end']:6.2f} {line['voice']:9s} want: {line['text']}\n{'':26s} got:  {got}")
 stray = [w for w in heard if not any(l["start"] - 0.1 <= w.start < l["end"] + 0.3 for l in script["lines"])]
 if stray:
     print("outside script windows:", " ".join(f"{w.word.strip()}@{w.start:.1f}" for w in stray))

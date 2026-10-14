@@ -12,15 +12,26 @@ library at its top, so every tool's environment can load it (second.py and
 signs.py run in their own); anything more (num2words, pykakasi) is imported
 where it's used.
 """
+
 import importlib
 import pathlib
 
 REQUIRED = (
-    "NAME", "ISO3", "NATIVE",                                # its names
-    "HALLUCINATIONS", "THANKS", "SECOND_OPINIONS", "units",  # heard: draft.py, second.py
-    "OCR",                                                   # read in the picture: subs.py, signs.py
-    "VOICES", "JOIN", "compare", "speakable",                # spoken by the dub: dub.py, lineqa.py
-    "TITLES", "FONT", "subtitle",                            # written: track names, subtitles
+    "NAME",
+    "ISO3",
+    "NATIVE",  # its names
+    "HALLUCINATIONS",
+    "THANKS",
+    "SECOND_OPINIONS",
+    "units",  # heard: draft.py, second.py
+    "OCR",  # read in the picture: subs.py, signs.py
+    "VOICES",
+    "JOIN",
+    "compare",
+    "speakable",  # spoken by the dub: dub.py, lineqa.py
+    "TITLES",
+    "FONT",
+    "subtitle",  # written: track names, subtitles
 )
 
 LANGUAGES = {}
@@ -65,9 +76,15 @@ for _pair in PAIRS:
 
 # Languages a clip may also speak, left in the original and captioned (draft.py tags
 # them), that have no module: their English name and ISO 639-2 code.
-OTHERS = {"fr": ("French", "fra"), "de": ("German", "deu"),
-          "it": ("Italian", "ita"), "pt": ("Portuguese", "por"), "ru": ("Russian", "rus"),
-          "fi": ("Finnish", "fin"), "sv": ("Swedish", "swe")}
+OTHERS = {
+    "fr": ("French", "fra"),
+    "de": ("German", "deu"),
+    "it": ("Italian", "ita"),
+    "pt": ("Portuguese", "por"),
+    "ru": ("Russian", "rus"),
+    "fi": ("Finnish", "fin"),
+    "sv": ("Swedish", "swe"),
+}
 NAMES = {**{code: name for code, (name, _) in OTHERS.items()}, **{code: m.NAME for code, m in LANGUAGES.items()}}
 ISO3 = {**{code: iso3 for code, (_, iso3) in OTHERS.items()}, **{code: m.ISO3 for code, m in LANGUAGES.items()}}
 

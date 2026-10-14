@@ -18,6 +18,7 @@ the dub's language with them (.en.ass, or .ja.ass), and the signs alone,
 track names theirs (TITLES in languages/<code>.py). Output
 defaults to the parts' `dubbed` folder.
 """
+
 import argparse
 import json
 import pathlib
@@ -34,9 +35,21 @@ TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
 
 
 def probe(path):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                          "format=duration:stream=index,codec_type,codec_name,width,height:stream_tags=language,title,handler_name",
-                          "-of", "json", str(path)], capture_output=True, encoding="utf-8", check=True).stdout
+    out = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=index,codec_type,codec_name,width,height:stream_tags=language,title,handler_name",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
     return json.loads(out)
 
 
@@ -44,7 +57,7 @@ def pick(parts, spec):
     if not spec:
         return parts
     a, _, b = spec.partition("-")
-    return parts[int(a) - 1:int(b or a)]
+    return parts[int(a) - 1 : int(b or a)]
 
 
 def write_srt(path, cues):
@@ -56,14 +69,23 @@ def write_srt(path, cues):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("stem")
-    ap.add_argument("--voice", choices=list(VOICE_LABEL), default="actor",
-                    help="which voice's renders to assemble (default: the actor's voice)")
+    ap.add_argument(
+        "--voice",
+        choices=list(VOICE_LABEL),
+        default="actor",
+        help="which voice's renders to assemble (default: the actor's voice)",
+    )
     ap.add_argument("--parts", help="range of split parts, e.g. 1-4 (default: all)")
     ap.add_argument("--out")
-    ap.add_argument("--sub", action="append", default=[],
-                    help="extra subtitle file timed to the source video: FILE.srt:lang[:title]")
-    ap.add_argument("--encoder", default="h264_nvenc",
-                    help="video encoder when the range doesn't start at 0 (else stream copy)")
+    ap.add_argument(
+        "--sub",
+        action="append",
+        default=[],
+        help="extra subtitle file timed to the source video: FILE.srt:lang[:title]",
+    )
+    ap.add_argument(
+        "--encoder", default="h264_nvenc", help="video encoder when the range doesn't start at 0 (else stream copy)"
+    )
     args = ap.parse_args()
 
     manifest = ROOT / "videos" / f"{args.stem}-parts" / "parts.json"
@@ -73,8 +95,7 @@ def main():
     else:
         doc = load_json(WORK / args.stem / "segments.json")
         source = pathlib.Path(doc["video"])
-        parts = [{"name": args.stem, "start": 0.0,
-                  "end": float(probe(source)["format"]["duration"])}]
+        parts = [{"name": args.stem, "start": 0.0, "end": float(probe(source)["format"]["duration"])}]
     parts = [{**p, "name": voice_part(p["name"], args.voice)} for p in parts]
     t0, t1 = parts[0]["start"], parts[-1]["end"]
     src, tgt = next((langs(p["name"]) for p in parts if (WORK / p["name"] / "segments.json").exists()), PAIR)
@@ -120,7 +141,7 @@ def main():
         ass.write(styled[1], video["width"], video["height"], (), signs, lang=tgt)
         print(f"  {len(signs)} signs: {styled[0].name}, {styled[1].name}")
     else:
-        for path in styled:     # left from an earlier assembly: they would deliver signs no part has now
+        for path in styled:  # left from an earlier assembly: they would deliver signs no part has now
             path.unlink(missing_ok=True)
     for s in args.sub:
         m = re.match(r"^(.+\.(?:srt|ass|ssa|vtt))(?::([^:]+))?(?::(.+))?$", s, re.IGNORECASE)
@@ -144,26 +165,50 @@ def main():
         cmd += ["-i", str(mp4)]
     for path, _, _, shift in subs:
         cmd += (["-itsoffset", f"{shift:.3f}"] if shift else []) + ["-i", str(path)]
-    chain = "".join(f"[{i + 1}:a:0]atrim=duration={d:.3f},asetpts=PTS-STARTPTS,apad=whole_dur={d:.3f}[a{i}];"
-                    for i, (_, d) in enumerate(dubs))
+    chain = "".join(
+        f"[{i + 1}:a:0]atrim=duration={d:.3f},asetpts=PTS-STARTPTS,apad=whole_dur={d:.3f}[a{i}];"
+        for i, (_, d) in enumerate(dubs)
+    )
     chain += "".join(f"[a{i}]" for i in range(len(dubs))) + f"concat=n={len(dubs)}:v=0:a=1[dub]"
     cmd += ["-filter_complex", chain, "-map", "0:v:0", "-map", "[dub]", "-map", "0:a:0"]
     for s in src_subs:
         cmd += ["-map", f"0:{s['index']}"]
     for k in range(len(subs)):
         cmd += ["-map", f"{1 + len(dubs) + k}:0"]
-    cmd += ["-c:v", "copy"] if copy_video else ["-c:v", args.encoder, "-cq", "19"] if "nvenc" in args.encoder \
+    cmd += (
+        ["-c:v", "copy"]
+        if copy_video
+        else ["-c:v", args.encoder, "-cq", "19"]
+        if "nvenc" in args.encoder
         else ["-c:v", args.encoder, "-crf", "18"]
-    cmd += ["-c:a", "aac", "-b:a", "192k", "-c:s", "mov_text", "-t", f"{t1 - t0:.3f}",
-            "-disposition:a:0", "default", "-disposition:a:1", "0"]
+    )
+    cmd += [
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-c:s",
+        "mov_text",
+        "-t",
+        f"{t1 - t0:.3f}",
+        "-disposition:a:0",
+        "default",
+        "-disposition:a:1",
+        "0",
+    ]
 
     def label(spec, lang, title):
         # MP4 players show handler_name as the track name; title for everyone else.
         return [f"-metadata:s:{spec}", f"language={lang}"] + (
-            [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else [])
-    cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + \
-        label("a:1", ISO3[src], LANGUAGES[src].TITLES["original"])
-    sub_meta = [((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs]
+            [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else []
+        )
+
+    cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + label(
+        "a:1", ISO3[src], LANGUAGES[src].TITLES["original"]
+    )
+    sub_meta = [
+        ((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs
+    ]
     sub_meta += [(lang, title) for _, lang, title, _ in subs]
     for k, (lang, title) in enumerate(sub_meta):
         cmd += label(f"s:{k}", lang, title) + [f"-disposition:s:{k}", "0"]

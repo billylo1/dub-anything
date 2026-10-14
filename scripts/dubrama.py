@@ -37,6 +37,7 @@ so the agent can tell the user. Exit codes: 0 done or idle, 2 needs the director
 1 error. Every GPU step waits for the GPU lock (gpulock.py); logs are in
 work/jobs/<slug>/logs/.
 """
+
 import argparse
 import filecmp
 import hashlib
@@ -50,8 +51,19 @@ import sys
 import time
 
 import backend
-from core import (JOBS, ROOT, VOICE_LABEL, WORK, actor_ends, langs, line_id, load_json, speech_length, take_wav,
-                  voice_part)
+from core import (
+    JOBS,
+    ROOT,
+    VOICE_LABEL,
+    WORK,
+    actor_ends,
+    langs,
+    line_id,
+    load_json,
+    speech_length,
+    take_wav,
+    voice_part,
+)
 from languages import LANGUAGES, NAMES, PAIR, PAIRS
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -61,12 +73,48 @@ QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = sys.executable
 UV = ["uv", "run", "--no-project"]
-SEPARATE = UV + ["--python", "3.11", "--index", "https://download.pytorch.org/whl/cu128", "--index-strategy",
-                 "unsafe-best-match", "--with", "torch==2.8.0", "--with", "audio-separator", "--with", "onnxruntime",
-                 "python", "scripts/separate.py"]
-SECOND = UV + ["--python", "3.12", "--with", "sherpa-onnx", "--with", "soundfile", "--with", "scipy", "--with",
-               "pykakasi", "--with", "huggingface_hub", "python", "scripts/second.py"]
-SUBS = UV + ["--python", "3.12", "--with", "rapidocr", "--with", "onnxruntime-gpu[cuda,cudnn]", "python", "scripts/subs.py"]
+SEPARATE = UV + [
+    "--python",
+    "3.11",
+    "--index",
+    "https://download.pytorch.org/whl/cu128",
+    "--index-strategy",
+    "unsafe-best-match",
+    "--with",
+    "torch==2.8.0",
+    "--with",
+    "audio-separator",
+    "--with",
+    "onnxruntime",
+    "python",
+    "scripts/separate.py",
+]
+SECOND = UV + [
+    "--python",
+    "3.12",
+    "--with",
+    "sherpa-onnx",
+    "--with",
+    "soundfile",
+    "--with",
+    "scipy",
+    "--with",
+    "pykakasi",
+    "--with",
+    "huggingface_hub",
+    "python",
+    "scripts/second.py",
+]
+SUBS = UV + [
+    "--python",
+    "3.12",
+    "--with",
+    "rapidocr",
+    "--with",
+    "onnxruntime-gpu[cuda,cudnn]",
+    "python",
+    "scripts/subs.py",
+]
 SIGNS = SUBS[:-1] + ["scripts/signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "cast_lines": False, "voice": "american"}
@@ -77,6 +125,7 @@ RETRY = ("render failed", "lineqa failed")  # problems a new run retries; the re
 
 
 # ---- jobs and parts ----
+
 
 def job_file(slug):
     return JOB_DIR / slug / "job.json"
@@ -138,6 +187,7 @@ def tool(job, label, cmd, logname):
 
 # ---- preparing ----
 
+
 def split(job):
     pdir = VIDEOS / f"{job['slug']}-parts"
     if (pdir / "parts.json").exists():
@@ -163,7 +213,7 @@ def prep_chunk(ps):
     separated and drafted before the next starts, so drafts keep coming while the
     models still load once per chunk."""
     todo = [p for p in ps if not original_only(p) and not drafted(p)]
-    return todo[:PREP_CHUNK if any(drafted(p) for p in ps) else 1]
+    return todo[: PREP_CHUNK if any(drafted(p) for p in ps) else 1]
 
 
 def prepare_step(job, ps):
@@ -185,8 +235,12 @@ def prepare_step(job, ps):
     for p in chunk:
         if not (WORK / p["name"] / "segments.json").exists():
             src, tgt = job_langs(job)
-            ok, out = tool(job, f"prep {p['name']}", [PY, "scripts/dub.py", "prep", p["file"], "--source", src,
-                                                      "--target", tgt], f"prep-{p['name']}")
+            ok, out = tool(
+                job,
+                f"prep {p['name']}",
+                [PY, "scripts/dub.py", "prep", p["file"], "--source", src, "--target", tgt],
+                f"prep-{p['name']}",
+            )
             if not ok and "produced no segments" in out:
                 # No speech at all (a silent channel card): nothing to dub, so it stays original.
                 (WORK / p["name"]).mkdir(exist_ok=True)
@@ -247,14 +301,19 @@ def second(job, ps):
         SECOND_RUN.pop(job["slug"])
     elif proc:
         return
-    todo = [p["name"] for p in ps if (WORK / p["name"] / "draft.json").exists() and p["name"] not in job.get("second", [])]
+    todo = [
+        p["name"] for p in ps if (WORK / p["name"] / "draft.json").exists() and p["name"] not in job.get("second", [])
+    ]
     if todo:
         logs = JOB_DIR / job["slug"] / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         f = open(logs / f"second-{time.strftime('%H%M%S')}.log", "w", encoding="utf-8")
         log(f"second.py over {len(todo)} parts in the background (CPU)")
-        SECOND_RUN[job["slug"]] = (subprocess.Popen(SECOND + todo, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT),
-                                   todo, f)
+        SECOND_RUN[job["slug"]] = (
+            subprocess.Popen(SECOND + todo, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT),
+            todo,
+            f,
+        )
 
 
 def problem(job, text):
@@ -274,6 +333,7 @@ def last_error(out):
 
 # ---- directing hand-off ----
 
+
 def ready(p):
     script = load_json(WORK / p["name"] / "script.json")
     return script is not None and (not script["lines"] or bool(script.get("ready")))
@@ -284,8 +344,10 @@ def derived_script(script, voice):
     if voice == "actor":
         return script
     s = {k: v for k, v in script.items() if k not in ("ready", "render")}
-    s["lines"] = [{**{k: v for k, v in line.items() if k != "text_us"}, "text": line.get("text_us", line["text"])}
-                  for line in script["lines"]]
+    s["lines"] = [
+        {**{k: v for k, v in line.items() if k != "text_us"}, "text": line.get("text_us", line["text"])}
+        for line in script["lines"]
+    ]
     s["render"] = AMERICAN_RENDER
     return s
 
@@ -325,7 +387,9 @@ def variant(job, p, voice):
     new, old = job_dir_of(name), job_dir_of(p["name"])
     if not (new / "separator.json").exists():
         # Same audio as the actor job, which is separated already: reuse its stems.
-        if not (old / "separator.json").exists() or not filecmp.cmp(old / "audio_hq.wav", new / "audio_hq.wav", shallow=False):
+        if not (old / "separator.json").exists() or not filecmp.cmp(
+            old / "audio_hq.wav", new / "audio_hq.wav", shallow=False
+        ):
             problem(job, f"{name}: no separated stems to share from {p['name']}")
             return None
         for stem in STEMS:
@@ -337,9 +401,13 @@ def variant(job, p, voice):
 
 # ---- rendering and QA, one part in one voice ----
 
+
 def script_sha(script):
-    return hashlib.sha1(json.dumps({"lines": script["lines"], "render": script.get("render")}, sort_keys=True,
-                                   ensure_ascii=False).encode()).hexdigest()[:12]
+    return hashlib.sha1(
+        json.dumps(
+            {"lines": script["lines"], "render": script.get("render")}, sort_keys=True, ensure_ascii=False
+        ).encode()
+    ).hexdigest()[:12]
 
 
 def finished(p, voice):
@@ -379,8 +447,12 @@ def advance(job, name):
     if stage in ("render", "remix"):
         clean_backend(job)
         what = {"render": "render" if not st["round"] else f"round {st['round']}", "remix": "re-mix"}[stage]
-        ok, out = tool(job, f"{what} {name}", [PY, "scripts/dub.py", "generate", name, "--match-level"],
-                       f"gen-{name}-{st['round']}{'-remix' if stage == 'remix' else ''}")
+        ok, out = tool(
+            job,
+            f"{what} {name}",
+            [PY, "scripts/dub.py", "generate", name, "--match-level"],
+            f"gen-{name}-{st['round']}{'-remix' if stage == 'remix' else ''}",
+        )
         if not ok:
             over = re.findall(r"^\s+(L\d+\s+[\d.]+\s.*\sOVER\s+.*)$", out, re.M)
             st["fails"] = st.get("fails", 0) + 1
@@ -401,8 +473,12 @@ def advance(job, name):
         save()
         return "busy"
     if stage == "qa":
-        ok, out = tool(job, f"qa {name}" + (f" (round {st['round']})" if st["round"] else ""),
-                       [PY, "scripts/lineqa.py", name, "--reroll"], f"qa-{name}-{st['round']}")
+        ok, out = tool(
+            job,
+            f"qa {name}" + (f" (round {st['round']})" if st["round"] else ""),
+            [PY, "scripts/lineqa.py", name, "--reroll"],
+            f"qa-{name}-{st['round']}",
+        )
         if not ok:
             st["problem"] = f"lineqa failed: {last_error(out)}"
             save()
@@ -425,25 +501,34 @@ def advance(job, name):
 
 # ---- delivery and report ----
 
+
 def delivery_sha(job, ps):
     h = hashlib.sha1()
     for p in ps:
         for voice in job["voices"]:
             name = voice_part(p["name"], voice)
-            h.update(json.dumps([load_json(WORK / name / "script.json"), load_json(WORK / name / "state.json")],
-                                sort_keys=True, ensure_ascii=False).encode())
+            h.update(
+                json.dumps(
+                    [load_json(WORK / name / "script.json"), load_json(WORK / name / "state.json")],
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode()
+            )
     return h.hexdigest()[:12]
 
 
 def deliver_job(job, ps):
     import deliver
+
     sha = delivery_sha(job, ps)
     done = job.get("delivered") or {}
     if done.get("state") == sha and pathlib.Path(done.get("path", "")).exists():
         return True
     dubs = {}
     for voice in job["voices"]:
-        ok, out = tool(job, f"assemble {voice}", [PY, "scripts/assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}")
+        ok, out = tool(
+            job, f"assemble {voice}", [PY, "scripts/assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}"
+        )
         m = re.search(r"-> (.+\.mp4)", out)
         if not ok or not m:
             return problem(job, f"assemble.py failed for the {voice} voice: {last_error(out)}")
@@ -463,8 +548,11 @@ def report(job, ps, quiet=False):
     if job.get("delivered"):
         md += [f"Delivered: `{job['delivered']['path']}` ({job['delivered']['at']})", ""]
     src, tgt = job_langs(job)
-    md += [f"{NAMES[src]} -> {NAMES[tgt]}; voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} "
-           f"(default: {VOICE_LABEL[job['default']]})", ""]
+    md += [
+        f"{NAMES[src]} -> {NAMES[tgt]}; voices: {', '.join(VOICE_LABEL[v] for v in job['voices'])} "
+        f"(default: {VOICE_LABEL[job['default']]})",
+        "",
+    ]
     problems = list(job.get("problems", []))
     listen, original, flags = [], [], {v: [] for v in job["voices"]}
     timing = {v: [] for v in job["voices"]}
@@ -499,12 +587,17 @@ def report(job, ps, quiet=False):
         md += ["## Needs attention", ""] + [f"- {t}" for t in problems] + [""]
     md += ["## Listen for", ""]
     if listen:
-        md += ["Director's notes:", ""] + [f"- {film_time(t)} \"{text}\": {why}" for t, text, why in sorted(listen)] + [""]
+        md += (
+            ["Director's notes:", ""] + [f'- {film_time(t)} "{text}": {why}' for t, text, why in sorted(listen)] + [""]
+        )
     for voice in job["voices"]:
         if flags[voice]:
-            md += [f"Still flagged by QA after {QA_ROUNDS} rounds ({VOICE_LABEL[voice]}): names Whisper doesn't know "
-                   "and near-misses, or garbles:", ""]
-            md += [f"- {film_time(t)} \"{text}\" heard as \"{got}\"" for t, text, got in sorted(flags[voice])] + [""]
+            md += [
+                f"Still flagged by QA after {QA_ROUNDS} rounds ({VOICE_LABEL[voice]}): names Whisper doesn't know "
+                "and near-misses, or garbles:",
+                "",
+            ]
+            md += [f'- {film_time(t)} "{text}" heard as "{got}"' for t, text, got in sorted(flags[voice])] + [""]
     if not listen and not any(flags.values()):
         md += ["Nothing flagged.", ""]
     md += ["## Numbers", ""]
@@ -513,8 +606,10 @@ def report(job, ps, quiet=False):
         if d:
             within = sum(abs(x) <= 0.25 for x in d) / len(d)
             med = sorted(abs(x) for x in d)[len(d) // 2]
-            md.append(f"- {VOICE_LABEL[voice]}: {len(d)} lines; {within:.0%} end within 0.25 s of the actor "
-                      f"(median {med:.2f} s); {len(flags[voice])} still flagged")
+            md.append(
+                f"- {VOICE_LABEL[voice]}: {len(d)} lines; {within:.0%} end within 0.25 s of the actor "
+                f"(median {med:.2f} s); {len(flags[voice])} still flagged"
+            )
     if original:
         md += ["", f"Left in the original (not dubbed): {', '.join(original)}"]
     path = JOB_DIR / job["slug"] / "report.md"
@@ -525,6 +620,7 @@ def report(job, ps, quiet=False):
 
 
 # ---- commands ----
+
 
 def make_slug(text):
     words = re.findall(r"[a-z0-9]+", text.lower().split(" - ")[0])
@@ -545,8 +641,9 @@ def cmd_new(args):
         raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
     unknown = [VOICE_LABEL[v] for v in voices if v not in LANGUAGES[args.target].VOICES]
     if unknown:
-        raise SystemExit(f"a dub into {NAMES[args.target]} can't have the {' or '.join(unknown)} voice: "
-                         f"use --voices actor")
+        raise SystemExit(
+            f"a dub into {NAMES[args.target]} can't have the {' or '.join(unknown)} voice: use --voices actor"
+        )
     VIDEOS.mkdir(exist_ok=True)
     link = VIDEOS / f"{slug}{src.suffix.lower()}"
     if not link.exists():
@@ -555,14 +652,25 @@ def cmd_new(args):
         except OSError:
             print(f"(can't hard-link across drives: copying the source to {link})")
             shutil.copy2(src, link)
-    job = {"slug": slug, "title": src.stem, "source": str(src), "video": str(link),
-           "langs": [args.source, args.target], "voices": voices,
-           "default": voices[0], "split": {"minutes": args.minutes, "whole": args.whole}, "captions": "open" if args.subtitles else args.captions,
-           "signs": args.signs, "created": time.strftime("%Y-%m-%d %H:%M")}
+    job = {
+        "slug": slug,
+        "title": src.stem,
+        "source": str(src),
+        "video": str(link),
+        "langs": [args.source, args.target],
+        "voices": voices,
+        "default": voices[0],
+        "split": {"minutes": args.minutes, "whole": args.whole},
+        "captions": "open" if args.subtitles else args.captions,
+        "signs": args.signs,
+        "created": time.strftime("%Y-%m-%d %H:%M"),
+    }
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
     save_job(job)
-    print(f"job {slug}: {src.name}, {NAMES[args.source]} -> {NAMES[args.target]}, "
-          f"{' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})")
+    print(
+        f"job {slug}: {src.name}, {NAMES[args.source]} -> {NAMES[args.target]}, "
+        f"{' + '.join(VOICE_LABEL[v] for v in voices)} (default {VOICE_LABEL[voices[0]]})"
+    )
     print(f"next: scripts/dubrama.py run {slug} --watch   (in the background), then direct the parts")
 
 
@@ -582,9 +690,10 @@ def cmd_ready(args):
 def cmd_status(args):
     job = load_job(args.slug)
     ps = parts(job)
-    print(f"{job['slug']}: {pathlib.Path(job['source']).name}; {' -> '.join(job_langs(job))}; "
-          f"voices {', '.join(job['voices'])}"
-          + (f"; delivered {job['delivered']['at']}" if job.get("delivered") else ""))
+    print(
+        f"{job['slug']}: {pathlib.Path(job['source']).name}; {' -> '.join(job_langs(job))}; "
+        f"voices {', '.join(job['voices'])}" + (f"; delivered {job['delivered']['at']}" if job.get("delivered") else "")
+    )
     if not ps:
         print("  not split yet")
     for p in ps:
@@ -603,7 +712,9 @@ def cmd_status(args):
         for voice in job["voices"]:
             st = load_json(WORK / voice_part(name, voice) / "state.json", {})
             left = len(load_json(WORK / voice_part(name, voice) / "reroll-left.json", []))
-            s = ("BLOCKED" if st.get("problem") else st.get("stage", "-")) + (f" r{st['round']}" if st.get("round") else "")
+            s = ("BLOCKED" if st.get("problem") else st.get("stage", "-")) + (
+                f" r{st['round']}" if st.get("round") else ""
+            )
             cols.append(f"{voice}: {s}" + (f" ({left} flagged)" if left else ""))
         print(f"  {name}  {film_time(p['start'])}  {prep:8s} {sep:9s} {draft:7s} {direction:13s} " + "  ".join(cols))
         for voice in job["voices"]:
@@ -628,12 +739,16 @@ def cmd_run(args):
             path = WORK / voice_part(p["name"], v) / "state.json"
             st = load_json(path, {})
             if st.get("problem", "").startswith(RETRY):
-                log(f"{voice_part(p['name'], v)}: retrying after \"{st.pop('problem')[:80]}\"")
+                log(f'{voice_part(p["name"], v)}: retrying after "{st.pop("problem")[:80]}"')
                 st["fails"] = 0
                 write_json(path, st)
     # Parts blocked before this run are known to the director; --watch stops for new ones.
-    known = {voice_part(p["name"], v) for p in ps for v in job["voices"]
-             if load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("problem")}
+    known = {
+        voice_part(p["name"], v)
+        for p in ps
+        for v in job["voices"]
+        if load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("problem")
+    }
     seen, new_block = set(), False
     while True:
         second(job, ps)
@@ -705,6 +820,7 @@ def cmd_cleanup(args):
             dst.parent.mkdir(parents=True, exist_ok=True)
             os.rename(src, dst)
             moved += 1
+
     for p in parts(job):
         for voice in ("actor", "american"):
             name = voice_part(p["name"], voice)
@@ -733,10 +849,16 @@ def main():
     a.add_argument("--minutes", type=float, default=3)
     a.add_argument("--whole", action="append", default=[], metavar="A-B")
     a.add_argument("--captions", action="store_true", help="the picture carries captions: run subs.py")
-    a.add_argument("--subtitles", action="store_true",
-                   help="the film subtitles its foreign-language speech in the picture: run subs.py --open")
-    a.add_argument("--signs", action="store_true",
-                   help="text in the picture worth translating (signs, diagrams, title cards): run signs.py")
+    a.add_argument(
+        "--subtitles",
+        action="store_true",
+        help="the film subtitles its foreign-language speech in the picture: run subs.py --open",
+    )
+    a.add_argument(
+        "--signs",
+        action="store_true",
+        help="text in the picture worth translating (signs, diagrams, title cards): run signs.py",
+    )
     a.set_defaults(fn=cmd_new)
     for name, fn in (("run", cmd_run), ("status", cmd_status), ("report", cmd_report), ("cleanup", cmd_cleanup)):
         b = sub.add_parser(name)

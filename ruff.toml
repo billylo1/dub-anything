@@ -1,0 +1,4 @@
+# Formatter settings: `uvx ruff format` from the repo root.
+# The code was written to about 120 columns; a narrower limit rewraps most of it.
+line-length = 120
+target-version = "py311"

@@ -22,6 +22,7 @@ Treat agreement as a review signal: re-listen with asr_words.py and decide from
 context. The models (~850 MB for Japanese, ~1 GB for English, ~900 MB for
 Spanish, ~320 MB for Korean) download to VoiceStudio's model cache on first use.
 """
+
 import argparse
 import json
 import os
@@ -38,10 +39,15 @@ from languages import LANGUAGES, pair_of
 
 # Same resolution as core.py.
 WORK = pathlib.Path(__file__).resolve().parents[1] / "work"
-JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
-                    or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
-HF_CACHE = (os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DIR")
-            or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache"))
+JOBS = (
+    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
+    / "dub_jobs"
+)
+HF_CACHE = (
+    os.environ.get("HF_HUB_CACHE")
+    or os.environ.get("OMNIVOICE_CACHE_DIR")
+    or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
+)
 SR = 16000
 PAD = 0.15  # s around each line
 FLAG = 0.3
@@ -60,32 +66,56 @@ def recogniser(kind, repo, lang):
     if kind == "parakeet":
         pk = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*.int8.onnx", "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_transducer(
-            encoder=part(pk, "encoder.int8.onnx"), decoder=part(pk, "decoder.int8.onnx"),
-            joiner=part(pk, "joiner.int8.onnx"), tokens=part(pk, "tokens.txt"), num_threads=8, sample_rate=SR,
-            feature_dim=128, model_type="nemo_transducer", decoding_method="greedy_search")
+            encoder=part(pk, "encoder.int8.onnx"),
+            decoder=part(pk, "decoder.int8.onnx"),
+            joiner=part(pk, "joiner.int8.onnx"),
+            tokens=part(pk, "tokens.txt"),
+            num_threads=8,
+            sample_rate=SR,
+            feature_dim=128,
+            model_type="nemo_transducer",
+            decoding_method="greedy_search",
+        )
     if kind == "canary":
         cn = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*.int8.onnx", "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_nemo_canary(
-            encoder=part(cn, "encoder.int8.onnx"), decoder=part(cn, "decoder.int8.onnx"),
-            tokens=part(cn, "tokens.txt"), src_lang=lang, tgt_lang=lang, num_threads=8)
+            encoder=part(cn, "encoder.int8.onnx"),
+            decoder=part(cn, "decoder.int8.onnx"),
+            tokens=part(cn, "tokens.txt"),
+            src_lang=lang,
+            tgt_lang=lang,
+            num_threads=8,
+        )
     if kind == "sensevoice":
         sv = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["model.int8.onnx", "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_sense_voice(
-            model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang,
-            use_itn=True)
+            model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang, use_itn=True
+        )
     if kind == "zipformer_ctc":
         zf = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["model.int8.onnx", "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_zipformer_ctc(
-            model=part(zf, "model.int8.onnx"), tokens=part(zf, "tokens.txt"), num_threads=8,
-            sample_rate=SR, feature_dim=80, decoding_method="greedy_search")
+            model=part(zf, "model.int8.onnx"),
+            tokens=part(zf, "tokens.txt"),
+            num_threads=8,
+            sample_rate=SR,
+            feature_dim=80,
+            decoding_method="greedy_search",
+        )
     if kind in ("reazon", "zipformer"):
         # k2 Zipformer transducers: ReazonSpeech's in full precision, the others int8.
         name = "{}-epoch-99-avg-1" + (".onnx" if kind == "reazon" else ".int8.onnx")
         zf = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=[name.format("*"), "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_transducer(
-            encoder=part(zf, name.format("encoder")), decoder=part(zf, name.format("decoder")),
-            joiner=part(zf, name.format("joiner")), tokens=part(zf, "tokens.txt"), num_threads=8,
-            sample_rate=SR, feature_dim=80, decoding_method="modified_beam_search", max_active_paths=4)
+            encoder=part(zf, name.format("encoder")),
+            decoder=part(zf, name.format("decoder")),
+            joiner=part(zf, name.format("joiner")),
+            tokens=part(zf, "tokens.txt"),
+            num_threads=8,
+            sample_rate=SR,
+            feature_dim=80,
+            decoding_method="modified_beam_search",
+            max_active_paths=4,
+        )
     raise SystemExit(f"second.py knows no {kind!r} recogniser (SECOND_OPINIONS in languages/{lang}.py)")
 
 
@@ -104,8 +134,12 @@ def dist(a, b, lang="ja"):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("targets", nargs="+", metavar="clip",
-                    help="one or more clips (the models load once), or one clip followed by t0:t1 stretches")
+    ap.add_argument(
+        "targets",
+        nargs="+",
+        metavar="clip",
+        help="one or more clips (the models load once), or one clip followed by t0:t1 stretches",
+    )
     ap.add_argument("--script", action="store_true", help="check script.json instead of draft.json")
     ap.add_argument("--all", action="store_true", help="print every line, not just flagged ones")
     args = ap.parse_args()
@@ -161,7 +195,7 @@ def check(clip, spans, recs, lang, script, show_all):
     flagged = 0
     for i, line in enumerate(lines):
         a, b = max(0.0, line["start"] - PAD), line["end"] + PAD
-        clip_audio = x[int(a * SR):int(b * SR)]
+        clip_audio = x[int(a * SR) : int(b * SR)]
         if len(clip_audio) < 0.1 * SR or line.get("lang"):
             continue  # a draft line at (or past) the clip's very end, or not in the source language
         got = {name: decode(rec, clip_audio) for name, rec in recs.items()}

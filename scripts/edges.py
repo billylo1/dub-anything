@@ -33,6 +33,7 @@ begins, and a per-line reference cut there ends cleanly.
 `dub.py generate` re-mixes without re-synthesizing. An earlier start also
 starts the take a little earlier, closer to the actor's mouth.
 """
+
 import argparse
 import json
 import sys
@@ -50,14 +51,14 @@ SILENT_DB = -70.0  # the separated vocals between phrases: exact zeros (-180 dB)
 
 def frames_db(audio):
     n = len(audio) // HOP
-    x = audio[:n * HOP].reshape(n, HOP)
-    return 20 * np.log10(np.sqrt((x ** 2).mean(1)) + 1e-9)
+    x = audio[: n * HOP].reshape(n, HOP)
+    return 20 * np.log10(np.sqrt((x**2).mean(1)) + 1e-9)
 
 
 def silent(db, a, b):
     """Some of the separated vocals' silence in frames a..b: the voice fades in
     or out over a few faint frames on its way from it."""
-    seg = db[max(0, a):b]
+    seg = db[max(0, a) : b]
     return len(seg) > 0 and float(seg.min()) < SILENT_DB
 
 
@@ -68,14 +69,14 @@ def voiced_onset(db, t, floor_t, level, below=20.0, lead=0.02):
     `below` dB of it."""
     k = int(t * SR / HOP)
     thresh = level - below
-    if k < 2 or k > len(db) or max(db[k - 2:k]) < thresh:  # the 10 ms before the edge
+    if k < 2 or k > len(db) or max(db[k - 2 : k]) < thresh:  # the 10 ms before the edge
         return None
     j = k - 1
     floor_k = int(floor_t * SR / HOP)
     # Walk back over the sound and any dip shorter than GAP: a soft line over low noise
     # flickers around the threshold, and stopping at the first quiet frame put each
     # --apply run's cut just before another flicker, a little earlier every time.
-    while j - 1 >= floor_k and max(db[max(floor_k, j - GAP):j]) >= thresh:
+    while j - 1 >= floor_k and max(db[max(floor_k, j - GAP) : j]) >= thresh:
         j -= 1
     return max(floor_t, j * HOP / SR - lead), j > floor_k and silent(db, j - 4 * GAP, j)
 
@@ -86,11 +87,11 @@ def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
     None. The mirror of voiced_onset."""
     k = int(t * SR / HOP)
     thresh = level - below
-    if k + 2 > len(db) or min(db[k:k + 2]) < thresh:  # the 10 ms after the edge
+    if k + 2 > len(db) or min(db[k : k + 2]) < thresh:  # the 10 ms after the edge
         return None
     j = k
     ceil_k = min(len(db) - 1, int(ceil_t * SR / HOP))
-    while j + 1 <= ceil_k and max(db[j + 1:min(ceil_k, j + GAP) + 1]) >= thresh:
+    while j + 1 <= ceil_k and max(db[j + 1 : min(ceil_k, j + GAP) + 1]) >= thresh:
         j += 1
     return min(ceil_t, (j + 1) * HOP / SR + lag), j < ceil_k and silent(db, j + 1, j + 1 + 4 * GAP)
 
@@ -98,7 +99,7 @@ def voiced_release(db, t, ceil_t, level, below=20.0, lag=0.02):
 def level_at(db, t):
     """The voice's level around time t, smoothed over 20 ms as end_dip smooths it."""
     k = int(round(t * SR / HOP))
-    seg = db[max(0, k - 2):k + 2]
+    seg = db[max(0, k - 2) : k + 2]
     return float(seg.mean()) if len(seg) else -90.0
 
 
@@ -109,7 +110,7 @@ DIP_SETTLED_DB = 3.0
 
 
 def line_level(db, a, b):
-    seg = db[int(a * SR / HOP):int(b * SR / HOP)]
+    seg = db[int(a * SR / HOP) : int(b * SR / HOP)]
     return float(np.percentile(seg, 90)) if len(seg) else -90.0
 
 
@@ -130,18 +131,21 @@ def check(name, apply=False, min_shift=0.015):
     path = WORK / name / "script.json"
     script = load_json(path)
     lines = script["lines"]
-    audio = decode_audio(str(JOBS / load_json(WORK / name / "segments.json")["job_id"] / "vocals.wav"),
-                         sampling_rate=SR)
+    audio = decode_audio(
+        str(JOBS / load_json(WORK / name / "segments.json")["job_id"] / "vocals.wav"), sampling_rate=SR
+    )
     db = frames_db(audio)
     moved, tails, joins = [], [], []
     for i, line in enumerate(lines):
         level = line_level(db, line["start"], line["end"])
         prev_end = lines[i - 1]["end"] if i else 0.0
-        onset, from_silence = voiced_onset(db, line["start"], max(prev_end, line["start"] - SEARCH), level) \
-            or (None, False)
+        onset, from_silence = voiced_onset(db, line["start"], max(prev_end, line["start"] - SEARCH), level) or (
+            None,
+            False,
+        )
         if onset is not None and line["start"] - onset >= min_shift:
             k = int(line["start"] * SR / HOP)
-            cut = float(max(db[k - 2:k])) - level  # how loud the voice is where it gets chopped
+            cut = float(max(db[k - 2 : k])) - level  # how loud the voice is where it gets chopped
             limit = MAX_SHIFT_SILENT if from_silence else MAX_SHIFT
             fix = MIN_SHIFT - 1e-6 <= line["start"] - onset <= limit + 1e-6 and cut >= CUT_DB
             moved.append((i, line["start"], round(onset, 2), line["text"], cut, fix))
@@ -150,35 +154,54 @@ def check(name, apply=False, min_shift=0.015):
         nxt = lines[i + 1]["start"] if i + 1 < len(lines) else line["end"] + 1
         if nxt - line["end"] <= 0.05:
             dip = end_dip(db, line["start"], line["end"])
-            if dip is not None and abs(dip - line["end"]) >= min_shift and dip < lines[i + 1]["end"] - 0.3                     and level_at(db, line["end"]) - level_at(db, dip) > DIP_SETTLED_DB:
+            if (
+                dip is not None
+                and abs(dip - line["end"]) >= min_shift
+                and dip < lines[i + 1]["end"] - 0.3
+                and level_at(db, line["end"]) - level_at(db, dip) > DIP_SETTLED_DB
+            ):
                 joins.append((i, line["end"], round(dip, 2), line["text"]))
                 if apply:
                     line["end"] = lines[i + 1]["start"] = round(dip, 2)
             continue
         ceil = nxt - 0.05
-        release, to_silence = voiced_release(db, line["end"], min(ceil, line["end"] + SEARCH), level) \
-            or (None, False)
+        release, to_silence = voiced_release(db, line["end"], min(ceil, line["end"] + SEARCH), level) or (None, False)
         if release is not None:
             k = int(line["end"] * SR / HOP)
-            cut = float(min(db[k:k + 2])) - level
+            cut = float(min(db[k : k + 2])) - level
             limit = MAX_SHIFT_SILENT if to_silence else MAX_SHIFT
-            fix = MIN_SHIFT - 1e-6 <= release - line["end"] <= limit + 1e-6 and cut >= CUT_DB \
-                and release < min(ceil, line["end"] + SEARCH)  # the voice really stopped
+            fix = (
+                MIN_SHIFT - 1e-6 <= release - line["end"] <= limit + 1e-6
+                and cut >= CUT_DB
+                and release < min(ceil, line["end"] + SEARCH)
+            )  # the voice really stopped
             tails.append((i, line["end"], round(release, 2), line["text"], cut, fix))
             if apply and fix:
                 line["end"] = round(release, 2)
     for i, old, new, text, cut, fix in moved:
-        print(f"  {'FIX ' if fix else 'skip'} L{i:02d} start {old:7.2f} -> {new:7.2f}  ({(old - new) * 1000:3.0f} ms "
-              f"earlier, voice {cut:+5.1f} dB at the cut)  {text[:40]}")
+        print(
+            f"  {'FIX ' if fix else 'skip'} L{i:02d} start {old:7.2f} -> {new:7.2f}  ({(old - new) * 1000:3.0f} ms "
+            f"earlier, voice {cut:+5.1f} dB at the cut)  {text[:40]}"
+        )
     for i, old, new, text, cut, fix in tails:
-        what = f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later," if fix else             f"   voice sounds {(new - old) * 1000:3.0f}+ ms on," if new >= old + SEARCH - 1e-6 else             f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
-        print(f"  {'FIX ' if fix else 'note'} L{i:02d} end   {old:7.2f} {what} voice {cut:+5.1f} dB at the cut)  {text[:36]}")
+        what = (
+            f"-> {new:7.2f}  ({(new - old) * 1000:3.0f} ms later,"
+            if fix
+            else f"   voice sounds {(new - old) * 1000:3.0f}+ ms on,"
+            if new >= old + SEARCH - 1e-6
+            else f"   voice sounds {(new - old) * 1000:3.0f} ms on,"
+        )
+        print(
+            f"  {'FIX ' if fix else 'note'} L{i:02d} end   {old:7.2f} {what} voice {cut:+5.1f} dB at the cut)  {text[:36]}"
+        )
     for i, old, new, text in joins:
         print(f"  FIX  L{i:02d}/L{i + 1:02d} boundary {old:7.2f} -> {new:7.2f}  (the voice dips there)  {text[:36]}")
     fixes = sum(m[5] for m in moved)
     end_fixes = sum(t[5] for t in tails)
-    print(f"{name}: {fixes} starts, {end_fixes} ends and {len(joins)} shared boundaries to move"
-          f"{' (applied)' if apply else ''}, {len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone")
+    print(
+        f"{name}: {fixes} starts, {end_fixes} ends and {len(joins)} shared boundaries to move"
+        f"{' (applied)' if apply else ''}, {len(moved) - fixes} starts and {len(tails) - end_fixes} ends left alone"
+    )
     if apply and (fixes or end_fixes or joins):
         # One entry per line, keeping every other top-level key (captions, notes).
         parts = []

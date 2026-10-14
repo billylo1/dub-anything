@@ -46,6 +46,7 @@ end, voice, the transcript under the source language's code ("ja", "en" or "es")
 text="" plus score fields). The director still decides: fix mishearings, confirm
 the cast, merge or split lines, then write script.json.
 """
+
 import argparse
 import glob
 import json
@@ -82,8 +83,10 @@ def hallucination(text, lang="ja", recovered=False):
     phrase (speech the full pass skipped) that only says thanks (THANKS): real
     thanks are common in dialogue, so only those are suspect."""
     known = LANGUAGES.get(lang)
-    return bool(known) and (any(h in text.lower() for h in known.HALLUCINATIONS) or (
-        recovered and re.sub(r"[^\w\s]", "", text).strip().lower() in known.THANKS))
+    return bool(known) and (
+        any(h in text.lower() for h in known.HALLUCINATIONS)
+        or (recovered and re.sub(r"[^\w\s]", "", text).strip().lower() in known.THANKS)
+    )
 
 
 def stretches(spans, a, b, pause=1.5, longest=8.0):
@@ -109,8 +112,9 @@ def spoken_language(model, clip):
 
 def transcribe(model, audio, offset=0.0, language="ja"):
     """Whisper phrases with their words in clip time: {start, end, said, words, logprob}."""
-    segs, _ = model.transcribe(audio, language=language, beam_size=5, vad_filter=False,
-                               condition_on_previous_text=False, word_timestamps=True)
+    segs, _ = model.transcribe(
+        audio, language=language, beam_size=5, vad_filter=False, condition_on_previous_text=False, word_timestamps=True
+    )
     out = []
     for s in segs:
         words = [(w.start + offset, w.end + offset, w.word) for w in (s.words or []) if w.word.strip()]
@@ -142,8 +146,7 @@ def surer(model, clip, offset, src, tgt):
 
 
 def phrase(words):
-    return {"start": words[0][0], "end": words[-1][1], "said": "".join(w[2] for w in words).strip(),
-            "words": words}
+    return {"start": words[0][0], "end": words[-1][1], "said": "".join(w[2] for w in words).strip(), "words": words}
 
 
 def snap(p, spans, duration):
@@ -185,10 +188,14 @@ def embedder():
     hold_gpu()
     from pyannote.audio import Inference, Model
     from pyannote.audio.core.task import Problem, Resolution, Specifications
+
     # pyannote 3.4's from_pretrained breaks on huggingface_hub 1.x: load the file.
     torch.serialization.add_safe_globals([torch.torch_version.TorchVersion, Problem, Resolution, Specifications])
-    ckpt = glob.glob(os.path.join(HF_CACHE, "models--pyannote--wespeaker-voxceleb-resnet34-LM",
-                                  "snapshots", "*", "pytorch_model.bin"))
+    ckpt = glob.glob(
+        os.path.join(
+            HF_CACHE, "models--pyannote--wespeaker-voxceleb-resnet34-LM", "snapshots", "*", "pytorch_model.bin"
+        )
+    )
     if not ckpt:
         return None
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -198,6 +205,7 @@ def embedder():
         wav = torch.from_numpy(np.ascontiguousarray(audio16k)).float()[None]
         v = np.asarray(inf({"waveform": wav, "sample_rate": SR})).reshape(-1)
         return v / np.linalg.norm(v)
+
     return embed
 
 
@@ -231,9 +239,11 @@ def cast_centroids(embed, keys, exclude=None, per_voice=30):
                 samples.setdefault(who, []).append((script.parent.name, line["start"], line["end"]))
     cents = {}
     for key, items in samples.items():
-        vecs = [embed(vocals(clip)[int(a * SR):int(b * SR)])
-                for clip, a, b in sorted(items, key=lambda s: s[1] - s[2])[:per_voice]
-                if vocals(clip) is not None and b - a >= 0.5]
+        vecs = [
+            embed(vocals(clip)[int(a * SR) : int(b * SR)])
+            for clip, a, b in sorted(items, key=lambda s: s[1] - s[2])[:per_voice]
+            if vocals(clip) is not None and b - a >= 0.5
+        ]
         if vecs:
             c = np.mean(vecs, axis=0)
             cents[key] = c / np.linalg.norm(c)
@@ -251,8 +261,11 @@ def show_of(name):
 def show_cast(name):
     """The voices built from this show's own parts: a new show's drafts shouldn't be
     scored against every other show's cast once it has a cast of its own."""
-    return {k for k, s in load_json(WORK / "voices.json", {}).items()
-            if s.get("from") and show_of(s["from"]) == show_of(name)}
+    return {
+        k
+        for k, s in load_json(WORK / "voices.json", {}).items()
+        if s.get("from") and show_of(s["from"]) == show_of(name)
+    }
 
 
 def on_screen(subs, p):
@@ -272,13 +285,17 @@ def caption(e):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="+", metavar="name", help="one or more prepped clips (the models load once)")
-    ap.add_argument("--cast", help="comma-separated voice keys to consider (default: the show's own voices, "
-                                   "or all while it has none)")
-    ap.add_argument("--model", default="Systran/faster-whisper-large-v3",
-                    help="Whisper model (default: large-v3)")
-    ap.add_argument("--recast", action="store_true",
-                    help="keep each clip's draft.json transcript and only suggest speakers again (after "
-                         "building voices for a new show's first drafts)")
+    ap.add_argument(
+        "--cast",
+        help="comma-separated voice keys to consider (default: the show's own voices, or all while it has none)",
+    )
+    ap.add_argument("--model", default="Systran/faster-whisper-large-v3", help="Whisper model (default: large-v3)")
+    ap.add_argument(
+        "--recast",
+        action="store_true",
+        help="keep each clip's draft.json transcript and only suggest speakers again (after "
+        "building voices for a new show's first drafts)",
+    )
     args = ap.parse_args()
     hold_gpu()
     model = None if args.recast else WhisperModel(args.model, device="auto", compute_type="default")
@@ -303,8 +320,13 @@ def draft(name, cast, model, embed_once):
     duration = len(audio) / SR
     if model is None:
         # --recast: the transcript and windows stay; only the speakers are suggested again.
-        phrases = [{**{k: v for k, v in line.items() if k not in ("voice", "score", "alt", "alt_score", "text", src)},
-                    "said": line.get(src, "")} for line in load_json(work / "draft.json")["lines"]]
+        phrases = [
+            {
+                **{k: v for k, v in line.items() if k not in ("voice", "score", "alt", "alt_score", "text", src)},
+                "said": line.get(src, ""),
+            }
+            for line in load_json(work / "draft.json")["lines"]
+        ]
         return suggest(name, work, audio, phrases, vad_spans(audio), cast, embed_once)
 
     spans = vad_spans(audio)
@@ -313,11 +335,16 @@ def draft(name, cast, model, embed_once):
     # keep only the words that land in the gap.
     for a, b in uncovered(phrases, spans):
         lo, hi = max(0.0, a - 1.0), min(duration, b + 1.0)
-        for p in transcribe(model, audio[int(lo * SR):int(hi * SR)], lo, language=src):
+        for p in transcribe(model, audio[int(lo * SR) : int(hi * SR)], lo, language=src):
             words = [w for w in p["words"] if a - 0.2 <= (w[0] + w[1]) / 2 + EARLY <= b + 0.2]
             if words:
-                phrases.append({**snap(phrase(words), spans, duration), "recovered": True,
-                                **({"suspect": True} if hallucination(p["said"], src) else {})})
+                phrases.append(
+                    {
+                        **snap(phrase(words), spans, duration),
+                        "recovered": True,
+                        **({"suspect": True} if hallucination(p["said"], src) else {}),
+                    }
+                )
     phrases = settle(phrases)
     # A hallucination over a long stretch hides real speech (a whole phone call
     # in accented English became "ご視聴ありがとうございました"): redo it a
@@ -325,18 +352,19 @@ def draft(name, cast, model, embed_once):
     for p in [p for p in phrases if hallucination(p["said"], src) and p["end"] - p["start"] > 3.0]:
         phrases.remove(p)
         for a, b in stretches(spans, p["start"], p["end"]):
-            lang, found = surer(model, audio[int(a * SR):int(b * SR)], a, src, tgt)
+            lang, found = surer(model, audio[int(a * SR) : int(b * SR)], a, src, tgt)
             for q in found:
                 if not hallucination(q["said"], lang):
-                    phrases.append({**snap(q, spans, duration), "recovered": True,
-                                    **({"lang": lang} if lang != src else {})})
+                    phrases.append(
+                        {**snap(q, spans, duration), "recovered": True, **({"lang": lang} if lang != src else {})}
+                    )
     phrases = settle(phrases)
     # Speech already in the target language, or in a third language (a film set
     # abroad): forced to the source language, Whisper translates it.
     for p in phrases:
         if p.get("lang") or p["end"] - p["start"] < 1.0:
             continue
-        clip = audio[int(p["start"] * SR):int(p["end"] * SR)]
+        clip = audio[int(p["start"] * SR) : int(p["end"] * SR)]
         lang = spoken_language(model, clip)
         if lang and lang != src:
             # A second opinion: the language counts only when Whisper transcribes the
@@ -358,8 +386,11 @@ def draft(name, cast, model, embed_once):
         onset, from_silence = edges.voiced_onset(db, p["start"], floor_t, level) or (None, False)
         k = int(p["start"] * SR / edges.HOP)
         limit = edges.MAX_SHIFT_SILENT if from_silence else edges.MAX_SHIFT
-        if onset is not None and edges.MIN_SHIFT <= p["start"] - onset <= limit \
-                and max(db[k - 2:k]) - level >= edges.CUT_DB:
+        if (
+            onset is not None
+            and edges.MIN_SHIFT <= p["start"] - onset <= limit
+            and max(db[k - 2 : k]) - level >= edges.CUT_DB
+        ):
             p["start"] = round(onset, 2)
     suggest(name, work, audio, phrases, spans, cast, embed_once)
 
@@ -368,31 +399,39 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
     """Score each phrase against the cast, print the draft and write draft.json."""
     src = langs(name)[0]
     embed = embed_once()
-    cents = cast_centroids(embed, set(cast.split(",")) if cast else show_cast(name) or None, exclude=name) \
-        if embed else {}
+    cents = (
+        cast_centroids(embed, set(cast.split(",")) if cast else show_cast(name) or None, exclude=name) if embed else {}
+    )
     for p in phrases:
         if not cents or p["end"] - p["start"] < 0.3:
             continue
-        v = embed(audio[int(p["start"] * SR):int(p["end"] * SR)])
+        v = embed(audio[int(p["start"] * SR) : int(p["end"] * SR)])
         ranked = sorted(((float(v @ c), k) for k, c in cents.items()), reverse=True)
         p["voice"], p["score"] = ranked[0][1], round(ranked[0][0], 2)
         if len(ranked) > 1:
             p["alt"], p["alt_score"] = ranked[1][1], round(ranked[1][0], 2)
 
     subs = load_json(work / "subs.json", {}).get("events", [])
-    print("cast considered: " + (", ".join(f"{k} ({cast_centroids.counts[k]})" for k in cents)
-                                 or "(none – no usable voices yet)"))
+    print(
+        "cast considered: "
+        + (", ".join(f"{k} ({cast_centroids.counts[k]})" for k in cents) or "(none – no usable voices yet)")
+    )
     for i, p in enumerate(phrases):
-        sure = p.get("score", 0) >= 0.3 and p["end"] - p["start"] >= 0.6 and \
-            p.get("score", 0) - p.get("alt_score", -1) >= 0.15
+        sure = (
+            p.get("score", 0) >= 0.3
+            and p["end"] - p["start"] >= 0.6
+            and p.get("score", 0) - p.get("alt_score", -1) >= 0.15
+        )
         who = f"{p.get('voice', '-'):>10s} {p.get('score', 0):4.2f}{' ' if sure else '?'}"
         alt = f"({p['alt']} {p['alt_score']:.2f})" if "alt" in p else ""
         tag = " [recovered]" if p.get("recovered") else ""
         if p.get("lang"):
             tag += f" [{NAMES.get(p['lang'], p['lang'])}: keep the original, caption it]"
         elif p.get("maybe"):
-            tag += (f" [{NAMES.get(p['maybe']['lang'], p['maybe']['lang'])}?: \"{p['maybe']['said']}\", "
-                    f"but Whisper is surer of it in {NAMES.get(src, src)}; re-listen]")
+            tag += (
+                f' [{NAMES.get(p["maybe"]["lang"], p["maybe"]["lang"])}?: "{p["maybe"]["said"]}", '
+                f"but Whisper is surer of it in {NAMES.get(src, src)}; re-listen]"
+            )
         if p.get("suspect") or hallucination(p["said"], p.get("lang", src), p.get("recovered")):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
@@ -413,13 +452,23 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
             print(f"    {e['start']:7.2f}-{e['end']:7.2f}  {caption(e)}")
     gaps = uncovered(phrases, spans)
     if gaps:
-        print("speech not in any line (hums/laughs, or missed words):",
-              " ".join(f"{a:.2f}-{b:.2f}" for a, b in gaps))
-    lines = [{"start": p["start"], "end": p["end"], "voice": p.get("voice", ""), src: p["said"], "text": "",
-              **{k: p[k] for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang", "maybe", "cc", "song") if k in p}}
-             for p in phrases]
-    (work / "draft.json").write_text(json.dumps({"lines": lines}, ensure_ascii=False, indent=1),
-                                     encoding="utf-8")
+        print("speech not in any line (hums/laughs, or missed words):", " ".join(f"{a:.2f}-{b:.2f}" for a, b in gaps))
+    lines = [
+        {
+            "start": p["start"],
+            "end": p["end"],
+            "voice": p.get("voice", ""),
+            src: p["said"],
+            "text": "",
+            **{
+                k: p[k]
+                for k in ("score", "alt", "alt_score", "recovered", "suspect", "lang", "maybe", "cc", "song")
+                if k in p
+            },
+        }
+        for p in phrases
+    ]
+    (work / "draft.json").write_text(json.dumps({"lines": lines}, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":

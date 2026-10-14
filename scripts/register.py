@@ -25,6 +25,7 @@ Usage: scripts/register.py report [clip ...]            each reference against t
        scripts/register.py drop <voice>                 retire an extra reference that doesn't
 report and check default to every directed clip (work/*/script.json).
 """
+
 import argparse
 import json
 import re
@@ -41,9 +42,9 @@ from faster_whisper.vad import VadOptions, get_speech_timestamps
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR, FRAME, HOP = 16000, 1024, 256
 FMIN, FMAX = 70, 500
-MIN_LINE = 0.6      # s; shorter lines are too short to measure
-APART = 1.0         # arousal gap between a line and its reference that counts as a mismatch
-HYSTERESIS = 0.5    # route only when another reference is nearer by this much
+MIN_LINE = 0.6  # s; shorter lines are too short to measure
+APART = 1.0  # arousal gap between a line and its reference that counts as a mismatch
+HYSTERESIS = 0.5  # route only when another reference is nearer by this much
 _audio = {}
 
 
@@ -59,8 +60,8 @@ def yin(fr):
     """Pitch per frame by YIN (Hz; nan where the frame isn't periodic)."""
     tmin, tmax = SR // FMAX, SR // FMIN
     w = FRAME - tmax
-    r = np.fft.irfft(np.conj(np.fft.rfft(fr[:, :w], 2048)) * np.fft.rfft(fr, 2048), 2048)[:, :tmax + 1]
-    cs = np.concatenate([np.zeros((len(fr), 1)), np.cumsum(fr ** 2, axis=1)], axis=1)
+    r = np.fft.irfft(np.conj(np.fft.rfft(fr[:, :w], 2048)) * np.fft.rfft(fr, 2048), 2048)[:, : tmax + 1]
+    cs = np.concatenate([np.zeros((len(fr), 1)), np.cumsum(fr**2, axis=1)], axis=1)
     taus = np.arange(tmax + 1)
     d = cs[:, w][:, None] + cs[:, taus + w] - cs[:, taus] - 2 * r
     cmnd = np.ones_like(d)
@@ -87,15 +88,18 @@ def features(x):
         return None
     n = 1 + (len(x) - FRAME) // HOP
     fr = x[np.arange(FRAME)[None] + HOP * np.arange(n)[:, None]].astype(np.float64)
-    db = 10 * np.log10((fr ** 2).mean(axis=1) + 1e-10)
+    db = 10 * np.log10((fr**2).mean(axis=1) + 1e-10)
     loud = db > db.max() - 25
     f0 = yin(fr[loud])
     f0 = f0[~np.isnan(f0)]
     p = np.abs(np.fft.rfft(fr[loud] * np.hanning(FRAME), axis=1)) ** 2
     hz = np.fft.rfftfreq(FRAME, 1 / SR)
     tilt = 10 * np.log10(p[:, (hz >= 1000) & (hz < 4000)].sum() / (p[:, (hz >= 100) & (hz < 1000)].sum() + 1e-12))
-    return {"pitch": 12 * np.log2(np.median(f0) / 100) if len(f0) >= 5 else np.nan,
-            "effort": float(tilt), "level": float(np.percentile(db, 95))}
+    return {
+        "pitch": 12 * np.log2(np.median(f0) / 100) if len(f0) >= 5 else np.nan,
+        "effort": float(tilt),
+        "level": float(np.percentile(db, 95)),
+    }
 
 
 FLOOR = {"pitch": 1.0, "effort": 1.0, "level": 1.5}
@@ -148,7 +152,7 @@ class Show:
                 if twin in seen:
                     continue
                 seen.add(twin)
-                f = features(vocals(clip)[int(line["start"] * SR):int(line["end"] * SR)])
+                f = features(vocals(clip)[int(line["start"] * SR) : int(line["end"] * SR)])
                 if f:
                     self.lines.setdefault(self.base[line["voice"]], []).append((clip, i, line, f))
         self.norm = {b: norms([f for *_, f in ls]) for b, ls in self.lines.items() if len(ls) >= 8}
@@ -156,8 +160,11 @@ class Show:
     def ref_arousal(self, key):
         """Duration-weighted arousal of a voice's reference clips."""
         nm = self.norm[self.base[key]]
-        got = [(arousal(f, nm), b - a) for clip, a, b in voice_clips(self.voices[key])
-               if vocals(clip) is not None and (f := features(vocals(clip)[int(a * SR):int(b * SR)]))]
+        got = [
+            (arousal(f, nm), b - a)
+            for clip, a, b in voice_clips(self.voices[key])
+            if vocals(clip) is not None and (f := features(vocals(clip)[int(a * SR) : int(b * SR)]))
+        ]
         return sum(x * w for x, w in got) / sum(w for _, w in got)
 
     def refs(self, base):
@@ -178,10 +185,12 @@ def cmd_report(args):
         calmer, louder = int((ar - near <= -APART).sum()), int((ar - near >= APART).sum())
         need = max(4, 0.15 * len(ls))
         todo = [b for b, n in (("calm", calmer), ("raised", louder)) if n >= need]
-        print(f"{base:10s} {len(ls):3d} lines  " + "  ".join(
-            f"ref {k} {r:+.1f} ({(ar < r).mean() * 100:.0f}th pct)" for k, r in refs.items())
+        print(
+            f"{base:10s} {len(ls):3d} lines  "
+            + "  ".join(f"ref {k} {r:+.1f} ({(ar < r).mean() * 100:.0f}th pct)" for k, r in refs.items())
             + f"   {calmer} lines {APART:g}+ calmer, {louder} louder than their nearest reference"
-            + (f"   -> build {' and '.join(todo)}" if todo else ""))
+            + (f"   -> build {' and '.join(todo)}" if todo else "")
+        )
 
 
 def clean_lines(show, base):
@@ -200,8 +209,10 @@ def clean_lines(show, base):
         if clip not in spans:
             opts = VadOptions(threshold=0.5, min_silence_duration_ms=100, speech_pad_ms=0)
             spans[clip] = [(s["start"] / SR, s["end"] / SR) for s in get_speech_timestamps(vocals(clip), opts)]
-        if any(a < line["start"] - 0.05 and b > line["start"] - 0.25 or a < line["end"] + 0.25 and b > line["end"] + 0.05
-               for a, b in spans[clip]):
+        if any(
+            a < line["start"] - 0.05 and b > line["start"] - 0.25 or a < line["end"] + 0.25 and b > line["end"] + 0.05
+            for a, b in spans[clip]
+        ):
             continue
         out.append((clip, i, line, f))
     return out
@@ -216,8 +227,11 @@ def cmd_build(args):
     nm, refs = show.norm[base], show.refs(base)
     sign = -1 if args.band == "calm" else 1
     # The lines the existing references serve worst in this direction set the target.
-    gaps = [arousal(f, nm) for *_, f in show.lines[base]
-            if sign * (arousal(f, nm) - min(refs.values(), key=lambda r: abs(arousal(f, nm) - r))) >= APART]
+    gaps = [
+        arousal(f, nm)
+        for *_, f in show.lines[base]
+        if sign * (arousal(f, nm) - min(refs.values(), key=lambda r: abs(arousal(f, nm) - r))) >= APART
+    ]
     if not gaps:
         raise SystemExit(f"no {args.band} lines that the current references serve badly")
     target = float(np.median(gaps))
@@ -230,15 +244,17 @@ def cmd_build(args):
         a = arousal(f, nm)
         if abs(a - target) > 1.0 or total >= 8.0 or len(picked) == 4:
             break
-        x = vocals(clip)[int(line["start"] * SR):int(line["end"] * SR)]
+        x = vocals(clip)[int(line["start"] * SR) : int(line["end"] * SR)]
         sim = float(embed(x) @ centroid)
         src = langs(clip)[0]
         heard = "".join(q["said"] for q in draft.transcribe(model, x, language=src))
         ref, got = bare(said(line, src)), bare(heard)
         err = cer(ref, got)
         ok = sim >= 0.5 and err <= 0.25
-        print(f"  {'take' if ok else 'skip'} {clip} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} arousal {a:+.1f}"
-              f"  voice match {sim:.2f}  heard {err:.0%} off  {said(line, src)}")
+        print(
+            f"  {'take' if ok else 'skip'} {clip} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} arousal {a:+.1f}"
+            f"  voice match {sim:.2f}  heard {err:.0%} off  {said(line, src)}"
+        )
         if ok:
             picked.append([clip, line["start"], line["end"], said(line, src), a])
             total += line["end"] - line["start"]
@@ -247,14 +263,23 @@ def cmd_build(args):
     level = sum(p[4] * (p[2] - p[1]) for p in picked) / total
     nearest = min(refs.values(), key=lambda r: abs(level - r))
     if abs(level - nearest) < 0.8:
-        raise SystemExit(f"the clean {args.band} lines average {level:+.1f}, too close to an existing reference "
-                         f"({nearest:+.1f}) to be a register of their own")
-    spec = {"from": picked[0][0], "clips": [p[:3] for p in picked], "ref_text": " ".join(p[3] for p in picked),
-            "register_of": base, "register": args.band}
+        raise SystemExit(
+            f"the clean {args.band} lines average {level:+.1f}, too close to an existing reference "
+            f"({nearest:+.1f}) to be a register of their own"
+        )
+    spec = {
+        "from": picked[0][0],
+        "clips": [p[:3] for p in picked],
+        "ref_text": " ".join(p[3] for p in picked),
+        "register_of": base,
+        "register": args.band,
+    }
     update_voices(lambda voices: voices.update({key: spec}))
-    print(f"{key}: {total:.1f} s from {len(picked)} lines at arousal {level:+.1f} (target {target:+.1f}; "
-          f"the character's own reference is {refs[base]:+.1f}). Written to voices.json; "
-          f"check work/voices/{key}.wav with asr_words.py after the first render.")
+    print(
+        f"{key}: {total:.1f} s from {len(picked)} lines at arousal {level:+.1f} (target {target:+.1f}; "
+        f"the character's own reference is {refs[base]:+.1f}). Written to voices.json; "
+        f"check work/voices/{key}.wav with asr_words.py after the first render."
+    )
 
 
 def cer(a, b):
@@ -283,8 +308,11 @@ def cmd_route(args):
             cur = line["voice"]
             best = min(refs[base], key=lambda k: abs(a - refs[base][k]))
             if best != cur and abs(a - refs[base][cur]) - abs(a - refs[base][best]) >= HYSTERESIS:
-                print(f"  {clip} L{i:02d} {line['start']:7.2f}  {cur} -> {best}  (line {a:+.1f}; "
-                      + ", ".join(f"{k} {r:+.1f}" for k, r in refs[base].items()) + f")  {line['text']}")
+                print(
+                    f"  {clip} L{i:02d} {line['start']:7.2f}  {cur} -> {best}  (line {a:+.1f}; "
+                    + ", ".join(f"{k} {r:+.1f}" for k, r in refs[base].items())
+                    + f")  {line['text']}"
+                )
                 line["voice"] = best
                 changed += 1
         if changed and args.apply:
@@ -325,9 +353,13 @@ def cmd_check(args):
                 continue
             d_orig, d_take = orig[on].mean() - orig[~on].mean(), take[on].mean() - take[~on].mean()
             want = -1 if show.voices[v].get("register") == "calm" else 1
-            verdict = "working" if want * d_take >= 0.5 else f"not delivering its register: scripts/register.py drop {v}"
-            print(f"    {v}: its {on.sum()} lines stand {d_orig:+.2f} apart from the others in the original, "
-                  f"{d_take:+.2f} in the takes -> {verdict}")
+            verdict = (
+                "working" if want * d_take >= 0.5 else f"not delivering its register: scripts/register.py drop {v}"
+            )
+            print(
+                f"    {v}: its {on.sum()} lines stand {d_orig:+.2f} apart from the others in the original, "
+                f"{d_take:+.2f} in the takes -> {verdict}"
+            )
     if rows:
         print(f"all: {sum(n * r for _, n, r in rows) / sum(n for _, n, _ in rows):+.2f} (weighted by lines)")
 
@@ -356,13 +388,23 @@ def cmd_drop(args):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("report"); p.add_argument("clips", nargs="*"); p.set_defaults(fn=cmd_report)  # noqa: E702
-    p = sub.add_parser("build"); p.add_argument("voice"); p.add_argument("band", choices=["calm", "raised"])  # noqa: E702
+    p = sub.add_parser("report")
+    p.add_argument("clips", nargs="*")
+    p.set_defaults(fn=cmd_report)  # noqa: E702
+    p = sub.add_parser("build")
+    p.add_argument("voice")
+    p.add_argument("band", choices=["calm", "raised"])  # noqa: E702
     p.set_defaults(fn=cmd_build)
-    p = sub.add_parser("route"); p.add_argument("clips", nargs="+"); p.add_argument("--apply", action="store_true")  # noqa: E702
+    p = sub.add_parser("route")
+    p.add_argument("clips", nargs="+")
+    p.add_argument("--apply", action="store_true")  # noqa: E702
     p.set_defaults(fn=cmd_route)
-    p = sub.add_parser("check"); p.add_argument("clips", nargs="*"); p.set_defaults(fn=cmd_check)  # noqa: E702
-    p = sub.add_parser("drop"); p.add_argument("voice"); p.set_defaults(fn=cmd_drop)  # noqa: E702
+    p = sub.add_parser("check")
+    p.add_argument("clips", nargs="*")
+    p.set_defaults(fn=cmd_check)  # noqa: E702
+    p = sub.add_parser("drop")
+    p.add_argument("voice")
+    p.set_defaults(fn=cmd_drop)  # noqa: E702
     args = ap.parse_args()
     args.fn(args)
 

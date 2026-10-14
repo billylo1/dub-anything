@@ -4,6 +4,7 @@ Usage: scripts/onsets.py <name>   Voice activity = 20 ms frames of the separated
 within 25 dB of the clip's loudest speech. Reports the active span found near
 each window, so windows can be snapped to real onsets.
 """
+
 import json
 import sys
 
@@ -18,7 +19,7 @@ lines = json.loads((WORK / name / "script.json").read_text(encoding="utf-8"))["l
 audio, sr = sf.read(JOBS / job / "vocals.wav", dtype="float32")
 mono = audio.mean(axis=1) if audio.ndim > 1 else audio
 hop = sr // 50
-db = 10 * np.log10(np.array([np.mean(mono[i:i + hop] ** 2) for i in range(0, len(mono) - hop, hop)]) + 1e-12)
+db = 10 * np.log10(np.array([np.mean(mono[i : i + hop] ** 2) for i in range(0, len(mono) - hop, hop)]) + 1e-12)
 active = db > np.percentile(db, 99) - 25
 
 for i, line in enumerate(lines):
@@ -37,5 +38,7 @@ for i, line in enumerate(lines):
         note.append(f"voice begins {line['start'] - on:.2f}s before window")
     if off - line["end"] > 0.1:
         note.append(f"voice runs {off - line['end']:.2f}s past window")
-    print(f"L{i:02d} {line['start']:6.2f}-{line['end']:6.2f}  voice {on:6.2f}-{off:6.2f}  "
-          f"{'; '.join(note):40s} {line['text']}")
+    print(
+        f"L{i:02d} {line['start']:6.2f}-{line['end']:6.2f}  voice {on:6.2f}-{off:6.2f}  "
+        f"{'; '.join(note):40s} {line['text']}"
+    )

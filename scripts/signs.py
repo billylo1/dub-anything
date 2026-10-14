@@ -30,6 +30,7 @@ frame from the middle of each sign, or of the signs given by number (1 is the
 first), and tiles them in work/<clip>/signs/preview-N.jpg: check that each
 sits where it should and nothing collides. No GPU.
 """
+
 import argparse
 import collections
 import difflib
@@ -81,8 +82,9 @@ def spoken(text, t, dialogue):
     if len(b) < 2:
         return False
     for a, z, ja in dialogue:
-        if a - 4 <= t <= z + 4 and (b in ja and len(b) >= max(6, len(ja) / 2)
-                                    or difflib.SequenceMatcher(None, b, ja).ratio() >= 0.6):
+        if a - 4 <= t <= z + 4 and (
+            b in ja and len(b) >= max(6, len(ja) / 2) or difflib.SequenceMatcher(None, b, ja).ratio() >= 0.6
+        ):
             return True
     return False
 
@@ -91,7 +93,7 @@ def caption(img, box):
     """Light text on a broadcaster's semi-transparent box. Not subs.caption_box,
     which takes any light text on a dark ground: a title card on black too."""
     xs, ys = [int(p[0]) for p in box], [int(p[1]) for p in box]
-    crop = img[max(min(ys), 0):max(ys) + 1, max(min(xs), 0):max(xs) + 1].reshape(-1, 3).astype(np.float32)
+    crop = img[max(min(ys), 0) : max(ys) + 1, max(min(xs), 0) : max(xs) + 1].reshape(-1, 3).astype(np.float32)
     if len(crop) < 20:
         return False
     lum = crop @ np.array([0.299, 0.587, 0.114], np.float32)
@@ -152,6 +154,7 @@ def overlap(a, b):
 
 def track(readings, shot_cuts, step, t_end):
     """Per-frame blocks -> candidates: one per block, over the frames of one shot that show it."""
+
     def shot_of(t):
         return sum(c <= t + 1e-3 for c in shot_cuts)
 
@@ -160,10 +163,21 @@ def track(readings, shot_cuts, step, t_end):
         still = []
         for text, x0, y0, x1, y1 in found:
             box = (x0, y0, x1, y1)
-            c = next((c for c in open_ if c not in still and c["shot"] == shot_of(t)
-                      and (overlap(c["last"], box) > 0.4 or difflib.SequenceMatcher(
-                          None, c["texts"][-1], text).ratio() >= 0.6 and abs(c["last"][0] - x0) < 120
-                          and abs(c["last"][1] - y0) < 120)), None)
+            c = next(
+                (
+                    c
+                    for c in open_
+                    if c not in still
+                    and c["shot"] == shot_of(t)
+                    and (
+                        overlap(c["last"], box) > 0.4
+                        or difflib.SequenceMatcher(None, c["texts"][-1], text).ratio() >= 0.6
+                        and abs(c["last"][0] - x0) < 120
+                        and abs(c["last"][1] - y0) < 120
+                    )
+                ),
+                None,
+            )
             if c is None:
                 c = {"first_t": t, "shot": shot_of(t), "texts": [], "first": box}
             c["texts"].append(text)
@@ -178,22 +192,30 @@ def track(readings, shot_cuts, step, t_end):
     out = []
     for c in sorted(done, key=lambda c: (c["first_t"], c["first"][1])):
         if len(c["texts"]) < 2 and bounds[c["shot"] + 1] - bounds[c["shot"]] > 2 * step:
-            continue    # a single glimpse in a longer shot: usually a misread piece of the scene
+            continue  # a single glimpse in a longer shot: usually a misread piece of the scene
         a, z = bounds[c["shot"]], bounds[c["shot"] + 1]
         # Shown from cut to cut unless it appears or leaves well inside the shot.
         start = a if c["first_t"] - a <= step * 1.5 else c["first_t"] - step / 2
         end = z if z - c["seen"] <= step * 2.5 else c["seen"] + step
         text = collections.Counter(c["texts"]).most_common(1)[0][0]
-        out.append({"start": round(start, 2), "end": round(end, 2), "text": text, "frames": len(c["texts"]),
-                    "box": [round(v / d, 3) for v, d in zip(c["first"], (W, H, W, H))],
-                    "box_end": [round(v / d, 3) for v, d in zip(c["last"], (W, H, W, H))],
-                    "seen": [round(c["first_t"], 2), round(c["seen"], 2)]})
+        out.append(
+            {
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "text": text,
+                "frames": len(c["texts"]),
+                "box": [round(v / d, 3) for v, d in zip(c["first"], (W, H, W, H))],
+                "box_end": [round(v / d, 3) for v, d in zip(c["last"], (W, H, W, H))],
+                "seen": [round(c["first_t"], 2), round(c["seen"], 2)],
+            }
+        )
     return out
 
 
 def logos(cands):
     """Candidates that are a channel's logo: the same text in the same place, near
     an edge of the picture, in three shots or more."""
+
     def centre(c):
         b = c["box"]
         return (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
@@ -203,8 +225,13 @@ def logos(cands):
         x, y = centre(c)
         if 0.15 < x < 0.85 and 0.15 < y < 0.85:
             continue
-        same = [d for d in cands if abs(centre(d)[0] - x) < 0.03 and abs(centre(d)[1] - y) < 0.03
-                and difflib.SequenceMatcher(None, bare(c["text"]), bare(d["text"])).ratio() >= 0.6]
+        same = [
+            d
+            for d in cands
+            if abs(centre(d)[0] - x) < 0.03
+            and abs(centre(d)[1] - y) < 0.03
+            and difflib.SequenceMatcher(None, bare(c["text"]), bare(d["text"])).ratio() >= 0.6
+        ]
         if len({(d["start"], d["end"]) for d in same}) >= 3:
             out |= {id(d) for d in same}
     return out
@@ -214,15 +241,16 @@ def shot_sheets(thumbs, bounds, out, per=24, cols=4):
     """One thumbnail per shot, labelled with its number and times, `per` to a sheet:
     for spotting text the reader missed (vertical brush lettering, handwriting)."""
     import cv2
+
     paths = []
     for s in range(0, len(thumbs), per):
-        batch = thumbs[s:s + per]
+        batch = thumbs[s : s + per]
         tw, th = batch[0][1].shape[1], batch[0][1].shape[0]
         rows = (len(batch) + cols - 1) // cols
         canvas = np.full((rows * th, cols * tw, 3), 32, np.uint8)
         for k, (shot, img) in enumerate(batch):
             y, x = k // cols * th, k % cols * tw
-            canvas[y:y + th, x:x + tw] = img
+            canvas[y : y + th, x : x + tw] = img
             label = f"S{shot:02d} {bounds[shot]:.1f}-{bounds[shot + 1]:.1f}"
             cv2.rectangle(canvas, (x, y), (x + 12 * len(label) + 8, y + 24), (0, 0, 0), -1)
             cv2.putText(canvas, label, (x + 4, y + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
@@ -236,12 +264,30 @@ def shot_sheets(thumbs, bounds, out, per=24, cols=4):
 def sheet(video, cand, path, w, h):
     """The frame with the candidate's box drawn, and the text enlarged beside it."""
     import cv2
+
     t = (cand["seen"][0] + cand["seen"][1]) / 2
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1",
-                          "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], capture_output=True).stdout
+    raw = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            f"{t:.3f}",
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-",
+        ],
+        capture_output=True,
+    ).stdout
     if len(raw) < w * h * 3:
         return
-    img = np.frombuffer(raw[:w * h * 3], np.uint8).reshape(h, w, 3).copy()
+    img = np.frombuffer(raw[: w * h * 3], np.uint8).reshape(h, w, 3).copy()
     bx = [cand["box"][0] * w, cand["box"][1] * h, cand["box"][2] * w, cand["box"][3] * h]
     pad = 12
     x0, y0 = max(int(bx[0]) - pad, 0), max(int(bx[1]) - pad, 0)
@@ -253,22 +299,24 @@ def sheet(video, cand, path, w, h):
     cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 0, 255), 4)
     frame = cv2.resize(frame, (960, 960 * h // w))
     canvas = np.full((frame.shape[0] + crop.shape[0] + 10, max(960, crop.shape[1]), 3), 32, np.uint8)
-    canvas[:frame.shape[0], :960] = frame
-    canvas[frame.shape[0] + 10:, :crop.shape[1]] = crop
+    canvas[: frame.shape[0], :960] = frame
+    canvas[frame.shape[0] + 10 :, : crop.shape[1]] = crop
     cv2.imwrite(str(path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 
 def preview(work, video, w, h, which=None):
     """The script's signs drawn into their frames, as delivered: preview-N.jpg sheets."""
     import cv2
+
     script = json.loads((work / "script.json").read_text(encoding="utf-8"))
     signs = sorted(script.get("signs", []), key=lambda s: s["start"])
     if not signs:
         raise SystemExit(f"{work.name}: no signs in script.json")
     pick = [(k, s) for k, s in enumerate(signs, 1) if not which or k in which]
     tgt = pair(work)[1]
-    dialogue = [(l["start"], l["end"], LANGUAGES[tgt].subtitle(l["text"]))
-                for l in script["lines"] + script.get("captions", [])]
+    dialogue = [
+        (l["start"], l["end"], LANGUAGES[tgt].subtitle(l["text"])) for l in script["lines"] + script.get("captions", [])
+    ]
     out = work / "signs"
     out.mkdir(exist_ok=True)
     ass.write(out / "preview.ass", w, h, dialogue, signs, lang=tgt)
@@ -277,13 +325,33 @@ def preview(work, video, w, h, which=None):
         t = (s["start"] + s["end"]) / 2
         # -copyts keeps the frame's own time, so the subtitles line up after the seek;
         # the filter takes a bare file name, run from its folder.
-        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-copyts", "-i", str(video),
-                              "-vf", "ass=preview.ass,scale=960:-2", "-frames:v", "1", "-f", "rawvideo",
-                              "-pix_fmt", "bgr24", "-"], capture_output=True, cwd=out).stdout
+        raw = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-ss",
+                f"{t:.3f}",
+                "-copyts",
+                "-i",
+                str(video),
+                "-vf",
+                "ass=preview.ass,scale=960:-2",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "bgr24",
+                "-",
+            ],
+            capture_output=True,
+            cwd=out,
+        ).stdout
         th = len(raw) // (960 * 3)
         if not th:
             continue
-        img = np.frombuffer(raw[:960 * th * 3], np.uint8).reshape(th, 960, 3).copy()
+        img = np.frombuffer(raw[: 960 * th * 3], np.uint8).reshape(th, 960, 3).copy()
         label = f"#{k} {t:.1f}s {s['text'][:40]}"
         cv2.rectangle(img, (0, 0), (min(960, 11 * len(label) + 10), 24), (0, 0, 0), -1)
         cv2.putText(img, label, (5, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1, cv2.LINE_AA)
@@ -291,9 +359,11 @@ def preview(work, video, w, h, which=None):
     for old in out.glob("preview-*.jpg"):
         old.unlink()
     for n in range(0, len(tiles), 6):
-        batch = tiles[n:n + 6]
-        rows = [np.hstack(batch[r:r + 2] + [np.zeros_like(batch[0])] * (2 - len(batch[r:r + 2])))
-                for r in range(0, len(batch), 2)]
+        batch = tiles[n : n + 6]
+        rows = [
+            np.hstack(batch[r : r + 2] + [np.zeros_like(batch[0])] * (2 - len(batch[r : r + 2])))
+            for r in range(0, len(batch), 2)
+        ]
         path = out / f"preview-{n // 6 + 1}.jpg"
         cv2.imwrite(str(path), np.vstack(rows), [cv2.IMWRITE_JPEG_QUALITY, 85])
         print(path)
@@ -317,8 +387,13 @@ def main():
     ap.add_argument("--fps", type=float, default=2.0, help="frames read a second (default 2)")
     ap.add_argument("--from", dest="t0", type=float)
     ap.add_argument("--to", dest="t1", type=float)
-    ap.add_argument("--preview", nargs="*", type=int, metavar="SIGN",
-                    help="draw the script's signs into their frames (all, or these by number)")
+    ap.add_argument(
+        "--preview",
+        nargs="*",
+        type=int,
+        metavar="SIGN",
+        help="draw the script's signs into their frames (all, or these by number)",
+    )
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     work = ROOT / "work" / args.clip
@@ -327,14 +402,22 @@ def main():
     w, h = subs.size(video)
     if args.preview is not None:
         return preview(work, video, w, h, set(args.preview))
-    duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                                     str(video)], capture_output=True, text=True).stdout.strip())
+    duration = float(
+        subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
     shot_cuts = cuts(video, args.t0, args.t1)
     dialogue = dialogue_of(work)
     ocr, cuda = subs.engine(pair(work)[0])
-    print(f"reading text in {video.name} ({'GPU' if cuda else 'CPU'}, {args.fps:g} frames/s, "
-          f"{len(shot_cuts)} cuts)", file=sys.stderr)
+    print(
+        f"reading text in {video.name} ({'GPU' if cuda else 'CPU'}, {args.fps:g} frames/s, {len(shot_cuts)} cuts)",
+        file=sys.stderr,
+    )
     import cv2
+
     t_end = args.t1 or duration
     bounds = [args.t0 or 0.0] + shot_cuts + [t_end]
     mids = [(a + b) / 2 for a, b in zip(bounds, bounds[1:])]
@@ -360,14 +443,21 @@ def main():
         c["id"] = k
         sheet(video, c, out / f"{k:02d}.jpg", w, h)
     sheets = shot_sheets(thumbs, bounds, out) if thumbs else []
-    print(f"{len(readings)} frames, {n} read, {dropped} pieces of dialogue and {len(logo)} of a logo left out, "
-          f"{len(cands)} candidates; {len(bounds) - 1} shots on {len(sheets)} sheet(s) in {out}", file=sys.stderr)
-    (work / "signs.json").write_text(json.dumps({"video": str(video), "cuts": shot_cuts, "candidates": cands},
-                                                ensure_ascii=False, indent=1), encoding="utf-8")
+    print(
+        f"{len(readings)} frames, {n} read, {dropped} pieces of dialogue and {len(logo)} of a logo left out, "
+        f"{len(cands)} candidates; {len(bounds) - 1} shots on {len(sheets)} sheet(s) in {out}",
+        file=sys.stderr,
+    )
+    (work / "signs.json").write_text(
+        json.dumps({"video": str(video), "cuts": shot_cuts, "candidates": cands}, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
     for c in cands:
         b = c["box"]
-        print(f"#{c['id']:02d} {c['start']:7.2f}-{c['end']:7.2f}  x{(b[0] + b[2]) / 2:.2f} y{(b[1] + b[3]) / 2:.2f}"
-              f"  ({c['frames']} frames)  {c['text']}")
+        print(
+            f"#{c['id']:02d} {c['start']:7.2f}-{c['end']:7.2f}  x{(b[0] + b[2]) / 2:.2f} y{(b[1] + b[3]) / 2:.2f}"
+            f"  ({c['frames']} frames)  {c['text']}"
+        )
 
 
 if __name__ == "__main__":

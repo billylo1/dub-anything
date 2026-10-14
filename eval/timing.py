@@ -14,6 +14,7 @@ the take (its trimmed speech, as VoiceStudio times it):
 Lines with no take, or where the VAD hears nothing, are left out. Compare
 renders of one part made from the same script (A/B copies, see research.md).
 """
+
 import pathlib
 import sys
 
@@ -36,18 +37,24 @@ def main():
         own = sum(1 for i in ids if rendered.get(i, {}).get("line_ref"))
         speeds = [rendered.get(i, {}).get("speed", 1.0) for i in ids]
         tgt = langs(name)[1]
-        d = np.array([end - speech_length(take_wav(job, i, tgt))
-                      for i, end in zip(ids, actor_ends(job, lines))
-                      if end is not None and take_wav(job, i, tgt).exists()])
+        d = np.array(
+            [
+                end - speech_length(take_wav(job, i, tgt))
+                for i, end in zip(ids, actor_ends(job, lines))
+                if end is not None and take_wav(job, i, tgt).exists()
+            ]
+        )
         if not len(d):
             print(f"{name}: no rendered takes")
             continue
-        print(f"{name}: {len(lines)} lines, {own} with their own reference; speed <={slow} "
-              f"{sum(s <= slow for s in speeds)}, <1 {sum(slow < s < 1 for s in speeds)}, "
-              f"1 {sum(s == 1 for s in speeds)}, >1 {sum(1 < s < fast for s in speeds)}, "
-              f">={fast} {sum(s >= fast for s in speeds)}; dead air {d.clip(0).sum():.1f} s, "
-              f"overrun {(-d).clip(0).sum():.1f} s, |end| mean {np.abs(d).mean():.2f} "
-              f"median {np.median(np.abs(d)):.2f} s, early {(d > FILL_TOL).sum()}, late {(d < -FILL_TOL).sum()}")
+        print(
+            f"{name}: {len(lines)} lines, {own} with their own reference; speed <={slow} "
+            f"{sum(s <= slow for s in speeds)}, <1 {sum(slow < s < 1 for s in speeds)}, "
+            f"1 {sum(s == 1 for s in speeds)}, >1 {sum(1 < s < fast for s in speeds)}, "
+            f">={fast} {sum(s >= fast for s in speeds)}; dead air {d.clip(0).sum():.1f} s, "
+            f"overrun {(-d).clip(0).sum():.1f} s, |end| mean {np.abs(d).mean():.2f} "
+            f"median {np.median(np.abs(d)):.2f} s, early {(d > FILL_TOL).sum()}, late {(d < -FILL_TOL).sum()}"
+        )
 
 
 if __name__ == "__main__":

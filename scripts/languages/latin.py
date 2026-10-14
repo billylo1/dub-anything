@@ -1,5 +1,6 @@
 """What the languages written in Latin letters, with spaces between words, share
 (en.py, es.py)."""
+
 import difflib
 import re
 import unicodedata
@@ -26,13 +27,17 @@ def compare_words(want, got, split, readings, negations, is_number):
     is "nineteen seventy nine", "03" "zero three"). Notes: leading junk, the better
     of word- or letter-level match, a changed count of `negations`, and a number
     (a word is_number says one) heard as another."""
-    want_w, got_w = max(((split(want, a), split(got, b)) for a in readings for b in readings),
-                        key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio())
+    want_w, got_w = max(
+        ((split(want, a), split(got, b)) for a in readings for b in readings),
+        key=lambda pair: difflib.SequenceMatcher(None, *pair).ratio(),
+    )
     notes = []
     if want_w and want_w[0] in got_w[:4] and got_w.index(want_w[0]) > 0:
-        notes.append(f"leading extra: '{' '.join(got_w[:got_w.index(want_w[0])])}'")
-    ratio = max(difflib.SequenceMatcher(None, want_w, got_w).ratio(),
-                difflib.SequenceMatcher(None, "".join(want_w), "".join(got_w)).ratio())
+        notes.append(f"leading extra: '{' '.join(got_w[: got_w.index(want_w[0])])}'")
+    ratio = max(
+        difflib.SequenceMatcher(None, want_w, got_w).ratio(),
+        difflib.SequenceMatcher(None, "".join(want_w), "".join(got_w)).ratio(),
+    )
     if not got_w:
         notes.append("silent or unintelligible")
     elif ratio < MATCH:

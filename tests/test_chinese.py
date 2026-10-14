@@ -1,4 +1,5 @@
 """Chinese source support and the independent recogniser's model contract."""
+
 import pathlib
 import sys
 import unittest
@@ -30,6 +31,7 @@ class ChineseSourceTests(unittest.TestCase):
 
     def test_reference_window_check_ignores_chinese_punctuation(self):
         from core import bare
+
         self.assertEqual(bare("你好，世界；今天：【出发】。"), bare("你好世界今天出发"))
 
     def test_subtitles_preserve_text_and_existing_breaks(self):
@@ -51,8 +53,11 @@ class ChineseSourceTests(unittest.TestCase):
 class ChineseRecognizerTests(unittest.TestCase):
     def test_zipformer_ctc_loads_its_single_model_not_transducer_files(self):
         import second
-        with patch.object(second, "snapshot_download", return_value="model-cache") as download, \
-                patch.object(second.sherpa_onnx.OfflineRecognizer, "from_zipformer_ctc") as build:
+
+        with (
+            patch.object(second, "snapshot_download", return_value="model-cache") as download,
+            patch.object(second.sherpa_onnx.OfflineRecognizer, "from_zipformer_ctc") as build,
+        ):
             result = second.recogniser("zipformer_ctc", LANGUAGES["zh"].SECOND_OPINIONS["zipformer_ctc"], "zh")
         self.assertIs(result, build.return_value)
         self.assertEqual(download.call_args.kwargs["allow_patterns"], ["model.int8.onnx", "tokens.txt"])

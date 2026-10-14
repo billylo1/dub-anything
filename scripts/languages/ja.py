@@ -1,6 +1,7 @@
 """Japanese: the source of most dubs (the directing notes are written for it), and a
 target for dubs from English (docs/languages/ja.md). Written without spaces, it
 is compared by its reading in kana (kana.py) and wrapped by hand in subtitles."""
+
 import difflib
 import re
 
@@ -13,8 +14,10 @@ NAME, ISO3, NATIVE = "Japanese", "jpn", "日本語"
 # Whisper's stock hallucinations on hums, music and silence, told the speech is Japanese.
 HALLUCINATIONS = ("ご視聴ありがとうございました", "チャンネル登録", "ご覧いただき", "字幕")
 THANKS = ()
-SECOND_OPINIONS = {"reazon": "reazon-research/reazonspeech-k2-v2",  # trained on Japanese TV
-                   "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"}
+SECOND_OPINIONS = {
+    "reazon": "reazon-research/reazonspeech-k2-v2",  # trained on Japanese TV
+    "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+}
 # The reader of captions and signs (subs.py, signs.py): PP-OCRv5's Chinese recogniser
 # (RapidOCR's LangRec and ModelType), which reads kana too.
 OCR = ("CH", "SERVER")
@@ -37,6 +40,7 @@ def speakable(text):
     """A line's text as the voice engine gets it: as written. VoiceStudio leaves
     digits as digits in Japanese, so the script spells numbers in kana (ja.md)."""
     return text
+
 
 PUNCT = re.compile(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—:：;；\"'’“”]")
 NEGATION = re.compile(r"ない|なかっ|ません")
@@ -75,8 +79,13 @@ def compare(want, got):
 
 # ---- written: track names and subtitles ----
 
-TITLES = {"dub": {"actor": "日本語吹替（俳優の声）"}, "subs": {"actor": "日本語（俳優の声の吹替）"},
-          "signs": "日本語（画面の文字のみ）", "transcript": "日本語 (transcript)", "original": "日本語 (original)"}
+TITLES = {
+    "dub": {"actor": "日本語吹替（俳優の声）"},
+    "subs": {"actor": "日本語（俳優の声の吹替）"},
+    "signs": "日本語（画面の文字のみ）",
+    "transcript": "日本語 (transcript)",
+    "original": "日本語 (original)",
+}
 # Arial has no Japanese; Yu Gothic ships with Windows (other systems fall back to a font that has it).
 FONT = "Yu Gothic"
 

@@ -17,6 +17,7 @@ line overflows.
 It first warns about any voice whose reference is much faster or slower than
 its speaker's lines: lines on that reference inherit its pace (OmniVoice only).
 """
+
 import argparse
 import statistics
 
@@ -25,9 +26,12 @@ from core import WORK, _omnivoice, fit_rows, langs, load_json, said, voice_clips
 ap = argparse.ArgumentParser()
 ap.add_argument("name")
 ap.add_argument("--only-flags", action="store_true", help="print only lines that don't fit or are at risk")
-ap.add_argument("--voice", choices=["actor", "american"],
-                help="estimate the part in this voice instead of its own (e.g. the director's script, with each "
-                     "line's text_us, for the American voice)")
+ap.add_argument(
+    "--voice",
+    choices=["actor", "american"],
+    help="estimate the part in this voice instead of its own (e.g. the director's script, with each "
+    "line's text_us, for the American voice)",
+)
 args = ap.parse_args()
 
 
@@ -44,15 +48,21 @@ def pace_check(name, tolerance=0.15):
         if not spec:
             continue
         ref = weight(spec["ref_text"]) / sum(b - a for _, a, b in voice_clips(spec))
-        rates = [weight(said(ln, src)) / (ln["end"] - ln["start"]) for s in scripts for ln in s["lines"]
-                 if ln.get("voice") == key and said(ln, src) and ln["end"] - ln["start"] >= 1.5]
+        rates = [
+            weight(said(ln, src)) / (ln["end"] - ln["start"])
+            for s in scripts
+            for ln in s["lines"]
+            if ln.get("voice") == key and said(ln, src) and ln["end"] - ln["start"] >= 1.5
+        ]
         if len(rates) < 5:
             continue
         typical = statistics.median(rates)
         if abs(ref / typical - 1) > tolerance:
-            print(f"pace: {key}'s reference says {ref:.1f} units/s, its {len(rates)} lines {typical:.1f} "
-                  f"({ref / typical - 1:+.0%}); lines on the reference will run "
-                  f"{'short' if ref > typical else 'long'}. Pick clips nearer the lines' pace.")
+            print(
+                f"pace: {key}'s reference says {ref:.1f} units/s, its {len(rates)} lines {typical:.1f} "
+                f"({ref / typical - 1:+.0%}); lines on the reference will run "
+                f"{'short' if ref > typical else 'long'}. Pick clips nearer the lines' pace."
+            )
 
 
 if (args.voice or load_json(WORK / args.name / "script.json").get("render", {}).get("voice")) != "american":
@@ -64,12 +74,16 @@ for row in fit_rows(args.name, predict=True, short=True, voice=args.voice):
     actor = f"actor {row['actor']:5.2f}s" if row["actor"] else "actor   -   "
     if row["speech"] is None:
         est = f"~{row['est']:4.2f}s" if "est" in row else "(no clip)"
-        print(f"L{row['i']:02d} {est:>6s} / window {row['window']:5.2f}s (room {row['room']:5.2f}, {actor})  "
-              f"{row['flag']:6s} {row['text']}")
+        print(
+            f"L{row['i']:02d} {est:>6s} / window {row['window']:5.2f}s (room {row['room']:5.2f}, {actor})  "
+            f"{row['flag']:6s} {row['text']}"
+        )
         continue
     total_chars += len(row["text"])
     total_secs += row["speech"]
-    print(f"L{row['i']:02d} {row['speech']:5.2f}s / window {row['window']:5.2f}s (room {row['room']:5.2f}, {actor})  "
-          f"{row['flag']:6s} {row['text']}")
+    print(
+        f"L{row['i']:02d} {row['speech']:5.2f}s / window {row['window']:5.2f}s (room {row['room']:5.2f}, {actor})  "
+        f"{row['flag']:6s} {row['text']}"
+    )
 if total_secs:
     print(f"average rate: {total_chars / total_secs:.1f} chars/s")

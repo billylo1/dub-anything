@@ -13,6 +13,7 @@ as kanji numerals first ("3人" as "三人"), as Whisper writes numbers either w
 hiragana() reads a text as it is written, and needs pykakasi where it runs
 (second.py's environment has it).
 """
+
 import json
 import pathlib
 import re
@@ -29,7 +30,7 @@ def kansuji(n):
     if n == 0:
         return "〇"
     out = ""
-    for unit, name in ((10 ** 8, "億"), (10 ** 4, "万")):
+    for unit, name in ((10**8, "億"), (10**4, "万")):
         if n >= unit:
             out += kansuji(n // unit) + name
             n %= unit
@@ -42,7 +43,7 @@ def kansuji(n):
 
 
 UNITS = {"十": 10, "百": 100, "千": 1000}
-BIG = {"万": 10 ** 4, "億": 10 ** 8}
+BIG = {"万": 10**4, "億": 10**8}
 
 
 def numbers(text):
@@ -74,13 +75,17 @@ def numbers(text):
 def numerals(text):
     """Digits as kanji numerals; a long run (a phone number) digit by digit."""
     text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
-    return re.sub(r"\d+", lambda m: kansuji(int(m.group())) if len(m.group()) <= 12
-                  else "".join(DIGITS[int(d)] for d in m.group()), text)
+    return re.sub(
+        r"\d+",
+        lambda m: kansuji(int(m.group())) if len(m.group()) <= 12 else "".join(DIGITS[int(d)] for d in m.group()),
+        text,
+    )
 
 
 def hiragana(text):
     """pykakasi's reading of a text as it is written (digits stay digits)."""
     import pykakasi
+
     if not hasattr(hiragana, "kks"):
         hiragana.kks = pykakasi.kakasi()
     return "".join(x["hira"] for x in hiragana.kks.convert(text))
@@ -100,8 +105,14 @@ def readings(texts):
             got = _convert(todo)
         except ImportError:
             if not _worker:
-                _worker.append(subprocess.Popen(UV_RUN + [str(pathlib.Path(__file__))], stdin=subprocess.PIPE,
-                                                stdout=subprocess.PIPE, encoding="utf-8"))
+                _worker.append(
+                    subprocess.Popen(
+                        UV_RUN + [str(pathlib.Path(__file__))],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        encoding="utf-8",
+                    )
+                )
             w = _worker[0]
             w.stdin.write(json.dumps(todo, ensure_ascii=False) + "\n")
             w.stdin.flush()

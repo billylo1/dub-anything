@@ -28,6 +28,7 @@ when IndexTTS's own take of a flagged line says it right, the line is queued to
 be converted again (conversion is random too), keeping the take; after
 RECONVERTS failed tries the take is re-rolled instead.
 """
+
 import argparse
 import hashlib
 import json
@@ -77,11 +78,18 @@ def check(name, model, show_all, reroll):
             continue
         got = hear(model, wav, tgt)
         notes, ratio = LANGUAGES[tgt].compare(line["text"], got)
-        take = {"notes": notes, "ratio": round(ratio, 3), "got": got, "sha": file_sha(wav),
-                "settings": rendered.get(lid, {})}
+        take = {
+            "notes": notes,
+            "ratio": round(ratio, 3),
+            "got": got,
+            "sha": file_sha(wav),
+            "settings": rendered.get(lid, {}),
+        }
         # Only takes made the same way count (a moved window re-renders the line anyway);
         # a seed only tells two rolls apart.
-        same = lambda k: {**k["settings"], "speed": None, "seed": None} ==             {**take["settings"], "speed": None, "seed": None}  # noqa: E731
+        same = lambda k: (
+            {**k["settings"], "speed": None, "seed": None} == {**take["settings"], "speed": None, "seed": None}
+        )  # noqa: E731
         earlier = [k for k in kept.get(lid, []) if same(k) and k["sha"] != take["sha"]]
         best = max(earlier, key=lambda k: (not k["notes"], k["ratio"]), default=None)
         if best and better(best, take):
@@ -91,8 +99,10 @@ def check(name, model, show_all, reroll):
                 converted[lid] = file_sha(wav)
             rendered[lid] = best["settings"]
             restored.append(lid)
-            print(f"L{i:02d} {line['start']:7.2f} put back an earlier take (match {best['ratio']:.2f} "
-                  f"over {take['ratio']:.2f}: {got!r})")
+            print(
+                f"L{i:02d} {line['start']:7.2f} put back an earlier take (match {best['ratio']:.2f} "
+                f"over {take['ratio']:.2f}: {got!r})"
+            )
             take, notes, got = best, best["notes"], best["got"]
         if notes:
             flagged.append({"id": lid, "start": line["start"], "text": line["text"], "got": got})
@@ -117,8 +127,10 @@ def check(name, model, show_all, reroll):
                 entry["reconverted"] = entry.get("reconverted", 0) + 1
         if notes or show_all:
             dur = sf.info(wav).duration
-            print(f"L{i:02d} {line['start']:7.2f} {line['voice']:10s} {dur:4.2f}s  {'; '.join(notes) or 'ok'}\n"
-                  f"      want: {line['text']}\n      got:  {got}")
+            print(
+                f"L{i:02d} {line['start']:7.2f} {line['voice']:10s} {dur:4.2f}s  {'; '.join(notes) or 'ok'}\n"
+                f"      want: {line['text']}\n      got:  {got}"
+            )
     print(f"{len(flagged)} of {len(lines)} lines flagged")
     if kept:
         kept_path.write_text(json.dumps(kept, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -130,18 +142,22 @@ def check(name, model, show_all, reroll):
     if reroll and flagged:
         (work / "reroll.json").write_text(json.dumps(flagged, ensure_ascii=False, indent=1), encoding="utf-8")
         again = sum(1 for f in flagged if f.get("reconvert"))
-        what = [f"{n} {kind}" for n, kind in ((len(flagged) - again, "for fresh takes"),
-                                              (again, "to be converted again")) if n]
-        print(f"queued {' and '.join(what)} on the next `scripts/dub.py generate {name}` "
-              f"(their current takes are kept, and put back if the new ones are worse)")
+        what = [
+            f"{n} {kind}"
+            for n, kind in ((len(flagged) - again, "for fresh takes"), (again, "to be converted again"))
+            if n
+        ]
+        print(
+            f"queued {' and '.join(what)} on the next `scripts/dub.py generate {name}` "
+            f"(their current takes are kept, and put back if the new ones are worse)"
+        )
 
 
 RECONVERTS = 2  # conversions of one IndexTTS take tried again before it gets a fresh take
 
 
 def hear(model, wav, lang="en"):
-    segs, _ = model.transcribe(str(wav), language=lang, beam_size=5, vad_filter=False,
-                               condition_on_previous_text=False)
+    segs, _ = model.transcribe(str(wav), language=lang, beam_size=5, vad_filter=False, condition_on_previous_text=False)
     return LANGUAGES[lang].JOIN.join(s.text.strip() for s in segs)
 
 

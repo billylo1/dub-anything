@@ -2,6 +2,7 @@
 Compare transcripts by characters: recognisers don't agree on word spacing.
 Simplified and traditional spellings are kept as written, not transliterated.
 """
+
 import difflib
 import re
 import unicodedata
@@ -12,12 +13,28 @@ NAME, ISO3, NATIVE = "Chinese", "zho", "中文"
 
 # Stock credits and channel calls on music/silence. Real thanks are common, so
 # THANKS only makes a recovered phrase containing nothing else suspect.
-HALLUCINATIONS = ("感谢观看", "感謝觀看", "谢谢观看", "謝謝觀看", "感谢收看", "感謝收看",
-                  "欢迎订阅", "歡迎訂閱", "请订阅", "請訂閱", "字幕由", "字幕提供",
-                  "点赞订阅", "點讚訂閱", "amara.org")
+HALLUCINATIONS = (
+    "感谢观看",
+    "感謝觀看",
+    "谢谢观看",
+    "謝謝觀看",
+    "感谢收看",
+    "感謝收看",
+    "欢迎订阅",
+    "歡迎訂閱",
+    "请订阅",
+    "請訂閱",
+    "字幕由",
+    "字幕提供",
+    "点赞订阅",
+    "點讚訂閱",
+    "amara.org",
+)
 THANKS = ("谢谢", "謝謝", "谢谢大家", "謝謝大家")
-SECOND_OPINIONS = {"zipformer_ctc": "csukuangfj/sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03",
-                   "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"}
+SECOND_OPINIONS = {
+    "zipformer_ctc": "csukuangfj/sherpa-onnx-zipformer-ctc-zh-int8-2025-07-03",
+    "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+}
 OCR = ("CH", "SERVER")
 
 
@@ -65,8 +82,13 @@ def compare(want, got):
 
 # ---- written: track names and subtitles ----
 
-TITLES = {"dub": {"actor": "中文配音（演员原声）"}, "subs": {"actor": "中文（演员原声配音）"},
-          "signs": "中文（画面文字）", "transcript": "中文 (transcript)", "original": "中文 (original)"}
+TITLES = {
+    "dub": {"actor": "中文配音（演员原声）"},
+    "subs": {"actor": "中文（演员原声配音）"},
+    "signs": "中文（画面文字）",
+    "transcript": "中文 (transcript)",
+    "original": "中文 (original)",
+}
 FONT = "Microsoft YaHei"
 
 

@@ -12,6 +12,7 @@ Lines at or above WET_MS are flagged for review: give them `"effect": "echo"`
 original's Japanese echo plays on after the English. When a line is
 rendered, the take's own tail is shown too, for comparison.
 """
+
 import argparse
 import sys
 
@@ -52,8 +53,10 @@ def main():
     job = load_json(WORK / args.name / "segments.json")["job_id"]
     audio = decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=SR)
     db = frames_db(audio)
-    onsets = [s["start"] / SR for s in get_speech_timestamps(
-        audio, VadOptions(threshold=0.5, min_silence_duration_ms=120, speech_pad_ms=0))]
+    onsets = [
+        s["start"] / SR
+        for s in get_speech_timestamps(audio, VadOptions(threshold=0.5, min_silence_duration_ms=120, speech_pad_ms=0))
+    ]
     wet = 0
     for i, line in enumerate(lines):
         nxt = lines[i + 1]["start"] if i + 1 < len(lines) else line["end"] + 2
@@ -76,8 +79,10 @@ def main():
         wet += flag
         if flag or args.all:
             more = "+" if capped else " "
-            print(f"  {'WET ' if flag else '    '} L{i:02d} {line['start']:7.2f}  original {ms:4.0f}{more}ms{take}"
-                  f"  {line['text'][:44]}")
+            print(
+                f"  {'WET ' if flag else '    '} L{i:02d} {line['start']:7.2f}  original {ms:4.0f}{more}ms{take}"
+                f"  {line['text'][:44]}"
+            )
     print(f"{args.name}: {wet} of {len(lines)} lines with a reverb tail of {WET_MS} ms or more")
 
 

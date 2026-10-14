@@ -1,6 +1,7 @@
 """Korean: a source for dubs into English (docs/languages/ko.md). Written with
 spaces between words, but spaced loosely (Whisper and other recognisers space
 the same words differently), so it is compared by its syllables, spaces aside."""
+
 import difflib
 import re
 import unicodedata
@@ -13,12 +14,23 @@ NAME, ISO3, NATIVE = "Korean", "kor", "한국어"
 
 # Whisper's stock hallucinations on hums, music and silence, told the speech is Korean.
 # Spaced both ways, as Whisper spaces them either way.
-HALLUCINATIONS = ("시청해주셔서", "시청해 주셔서", "시청 감사", "구독과 좋아요", "구독 좋아요", "좋아요와 구독",
-                  "mbc 뉴스", "자막", "다음 영상에서")
+HALLUCINATIONS = (
+    "시청해주셔서",
+    "시청해 주셔서",
+    "시청 감사",
+    "구독과 좋아요",
+    "구독 좋아요",
+    "좋아요와 구독",
+    "mbc 뉴스",
+    "자막",
+    "다음 영상에서",
+)
 # Whole phrases it writes on a breath, a laugh or crowd noise: suspect in a recovered phrase.
 THANKS = ("감사합니다", "고맙습니다")
-SECOND_OPINIONS = {"zipformer": "k2-fsa/sherpa-onnx-zipformer-korean-2024-06-24",
-                   "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"}
+SECOND_OPINIONS = {
+    "zipformer": "k2-fsa/sherpa-onnx-zipformer-korean-2024-06-24",
+    "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+}
 # The reader of captions and signs: PP-OCRv5's Korean recogniser, which reads Latin letters
 # and digits too (the Chinese one has no Hangul). It comes only as a mobile model.
 OCR = ("KOREAN", "MOBILE")
@@ -43,6 +55,7 @@ def speakable(text):
     """A line's text as the voice engine gets it: as written (VoiceStudio leaves
     digits as digits in Korean, as in Japanese)."""
     return text
+
 
 MATCH = 0.8  # syllables are finer than words, as kana are
 # Negative forms: 않다/않아, 못, 없다/없어, 아니다/아니야, 말다 (하지 마). "안" alone is
@@ -79,7 +92,12 @@ def compare(want, got):
 
 # ---- written: track names and subtitles ----
 
-TITLES = {"dub": {"actor": "한국어 더빙 (배우 목소리)"}, "subs": {"actor": "한국어 (배우 목소리 더빙)"},
-          "signs": "한국어 (화면 글자만)", "transcript": "한국어 (transcript)", "original": "한국어 (original)"}
+TITLES = {
+    "dub": {"actor": "한국어 더빙 (배우 목소리)"},
+    "subs": {"actor": "한국어 (배우 목소리 더빙)"},
+    "signs": "한국어 (화면 글자만)",
+    "transcript": "한국어 (transcript)",
+    "original": "한국어 (original)",
+}
 # Arial has no Hangul; Malgun Gothic ships with Windows (other systems fall back to a font that has it).
 FONT = "Malgun Gothic"

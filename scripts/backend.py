@@ -9,6 +9,7 @@ log goes to backend.log beside the data folder (or $VOICESTUDIO_LOG). The
 checkout is $VOICESTUDIO_DIR, or VoiceStudio beside this repo. dubrama.py calls
 ensure() before GPU work and restarts a backend that stopped answering.
 """
+
 import argparse
 import os
 import pathlib
@@ -32,6 +33,7 @@ def user_env(name):
         return os.environ[name]
     if sys.platform == "win32":
         import winreg
+
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
                 return os.path.expandvars(winreg.QueryValueEx(k, name)[0])
@@ -49,9 +51,12 @@ def full_env():
             env[name] = user_env(name)
     if sys.platform == "win32":
         import winreg
+
         paths = []
-        for root, key in ((winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
-                          (winreg.HKEY_CURRENT_USER, "Environment")):
+        for root, key in (
+            (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+            (winreg.HKEY_CURRENT_USER, "Environment"),
+        ):
             try:
                 with winreg.OpenKey(root, key) as k:
                     paths.append(os.path.expandvars(winreg.QueryValueEx(k, "Path")[0]))
@@ -105,9 +110,16 @@ def stop():
         return
     if sys.platform == "win32":
         # The listener is uv's Python; its parent (uv / the venv launcher) goes too.
-        parent = subprocess.run(["powershell", "-NoProfile", "-Command",
-                                 f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').ParentProcessId"],
-                                capture_output=True, text=True).stdout.strip()
+        parent = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').ParentProcessId",
+            ],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
         for p in [pid] + ([int(parent)] if parent.isdigit() else []):
             subprocess.run(["taskkill", "/PID", str(p), "/T", "/F"], capture_output=True)
     else:
@@ -139,21 +151,37 @@ def start(wait=600):
         raise SystemExit("backend: uv not found on PATH (see docs/setup.md)")
     if not (VS_DIR / "backend").is_dir():
         raise SystemExit(f"backend: no VoiceStudio checkout at {VS_DIR} (set VOICESTUDIO_DIR)")
-    cmd = [uv, "run", "--no-sync", "uvicorn", "main:app", "--app-dir", "backend",
-           "--host", re.sub(r"^\w+://|:\d+.*$", "", API), "--port", str(PORT)]
+    cmd = [
+        uv,
+        "run",
+        "--no-sync",
+        "uvicorn",
+        "main:app",
+        "--app-dir",
+        "backend",
+        "--host",
+        re.sub(r"^\w+://|:\d+.*$", "", API),
+        "--port",
+        str(PORT),
+    ]
     if sys.platform == "win32":
         # A child of this shell dies with an agent's session; one started by the
         # process service (WMI) doesn't. A batch file carries the environment.
         launcher = ROOT / "work" / "backend-start.cmd"
         launcher.parent.mkdir(exist_ok=True)
-        lines = ["@echo off"] + [f'set "{k}={env[k].replace("%", "%%")}"'
-                                 for k in ("PATH", "OMNIVOICE_DATA_DIR", "OMNIVOICE_CACHE_DIR") if env.get(k)]
+        lines = ["@echo off"] + [
+            f'set "{k}={env[k].replace("%", "%%")}"'
+            for k in ("PATH", "OMNIVOICE_DATA_DIR", "OMNIVOICE_CACHE_DIR")
+            if env.get(k)
+        ]
         lines += [f'cd /d "{VS_DIR}"', subprocess.list2cmdline(cmd) + f' > "{log}" 2>&1']
         launcher.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
-        ps = ("$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow=[uint16]0}; "
-              f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{{"
-              f"CommandLine='cmd.exe /c \"{launcher}\"'; CurrentDirectory='{VS_DIR}'; ProcessStartupInformation=$si}}; "
-              "exit $r.ReturnValue")
+        ps = (
+            "$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow=[uint16]0}; "
+            f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{{"
+            f"CommandLine='cmd.exe /c \"{launcher}\"'; CurrentDirectory='{VS_DIR}'; ProcessStartupInformation=$si}}; "
+            "exit $r.ReturnValue"
+        )
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
         if r.returncode:
             raise SystemExit(f"backend: could not start it ({r.returncode}): {r.stderr.strip()[:300]}")
@@ -188,8 +216,12 @@ def main():
     args = ap.parse_args()
     if args.cmd == "status":
         h, pid = health(), listening_pid()
-        print(f"backend: {(h or {}).get('status', 'down')}" + (f", {h.get('device')}" if h else "")
-              + (f", pid {pid}" if pid else "") + f"; log {log_path()}")
+        print(
+            f"backend: {(h or {}).get('status', 'down')}"
+            + (f", {h.get('device')}" if h else "")
+            + (f", pid {pid}" if pid else "")
+            + f"; log {log_path()}"
+        )
         sys.exit(0 if h and h.get("status") == "ok" else 1)
     if args.cmd == "stop":
         stop()

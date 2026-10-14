@@ -23,6 +23,7 @@ CHATTERBOX_SRC). Only its voice converter is imported: the package's own
 __init__ loads the TTS models too and wants pip metadata. Weights
 (ResembleAI/chatterbox, ~1 GB) download to the Hugging Face cache on first use.
 """
+
 import argparse
 import json
 import os
@@ -37,13 +38,49 @@ from gpulock import hold_gpu
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # The environment it runs in (dub.py prepends this to "python vc.py ...").
-UV_RUN = ["uv", "run", "--no-project", "--python", "3.11",
-          "--index", "https://download.pytorch.org/whl/cu128", "--index-strategy", "unsafe-best-match",
-          "--with", "torch==2.8.0", "--with", "torchaudio==2.8.0", "--with", "numpy<2", "--with", "scipy",
-          "--with", "librosa==0.11.0", "--with", "soundfile", "--with", "huggingface_hub==0.25.2",
-          "--with", "s3tokenizer", "--with", "diffusers==0.29.0", "--with", "conformer==0.3.2",
-          "--with", "safetensors==0.5.3", "--with", "omegaconf", "--with", "einops",
-          "--with", "resemble-perth", "--with", "setuptools<81", "--with", "tqdm"]
+UV_RUN = [
+    "uv",
+    "run",
+    "--no-project",
+    "--python",
+    "3.11",
+    "--index",
+    "https://download.pytorch.org/whl/cu128",
+    "--index-strategy",
+    "unsafe-best-match",
+    "--with",
+    "torch==2.8.0",
+    "--with",
+    "torchaudio==2.8.0",
+    "--with",
+    "numpy<2",
+    "--with",
+    "scipy",
+    "--with",
+    "librosa==0.11.0",
+    "--with",
+    "soundfile",
+    "--with",
+    "huggingface_hub==0.25.2",
+    "--with",
+    "s3tokenizer",
+    "--with",
+    "diffusers==0.29.0",
+    "--with",
+    "conformer==0.3.2",
+    "--with",
+    "safetensors==0.5.3",
+    "--with",
+    "omegaconf",
+    "--with",
+    "einops",
+    "--with",
+    "resemble-perth",
+    "--with",
+    "setuptools<81",
+    "--with",
+    "tqdm",
+]
 
 
 def resample(x, sr, to):
@@ -51,6 +88,7 @@ def resample(x, sr, to):
         return x.astype("float32")
     from math import gcd
     import scipy.signal as ss
+
     g = gcd(int(sr), int(to))
     return ss.resample_poly(x, int(to) // g, int(sr) // g).astype("float32")
 
@@ -67,8 +105,8 @@ def gate(y, x, sr, floor_db=-50.0, margin=0.05, fade=0.01):
     w[a:b] = 1.0
     n = min(int(fade * sr), (b - a) // 2)
     if n:
-        w[a:a + n] = np.linspace(0, 1, n)
-        w[b - n:b] = np.linspace(1, 0, n)
+        w[a : a + n] = np.linspace(0, 1, n)
+        w[b - n : b] = np.linspace(1, 0, n)
     return y * w
 
 
@@ -77,25 +115,29 @@ def active_rms(x, sr):
     hop = max(1, int(0.02 * sr))
     n = len(x) // hop
     if n == 0:
-        return float(np.sqrt(np.mean(x ** 2) + 1e-12))
-    e = np.sqrt((x[:n * hop].reshape(n, hop) ** 2).mean(1) + 1e-12)
+        return float(np.sqrt(np.mean(x**2) + 1e-12))
+    e = np.sqrt((x[: n * hop].reshape(n, hop) ** 2).mean(1) + 1e-12)
     loud = e[e > e.max() * 0.1]
-    return float(np.sqrt(np.mean(loud ** 2)))
+    return float(np.sqrt(np.mean(loud**2)))
 
 
 class Chatterbox:
     def __init__(self):
         import types
         import torch
+
         src = pathlib.Path(os.environ.get("CHATTERBOX_SRC") or ROOT / "vendor" / "chatterbox")
         if not (src / "src" / "chatterbox" / "vc.py").exists():
-            raise SystemExit(f"no Chatterbox source at {src}: git clone --depth 1 "
-                             "https://github.com/resemble-ai/chatterbox vendor/chatterbox (or set CHATTERBOX_SRC)")
+            raise SystemExit(
+                f"no Chatterbox source at {src}: git clone --depth 1 "
+                "https://github.com/resemble-ai/chatterbox vendor/chatterbox (or set CHATTERBOX_SRC)"
+            )
         pkg = types.ModuleType("chatterbox")
         pkg.__path__ = [str(src / "src" / "chatterbox")]
         sys.modules["chatterbox"] = pkg
         from chatterbox.models.s3tokenizer import S3_SR
         from chatterbox.vc import ChatterboxVC
+
         self.torch, self.S3_SR = torch, S3_SR
         self.vc = ChatterboxVC.from_pretrained("cuda" if torch.cuda.is_available() else "cpu")
         self.sr = self.vc.sr
@@ -135,8 +177,12 @@ def main():
         peak = float(np.abs(y).max())
         if peak > 0.989:
             y = y * (0.989 / peak)
-        sf.write(p["out"], np.repeat(y[:, None], ch, 1) if ch > 1 else y, sr,
-                 subtype=subtype if subtype.startswith("PCM") else "PCM_16")
+        sf.write(
+            p["out"],
+            np.repeat(y[:, None], ch, 1) if ch > 1 else y,
+            sr,
+            subtype=subtype if subtype.startswith("PCM") else "PCM_16",
+        )
     print(f"  voice conversion: {len(pairs)} takes in {time.time() - t0:.0f} s", flush=True)
 
 

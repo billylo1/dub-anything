@@ -4,6 +4,7 @@ Usage: scripts/pitch.py <name>   (reads work/<name>/segments.json and that job's
 Needs librosa, so run it in a throwaway env:
   uv run --no-project --python 3.12 --with librosa --with soundfile python scripts/pitch.py <clip>
 """
+
 import json
 import os
 import pathlib
@@ -13,8 +14,10 @@ import librosa
 import numpy as np
 
 # Same job-folder resolution as core.py / VoiceStudio's backend/core/config.py.
-JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
-                    or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
+JOBS = (
+    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
+    / "dub_jobs"
+)
 
 sys.stdout.reconfigure(encoding="utf-8")
 work = pathlib.Path(__file__).resolve().parents[1] / "work" / sys.argv[1]
@@ -24,7 +27,7 @@ y, sr = librosa.load(wav, sr=16000, mono=True)
 
 for seg in doc["segments"]:
     for w in seg.get("words") or [{"text": seg["text"], "start": seg["start"], "end": seg["end"]}]:
-        clip = y[int(w["start"] * sr):int(w["end"] * sr)]
+        clip = y[int(w["start"] * sr) : int(w["end"] * sr)]
         if len(clip) < sr // 10:
             continue
         f0, voiced, _ = librosa.pyin(clip, fmin=70, fmax=450, sr=sr, frame_length=1024)

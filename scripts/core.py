@@ -5,6 +5,7 @@ check that a window is clean, and the length OmniVoice will give a take
 (take_length, fit_rows). dub.py drives VoiceStudio with these; the other tools
 import them from here.
 """
+
 import functools
 import hashlib
 import json
@@ -20,14 +21,19 @@ import soundfile as sf
 
 from languages import LANGUAGES, PAIR, PAIRS, pair_of
 
-HERE = pathlib.Path(__file__).resolve().parent     # the scripts
-ROOT = HERE.parent                                  # the repo: work/, videos/, vendor/
+HERE = pathlib.Path(__file__).resolve().parent  # the scripts
+ROOT = HERE.parent  # the repo: work/, videos/, vendor/
 WORK = ROOT / "work"
 # Same resolution as VoiceStudio's backend/core/config.py.
-JOBS = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
-                    or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice") / "dub_jobs"
-HF_CACHE = (os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DIR")
-            or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache"))
+JOBS = (
+    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
+    / "dub_jobs"
+)
+HF_CACHE = (
+    os.environ.get("HF_HUB_CACHE")
+    or os.environ.get("OMNIVOICE_CACHE_DIR")
+    or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
+)
 
 
 def whisper_setup():
@@ -38,6 +44,7 @@ def whisper_setup():
     lib = pathlib.Path(sys.prefix) / "Lib" / "site-packages" / "cudnn8_compat" / "nvidia" / "cudnn" / "bin"
     if sys.platform == "win32" and lib.is_dir():
         import ctypes
+
         whisper_setup.cookie = os.add_dll_directory(str(lib))  # must stay alive
         for dll in sorted(lib.glob("cudnn*64_8.dll")):
             ctypes.CDLL(str(dll))
@@ -46,6 +53,7 @@ def whisper_setup():
 def out_dir(doc):
     """Finished dubs go to a 'dubbed' folder beside the source video (or $DUB_OUT)."""
     return pathlib.Path(os.environ.get("DUB_OUT") or pathlib.Path(doc["video"]).parent / "dubbed")
+
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -122,6 +130,7 @@ def end_dip(db, start, end):
     (5 ms frames of edges.frames_db, smoothed over 20 ms), if it is at least DIP_DB
     below the line's speech level; else None."""
     import edges
+
     frame = edges.HOP / edges.SR
     level = edges.line_level(db, start, end)
     lo = max(int((end - DIP_REACH) / frame), int((start + 0.3) / frame))
@@ -154,15 +163,22 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
     src = langs(work.name)[0]
     cache_path = work / "refs" / "clean.json"
     cache = load_json(cache_path, {})
-    rivals = hashlib.sha1("|".join(f"{v}:{voice_sig(v)}" for v in sorted({line["voice"] for line in lines}))
-                          .encode()).hexdigest()[:8]
-    keys = [f"{line['start']:.2f}-{line['end']:.2f}_" + hashlib.sha1(
-            f"{line['voice']}|{voice_sig(line['voice'])}|{said(line, src)}".encode()).hexdigest()[:12]
-            + f"_{rivals}" + ("_dips" if dips else "") + ("_cast" if cast_lines else "") for line in lines]
+    rivals = hashlib.sha1(
+        "|".join(f"{v}:{voice_sig(v)}" for v in sorted({line["voice"] for line in lines})).encode()
+    ).hexdigest()[:8]
+    keys = [
+        f"{line['start']:.2f}-{line['end']:.2f}_"
+        + hashlib.sha1(f"{line['voice']}|{voice_sig(line['voice'])}|{said(line, src)}".encode()).hexdigest()[:12]
+        + f"_{rivals}"
+        + ("_dips" if dips else "")
+        + ("_cast" if cast_lines else "")
+        for line in lines
+    ]
     if any(k not in cache for k in keys):
         import draft
         import edges
         from register import cer
+
         sr = draft.SR
         audio = draft.decode_audio(str(JOBS / job_id / "vocals.wav"), sampling_rate=sr)
         db = edges.frames_db(audio)
@@ -171,13 +187,16 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
         opts = draft.VadOptions(threshold=0.5, min_silence_duration_ms=50, speech_pad_ms=0)
         spans = [(s["start"] / sr, s["end"] / sr) for s in draft.get_speech_timestamps(audio, opts)]
         from gpulock import hold_gpu
+
         hold_gpu("window check")
         model = draft.WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
         embed = draft.embedder()
         voices = load_json(WORK / "voices.json", {})
         who = lambda v: voices[v].get("register_of", v)  # noqa: E731
-        cast = {v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
-                for v in {line["voice"] for line in lines}}
+        cast = {
+            v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
+            for v in {line["voice"] for line in lines}
+        }
         # Exclude this part's own lines: a line mustn't vouch for itself.
         cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
         for line, key in zip(lines, keys):
@@ -189,7 +208,7 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
                 cut = end_dip(db, a, b) if dips else None
                 if cut is None:
                     why = "speech runs on past the window's end"
-            x = audio[int(a * sr):int((cut or b) * sr)]
+            x = audio[int(a * sr) : int((cut or b) * sr)]
             if why is None:
                 heard = "".join(p["said"] for p in draft.transcribe(model, x, language=src))
                 err = cer(bare(said(line, src)), bare(heard))
@@ -199,8 +218,9 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
                     e = embed(x)
                     best = max(cast, key=lambda v: float(e @ cast[v]))
                     if who(best) != who(line["voice"]) and not (
-                            who(line["voice"]) in cents
-                            and max(cents, key=lambda v: float(e @ cents[v])) == who(line["voice"])):
+                        who(line["voice"]) in cents
+                        and max(cents, key=lambda v: float(e @ cents[v])) == who(line["voice"])
+                    ):
                         why = f"voice nearer {best}"
             cache[key] = {"cut": cut} if cut and not why else why
         cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -233,7 +253,7 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
             continue
         base_path = WORK / "voices" / f"{line['voice']}.wav"
         base, base_sr = sf.read(base_path, dtype="float32")
-        own = vocals[int(line["start"] * sr):int((cut or line["end"]) * sr)]
+        own = vocals[int(line["start"] * sr) : int((cut or line["end"]) * sr)]
         if base_sr != sr or base.shape[1:] != own.shape[1:]:
             print(f"  line ref skipped at {line['start']}: {base_path.name} isn't in the vocals' format")
             continue
@@ -249,7 +269,7 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
     return refs
 
 
-FILL_TOL = 0.25           # s; a take ending this close to the actor's last sound is left alone
+FILL_TOL = 0.25  # s; a take ending this close to the actor's last sound is left alone
 FILL_SPEED = (0.8, 1.25)  # OmniVoice speeds allowed when re-timing a take (judge by ear)
 
 
@@ -259,15 +279,18 @@ def actor_spans(job_id, lines):
     nothing."""
     from faster_whisper.audio import decode_audio
     from faster_whisper.vad import VadOptions, get_speech_timestamps
+
     audio = decode_audio(str(JOBS / job_id / "vocals.wav"), sampling_rate=16000)
     opts = VadOptions(threshold=0.5, min_silence_duration_ms=120, speech_pad_ms=30)
     spans = [(s["start"] / 16000, s["end"] / 16000) for s in get_speech_timestamps(audio, opts)]
     out = []
     for line in lines:
-        inside = [(max(a, line["start"]), min(b, line["end"])) for a, b in spans
-                  if b > line["start"] and a < line["end"]]
-        out.append((min(a for a, _ in inside) - line["start"], max(b for _, b in inside) - line["start"])
-                   if inside else None)
+        inside = [
+            (max(a, line["start"]), min(b, line["end"])) for a, b in spans if b > line["start"] and a < line["end"]
+        ]
+        out.append(
+            (min(a for a, _ in inside) - line["start"], max(b for _, b in inside) - line["start"]) if inside else None
+        )
     return out
 
 
@@ -290,9 +313,11 @@ def update_voices(change):
                 lock.seek(0)
                 if sys.platform == "win32":
                     import msvcrt
+
                     msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
                     import fcntl
+
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except OSError:
@@ -335,7 +360,7 @@ def voice_wav(key, rebuild=False):
             sources[clip] = sf.read(JOBS / job / "vocals.wav", dtype="float32")
         audio, sr = sources[clip]
         gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")
-        parts += [audio[int(a * sr):int(b * sr)], gap]
+        parts += [audio[int(a * sr) : int(b * sr)], gap]
     ref.parent.mkdir(parents=True, exist_ok=True)
     sf.write(ref, np.concatenate(parts[:-1]), sr)
     return ref
@@ -355,7 +380,7 @@ def speech_length(wav):
 
 
 OMNIVOICE_SR, OMNIVOICE_FPS = 24000, 25  # OmniVoice's audio tokenizer: 24 kHz, 960-sample frames
-STRETCH_USED = 0.5    # share of OmniVoice's stretch of short lines that a take actually speaks
+STRETCH_USED = 0.5  # share of OmniVoice's stretch of short lines that a take actually speaks
 SPEED_EXPONENT = 0.7  # a take asked for at speed s changes length by 1/s**0.7, not 1/s
 
 
@@ -364,7 +389,7 @@ def at_speed(natural, speed, exponent=SPEED_EXPONENT):
     less than the speed asks: slowed, OmniVoice often says the words at its own
     pace and leaves the extra time silent, which is trimmed; sped up, it
     shortens less too. (IndexTTS's duration factor is exact: exponent 1.)"""
-    return natural / speed ** exponent
+    return natural / speed**exponent
 
 
 @functools.lru_cache(maxsize=1)
@@ -377,6 +402,7 @@ def _omnivoice():
     from omnivoice.utils.audio import remove_silence_safe
     from omnivoice.utils.duration import RuleDurationEstimator
     from omnivoice.utils.text import add_punctuation
+
     path = pathlib.Path(omnivoice.__file__).parents[1] / "backend" / "services" / "text_normalization.py"
     spec = importlib.util.spec_from_file_location("voicestudio_text_normalization", path)
     norm = importlib.util.module_from_spec(spec)
@@ -392,6 +418,7 @@ def _ref_frames(path, mtime):
     trimming; leaving that out predicted rendered takes better.)"""
     import torch
     import torchaudio
+
     audio, sr = sf.read(path, dtype="float32")
     wav = torch.from_numpy(audio.mean(axis=1) if audio.ndim > 1 else audio)[None]
     wav = torchaudio.functional.resample(wav, sr, OMNIVOICE_SR)
@@ -500,12 +527,19 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
     own, base = {}, {}  # per-line references by line id, voices' references by key
     if predict and not american:
         voices = load_json(WORK / "voices.json", {})
-        todo = [k for k, i in enumerate(ids) if not take_wav(job, i, tgt).exists()
-                and "clips" in voices[lines[k]["voice"]]]
+        todo = [
+            k for k, i in enumerate(ids) if not take_wav(job, i, tgt).exists() and "clips" in voices[lines[k]["voice"]]
+        ]
         base = {key: (voice_wav(key), voices[key].get("ref_text", "")) for key in {lines[k]["voice"] for k in todo}}
         if todo and mode.get("line_ref", not rendered and PAIRS[pair]["line_ref"]):
-            own = line_refs(work, job, [lines[k] for k in todo], [ids[k] for k in todo],
-                            dips=mode.get("dips", not rendered), cast_lines=mode.get("cast_lines", not rendered))
+            own = line_refs(
+                work,
+                job,
+                [lines[k] for k in todo],
+                [ids[k] for k in todo],
+                dips=mode.get("dips", not rendered),
+                cast_lines=mode.get("cast_lines", not rendered),
+            )
     spans = actor_spans(job, lines) if short or (predict and american) else [None] * len(lines)
     rows = []
     for i, (line, sid, span) in enumerate(zip(lines, ids, spans)):
@@ -513,16 +547,20 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
         if other:
             wav = JOBS / job / "none"
         end = span and span[1] if short else None
-        row = {"i": i, "start": line["start"], "text": line["text"], "window": line["end"] - line["start"],
-               "actor": end}
+        row = {
+            "i": i,
+            "start": line["start"],
+            "text": line["text"],
+            "window": line["end"] - line["start"],
+            "actor": end,
+        }
         gap = lines[i + 1]["start"] - line["end"] if i + 1 < len(lines) else 0.0
         borrow = min(gap - 0.05, 0.25) if gap > 0.05 else 0.0
         row["room"] = row["window"] + borrow + overflow
         length = None
         if wav.exists():
             length = row["speech"] = speech_length(wav)
-            row["flag"] = "OVER" if row["speech"] > row["room"] else (
-                "tight" if row["speech"] > row["window"] else "")
+            row["flag"] = "OVER" if row["speech"] > row["room"] else ("tight" if row["speech"] > row["window"] else "")
         else:
             row["speech"], row["flag"] = None, ""
             ref = own.get(sid) or base.get(line["voice"])
@@ -531,8 +569,11 @@ def fit_rows(name, overflow=0.3, predict=False, short=False, voice=None):
             elif ref:
                 length = row["est"] = take_length(*ref, line["text"], lang=tgt)
             if length:
-                row["flag"] = "OVER?" if at_speed(length, fastest, exponent) > row["room"] else (
-                    "risk" if at_speed(length, fastest, exponent) > row["room"] - 0.3 else "")
+                row["flag"] = (
+                    "OVER?"
+                    if at_speed(length, fastest, exponent) > row["room"]
+                    else ("risk" if at_speed(length, fastest, exponent) > row["room"] - 0.3 else "")
+                )
         # A take as rendered; an estimate as slow as fill can make it (American: exact).
         ends_at = at_speed(length, slowest, exponent) if length and row["speech"] is None else length
         if short and end and length and not row["flag"] and ends_at < end - SHORT_BY:
@@ -555,7 +596,7 @@ def voice_part(name, voice):
 
 def base_part(name):
     """The part a voice's copy (<part>.us) was made from; the name itself otherwise."""
-    return next((name[:-len(s)] for s in VOICE_SUFFIX.values() if s and name.endswith(s)), name)
+    return next((name[: -len(s)] for s in VOICE_SUFFIX.values() if s and name.endswith(s)), name)
 
 
 def line_id(line):

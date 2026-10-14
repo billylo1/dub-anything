@@ -9,6 +9,7 @@ existing cast member, so a recurring character keeps one voice and a new one is
 identified once (from the dialogue and frames.py), not part by part. Short
 lines end up as singletons: settle them with draft.py once the cast is built.
 """
+
 import argparse
 import sys
 
@@ -52,7 +53,7 @@ def main():
         audio = draft.decode_audio(str(JOBS / job / "vocals.wav"), sampling_rate=draft.SR)
         for i, line in enumerate(load_json(WORK / name / "draft.json")["lines"]):
             if line["end"] - line["start"] >= args.min and not line.get("suspect") and not line.get("song"):
-                v = embed(audio[int(line["start"] * draft.SR):int(line["end"] * draft.SR)])
+                v = embed(audio[int(line["start"] * draft.SR) : int(line["end"] * draft.SR)])
                 items.append((name, i, line, v))
     if not items:
         raise SystemExit("no lines to cluster (run draft.py first)")
@@ -65,8 +66,10 @@ def main():
         print(f"\n=== C{c}  {len(members)} lines  {hint}")
         for k in sorted(members, key=lambda k: (items[k][0], items[k][2]["start"])):
             name, i, line, v = items[k]
-            print(f"  {name} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} {float(v @ centre):4.2f}  "
-                  f"{said(line, langs(name)[0])}")
+            print(
+                f"  {name} L{i:02d} {line['start']:7.2f}-{line['end']:7.2f} {float(v @ centre):4.2f}  "
+                f"{said(line, langs(name)[0])}"
+            )
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ dubrama.py goes from one job to the next gets the card after the current job,
 not after the whole batch. Standard library only, so tools in other
 environments (separate.py) can import it too.
 """
+
 import json
 import os
 import pathlib
@@ -25,20 +26,24 @@ _held = None
 def _try_lock(f):
     if sys.platform == "win32":
         import msvcrt
+
         f.seek(0)
         msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
     else:
         import fcntl
+
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def _unlock(f):
     if sys.platform == "win32":
         import msvcrt
+
         f.seek(0)
         msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
     else:
         import fcntl
+
         fcntl.flock(f, fcntl.LOCK_UN)
 
 
@@ -102,5 +107,7 @@ def hold_gpu(what=None):
     _held = f
     os.environ["DUBRAMA_GPU"] = "held"
     what = what or pathlib.Path(sys.argv[0]).name
-    OWNER.write_text(json.dumps({"what": " ".join([what] + sys.argv[1:2]), "pid": os.getpid(),
-                                 "since": time.strftime("%H:%M:%S")}), encoding="utf-8")
+    OWNER.write_text(
+        json.dumps({"what": " ".join([what] + sys.argv[1:2]), "pid": os.getpid(), "since": time.strftime("%H:%M:%S")}),
+        encoding="utf-8",
+    )

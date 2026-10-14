@@ -28,6 +28,7 @@ score: the speaker scores draft.py gives a line, for any stretch of a clip's voc
 (half of a line, a window you're about to draw), against the show's own voices and the
 lines already cast to them in its other parts, best three first.
 """
+
 import json
 import sys
 
@@ -40,10 +41,13 @@ SR = 16000
 def spans(clip, ranges):
     from faster_whisper.audio import decode_audio
     from faster_whisper.vad import VadOptions, get_speech_timestamps
+
     seg = load_json(WORK / clip / "segments.json")
     audio = decode_audio(str(JOBS / seg["job_id"] / "vocals.wav"), sampling_rate=SR)
-    found = [(s["start"] / SR, s["end"] / SR) for s in
-             get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=120, speech_pad_ms=30))]
+    found = [
+        (s["start"] / SR, s["end"] / SR)
+        for s in get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=120, speech_pad_ms=30))
+    ]
     for rng in ranges:
         a, b = (float(x) for x in rng.split("-"))
         near = [(s, e) for s, e in found if e > a - 1.5 and s < b + 1.5]
@@ -59,33 +63,41 @@ def add(key, src, clips, text, replace):
 
     def change(voices):
         if key in voices and not replace:
-            raise SystemExit(f"{key} exists already (from {voices[key].get('from')}): pick another key, "
-                             f"or --replace a voice you made yourself")
+            raise SystemExit(
+                f"{key} exists already (from {voices[key].get('from')}): pick another key, "
+                f"or --replace a voice you made yourself"
+            )
         voices[key] = {"from": src, "clips": clips, "ref_text": text}
+
     update_voices(change)
     used = sum(line.get("voice") == key for p in WORK.glob("*/script.json") for line in load_json(p)["lines"])
     total = sum(b - a for _, a, b in voice_clips(load_json(WORK / "voices.json")[key]))
-    print(f"{key}: {total:.1f} s of clips -> {voice_wav(key, rebuild=True)}"
-          + (f"; {used} script lines use it and will render again" if used else ""))
+    print(
+        f"{key}: {total:.1f} s of clips -> {voice_wav(key, rebuild=True)}"
+        + (f"; {used} script lines use it and will render again" if used else "")
+    )
 
 
 def check(keys):
     from gpulock import hold_gpu
+
     voices = load_json(WORK / "voices.json")
     wavs = {k: voice_wav(k) for k in keys}
     hold_gpu()
     whisper_setup()
     from faster_whisper import WhisperModel
     from faster_whisper.audio import decode_audio
+
     model = WhisperModel("Systran/faster-whisper-large-v3", device="cuda", compute_type="float16")
     for k in keys:
         audio = decode_audio(str(wavs[k]), sampling_rate=SR)
         print(f"=== {k}  {len(audio) / SR:.1f} s  ref_text: {voices[k]['ref_text']}")
         t = 0.0
         for clip, a, b in voice_clips(voices[k]):
-            piece = audio[int(t * SR):int((t + b - a) * SR)]
-            segs, _ = model.transcribe(piece, language=langs(clip)[0], beam_size=5, vad_filter=False,
-                                       condition_on_previous_text=False)
+            piece = audio[int(t * SR) : int((t + b - a) * SR)]
+            segs, _ = model.transcribe(
+                piece, language=langs(clip)[0], beam_size=5, vad_filter=False, condition_on_previous_text=False
+            )
             print(f"   {clip} {a:.2f}-{b:.2f} ({b - a:.1f} s): {''.join(s.text for s in segs).strip()}")
             t += b - a + 0.3
 
@@ -93,6 +105,7 @@ def check(keys):
 def sim(keys):
     import draft
     from faster_whisper.audio import decode_audio
+
     embed = draft.embedder()
     if embed is None:
         raise SystemExit("no WeSpeaker model in the cache (see draft.py)")
@@ -105,6 +118,7 @@ def sim(keys):
 
 def score(clip, ranges):
     import draft
+
     embed = draft.embedder()
     if embed is None:
         raise SystemExit("no WeSpeaker model in the cache (see draft.py)")
@@ -113,10 +127,13 @@ def score(clip, ranges):
     audio = draft.decode_audio(str(JOBS / seg["job_id"] / "vocals.wav"), sampling_rate=SR)
     for rng in ranges:
         a, b = (float(x) for x in rng.split("-"))
-        v = embed(audio[int(a * SR):int(b * SR)])
+        v = embed(audio[int(a * SR) : int(b * SR)])
         ranked = sorted(((float(v @ c), k) for k, c in cents.items()), reverse=True)[:3]
-        print(f"{clip} {a:.2f}-{b:.2f}  " + "  ".join(f"{k} {s:.2f}" for s, k in ranked)
-              + ("  (under 0.6 s: unreliable)" if b - a < 0.6 else ""))
+        print(
+            f"{clip} {a:.2f}-{b:.2f}  "
+            + "  ".join(f"{k} {s:.2f}" for s, k in ranked)
+            + ("  (under 0.6 s: unreliable)" if b - a < 0.6 else "")
+        )
 
 
 def main():

@@ -25,12 +25,13 @@ optionally
 A line of dialogue that would cover a sign shown with it moves to the top,
 if the top is clear.
 """
+
 import re
 import unicodedata
 
 from languages import LANGUAGES
 
-DIALOGUE_SIZE = 0.054   # of the picture's height
+DIALOGUE_SIZE = 0.054  # of the picture's height
 SIGN_SIZE = 0.042
 PLACES = {"over": 5, "above": 2, "below": 8, "left": 6, "right": 4, "page": 7}
 
@@ -88,8 +89,14 @@ def anchor(box, place, size, lines, w, h, room=None):
     x0, y0, x1, y1 = box[0] * w, box[1] * h, box[2] * w, box[3] * h
     gap = size * 0.3
     an = PLACES[place]
-    x, y = {5: ((x0 + x1) / 2, (y0 + y1) / 2), 2: ((x0 + x1) / 2, y0 - gap), 8: ((x0 + x1) / 2, y1 + gap),
-            6: (x0 - gap, (y0 + y1) / 2), 4: (x1 + gap, (y0 + y1) / 2), 7: (x0, y0)}[an]
+    x, y = {
+        5: ((x0 + x1) / 2, (y0 + y1) / 2),
+        2: ((x0 + x1) / 2, y0 - gap),
+        8: ((x0 + x1) / 2, y1 + gap),
+        6: (x0 - gap, (y0 + y1) / 2),
+        4: (x1 + gap, (y0 + y1) / 2),
+        7: (x0, y0),
+    }[an]
     m = h * 0.03
     tw, th = extent(lines, size, w, h, room)
     left = {4: x, 7: x, 6: x - tw}.get(an, x - tw / 2)
@@ -181,10 +188,12 @@ def write(path, w, h, dialogue=(), signs=(), lang="en"):
     events = []
     for a, b, t in dialogue:
         near = [r for y, z, rs in rects if min(b, z) - max(a, y) > 0.05 for r in rs]
-        up = any(meets(dialogue_rect(t, w, h), r) for r in near) and \
-            not any(meets(dialogue_rect(t, w, h, top=True), r) for r in near)
-        events.append(f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Dialogue,,0,0,0,,"
-                      + ("{\\an8}" if up else "") + escape(t))
+        up = any(meets(dialogue_rect(t, w, h), r) for r in near) and not any(
+            meets(dialogue_rect(t, w, h, top=True), r) for r in near
+        )
+        events.append(
+            f"Dialogue: 0,{ass_time(a)},{ass_time(b)},Dialogue,,0,0,0,," + ("{\\an8}" if up else "") + escape(t)
+        )
     events += [sign_event(s, w, h) for s in sorted(signs, key=lambda s: s["start"])]
     with open(path, "w", encoding="utf-8-sig", newline="\n") as f:
         f.write(header(w, h, lang) + "\n".join(events) + "\n")

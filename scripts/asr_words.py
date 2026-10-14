@@ -8,6 +8,7 @@ Options: --model <repo>  (default Systran/faster-whisper-large-v3)
                       the clip's source language; for a voice's reference, work/voices/<key>.wav, the
                       source language of the part it was built from; else ja)
 """
+
 import argparse
 import pathlib
 import sys
@@ -37,18 +38,18 @@ if seg_doc.exists():
         raise SystemExit("usage: scripts/asr_words.py <clip> <t0> <t1>")
     t0, t1 = args.times
     audio = decode_audio(str(JOBS / load_json(seg_doc)["job_id"] / "vocals.wav"), sampling_rate=16000)
-    audio, offset = audio[int(t0 * 16000):int(t1 * 16000)], t0
+    audio, offset = audio[int(t0 * 16000) : int(t1 * 16000)], t0
     spans = get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=120, speech_pad_ms=30))
-    print("speech: " + " ".join(f"{offset + s['start'] / 16000:.2f}-{offset + s['end'] / 16000:.2f}"
-                                for s in spans))
+    print("speech: " + " ".join(f"{offset + s['start'] / 16000:.2f}-{offset + s['end'] / 16000:.2f}" for s in spans))
     source = audio
 else:
     source, offset = args.source, (args.times[0] if args.times else 0.0)
 
 hold_gpu()
 model = WhisperModel(args.model, device="auto", compute_type="default")
-segs, _ = model.transcribe(source, language=args.lang, beam_size=5, vad_filter=False,
-                           condition_on_previous_text=False, word_timestamps=True)
+segs, _ = model.transcribe(
+    source, language=args.lang, beam_size=5, vad_filter=False, condition_on_previous_text=False, word_timestamps=True
+)
 for s in segs:
     words = " ".join(f"{w.word}[{w.start + offset:.2f}]" for w in s.words)
     print(f"{s.start + offset:6.2f}-{s.end + offset:6.2f}  {s.text}\n        {words}")

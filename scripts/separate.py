@@ -15,6 +15,7 @@ Run it right after `dub.py prep`, before draft.py and before building voices
 from the clip. A voice already built keeps its old reference until its entry in
 voices.json changes.
 """
+
 import argparse
 import json
 import os
@@ -28,11 +29,14 @@ from gpulock import hold_gpu
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
 # Same resolution as core.py / VoiceStudio's backend/core/config.py.
-DATA = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR")
-                    or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
+DATA = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
 JOBS = DATA / "dub_jobs"
-MODELS = pathlib.Path(os.environ.get("OMNIVOICE_CACHE_DIR")
-                      or pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice") / "audio-separator"
+MODELS = (
+    pathlib.Path(
+        os.environ.get("OMNIVOICE_CACHE_DIR") or pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice"
+    )
+    / "audio-separator"
+)
 STEMS = ("vocals.wav", "no_vocals.wav")
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -56,8 +60,11 @@ def restore(clip):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("clips", nargs="+")
-    ap.add_argument("--model", default="vocals_mel_band_roformer.ckpt",
-                    help="an audio-separator vocals model (default: Kim's Mel-Band Roformer)")
+    ap.add_argument(
+        "--model",
+        default="vocals_mel_band_roformer.ckpt",
+        help="an audio-separator vocals model (default: Kim's Mel-Band Roformer)",
+    )
     ap.add_argument("--restore", action="store_true", help="put VoiceStudio's htdemucs stems back")
     args = ap.parse_args()
     if args.restore:
