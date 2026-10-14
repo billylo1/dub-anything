@@ -11,6 +11,9 @@ others work.
 - NVIDIA driver ≥ 610 if you want `scripts/split.py --encoder h264_nvenc` (current
   FFmpeg builds need NVENC API 13.1). Otherwise use the default x264.
 - `winget install Git.Git astral-sh.uv Gyan.FFmpeg`, then open a new terminal.
+- In the clone, `git config core.hooksPath .githooks` turns on the pre-commit
+  check (ruff format and lint) and `git config blame.ignoreRevsFile
+  .git-blame-ignore-revs` keeps formatting commits out of `git blame`.
 
 ## 2. Keep models and data out of AppData
 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Checks the staged Python with ruff (format and lint) before each commit.
+# Turn it on once per clone: git config core.hooksPath .githooks
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ -z "$files" ] && exit 0
+if ! command -v uvx >/dev/null 2>&1; then
+    echo "pre-commit: uvx not found, ruff checks skipped" >&2
+    exit 0
+fi
+# Check what is staged, not the working tree: copy it out with ruff.toml.
+tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmp"' EXIT
+git checkout-index --prefix="$tmp/" -- ruff.toml $files || exit 1
+cd "$tmp" || exit 1
+uvx ruff format --check $files && uvx ruff check $files && exit 0
+echo "pre-commit: run 'uvx ruff format' and fix what 'uvx ruff check' reports, then stage and commit again" >&2
+exit 1
