@@ -2,12 +2,12 @@
 
 The directing notes for each language, on what differs with it as the source
 and as the target, are beside this file: [ja.md](ja.md), [en.md](en.md),
-[es.md](es.md), [ko.md](ko.md). Read the job's two beside
+[es.md](es.md), [ko.md](ko.md), [zh.md](zh.md). Read the job's two beside
 [directing.md](../directing.md).
 
 The scripts dub the pairs listed in `PAIRS` (`scripts/languages/__init__.py`):
-Japanese → English, Spanish → English, Korean → English, English → Japanese and
-English → Spanish.
+Japanese → English, Spanish → English, Korean → English, Chinese (Mandarin) →
+English, English → Japanese and English → Spanish.
 What they know about a language is in one module, `scripts/languages/<code>.py`,
 named for its ISO 639-1 code. What was measured for a pair is its entry in
 `PAIRS`. The scripts look a language up by its code (`LANGUAGES["es"]`) and
@@ -28,9 +28,9 @@ pykakasi through `kana.py`).
 | `NAME`, `ISO3`, `NATIVE` | The language's English name (in messages), its ISO 639-2 code (track tags) and its name in itself (subtitle track titles) | everything, `assemble.py`, `deliver.py` |
 | `HALLUCINATIONS` | Whisper's stock phrases on hums, music and silence when it's told to hear this language, in lowercase | `draft.py` |
 | `THANKS` | Whole phrases Whisper writes on a breath, a laugh or crowd noise ("thanks"). Real thanks are common, so only a recovered phrase that says nothing else is suspect. May be empty | `draft.py` |
-| `SECOND_OPINIONS` | Two sherpa-onnx recognisers, `{family: Hugging Face repo}`, the family one that `second.py` builds (`parakeet`, `canary`, `sensevoice`, `reazon`). `{}` for none | `second.py` |
+| `SECOND_OPINIONS` | Two sherpa-onnx recognisers, `{family: Hugging Face repo}`, the family one that `second.py` builds (`parakeet`, `canary`, `sensevoice`, `reazon`, `zipformer`, `zipformer_ctc`). `{}` for none | `second.py` |
 | `units(text)` | What two transcripts are compared by: a list of words, or a string of characters (the edit distance runs over its items) | `second.py` |
-| `OCR` | The recogniser that reads captions and signs in the language: RapidOCR's PP-OCRv5 `(LangRec, ModelType)`, `("CH", "SERVER")` for Japanese, English and Spanish, `("KOREAN", "MOBILE")` for Korean | `subs.py`, `signs.py` |
+| `OCR` | The recogniser that reads captions and signs in the language: RapidOCR's PP-OCRv5 `(LangRec, ModelType)`, `("CH", "SERVER")` for Chinese, Japanese, English and Spanish, `("KOREAN", "MOBILE")` for Korean | `subs.py`, `signs.py` |
 | `VOICES` | The render voices a dub into the language can have: `("actor",)`, plus `"american"` for English | `dubrama.py new`, `dub.py` |
 | `JOIN` | What joins Whisper's segments of a take: `" "`, or `""` for a language written without spaces | `lineqa.py` |
 | `compare(want, got)` | QA's check of a take's transcript against its line: `(notes, similarity)`, one note per problem (`match 0.71`, `negation differs`, `number differs: ...`), none when it passes | `lineqa.py` |
@@ -45,6 +45,8 @@ normalizer (numbers spelled out in its words in each reading that matters,
 abbreviations, contractions), its negations and its number words. `kana.py`
 reads Japanese as hiragana for `ja.py`. Korean has spaces, but recognisers place
 them differently, so `ko.py` compares by syllables, as `ja.py` does by kana.
+Chinese's `zh.py` compares characters with punctuation, spacing and width aside;
+it preserves simplified/traditional variants and homophones for review.
 
 A language that is only a source still defines every name: `ko.py`'s `compare`
 has never checked a rendered take, since nothing dubs into Korean yet.
@@ -60,9 +62,9 @@ needs no module: its English name and ISO 639-2 code go in `OTHERS`.
 - `line_ref`: whether the pair's lines render with per-line references (the
   voice's clips, then the actor's own original of the line) unless the script
   says otherwise. They help where the original doesn't carry its accent into
-  the dub, so they're on into English from Japanese, Spanish and Korean and
+  the dub, so they're on into English from Japanese, Spanish, Korean and Chinese and
   from English into Spanish, and off from English into Japanese (findings 16
-  to 19).
+  to 20).
 
 A pair goes into `PAIRS` once a video has been dubbed in it end to end and
 checked. `dub.py prep`, `dubrama.py new` and `deliver.py` refuse any pair that

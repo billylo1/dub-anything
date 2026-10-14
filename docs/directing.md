@@ -60,7 +60,7 @@ differs.
 - `start`/`end`: the window the English line may occupy.
 - `voice`: a key in `voices.json`.
 - `ja`: the corrected original. The field is named for the source language:
-  `en` when dubbing from English, `es` from Spanish, `ko` from Korean (see
+  `en` when dubbing from English, `es` from Spanish, `ko` from Korean, `zh` from Chinese (see
   "Other languages").
 - `text`: the English that is spoken (the dub's language: Japanese or Spanish
   when dubbing into it).
@@ -113,7 +113,7 @@ dialogue is the same cast, so dub it like the show with the same voices. Its tit
 cards and on-screen text stay as they are.
 
 A top-level `"captions": [{start, end, ja, text}]` list (`en` for `ja` dubbing
-from English, `es` from Spanish, `ko` from Korean) holds speech that stays in the original audio but still belongs in
+from English, `es` from Spanish, `ko` from Korean, `zh` from Chinese) holds speech that stays in the original audio but still belongs in
 the subtitles. Examples: dialogue already in
 English, names, whispers, and bit parts too short to clone. `assemble.py` adds the
 list to both subtitle tracks.
@@ -137,7 +137,7 @@ render nothing and don't make a part render again; they change the delivery
 For a new show, settle one thing with the user before the first part: the
 voice, or both (see "Voice" under Render). Everything else has a default. The
 language pair is Japanese → English unless the job says otherwise (`--source
-en --target ja`, `--source en --target es`, `--source es` or `--source ko`; see "Other
+en --target ja`, `--source en --target es`, `--source es`, `--source ko` or `--source zh`; see "Other
 languages").
 `scripts/dubrama.py` runs the machine steps below for a whole video, around
 your directing (AGENTS.md, "A dub, start to finish"); this section is what each
@@ -209,7 +209,7 @@ confidence alone does not prove that a transcription is right.
 `scripts/second.py <clip>` compares ReazonSpeech and SenseVoice with the draft and
 flags lines where both disagree with Whisper (for English speech, Parakeet and
 SenseVoice; for Spanish, Parakeet v3 and Canary; for Korean, k2's Korean Zipformer
-and SenseVoice). Re-listen with `asr_words.py`
+and SenseVoice; for Chinese, Zipformer CTC and SenseVoice). Re-listen with `asr_words.py`
 and decide from context. It needs its own environment (see AGENTS.md).
 
 Some recordings have the broadcaster's closed captions burned into the
@@ -713,7 +713,7 @@ This guide was written from Japanese → English dubs. For any other pair, read
 the notes on both its languages in [languages/](languages/README.md) as well:
 what differs with each as the source and as the target
 ([ja.md](languages/ja.md), [en.md](languages/en.md),
-[es.md](languages/es.md), [ko.md](languages/ko.md)). Write what you learn about a
+[es.md](languages/es.md), [ko.md](languages/ko.md), [zh.md](languages/zh.md)). Write what you learn about a
 language there.
 
 ## Gotchas
@@ -860,7 +860,7 @@ The loop, in the order it runs:
 |---|---|
 | `scripts/dubrama.py new\|run\|status\|ready\|report\|cleanup` | A whole dub: runs every machine step below in order, renders each part when its script is ready, QA rounds, delivery, the report |
 | `scripts/split.py <video>` | Cut a long video into ~N-minute parts at pauses in speech (frame-accurate) |
-| `scripts/dub.py prep <video> [--source en\|es\|ko --target ja\|en\|es]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), `ja.srt` (`en.srt` from English, `es.srt` from Spanish) |
+| `scripts/dub.py prep <video> [--source en\|es\|ko\|zh --target ja\|en\|es]` | Upload, separate, transcribe, diarize → `work/<name>/segments.json` (with the language pair), source-language `.srt` |
 | `scripts/separate.py <clip> ... [--restore]` | Re-separate prepped clips with Mel-Band Roformer: far less music left in the vocals, so cleaner clones (own environment; see AGENTS.md) |
 | `scripts/subs.py <clip> [--open]` | Read burned-in closed captions (OCR) → `subs.json`: exact words, speaker names, colours, off-screen marks; song lyrics become bare ♪ markers (own environment). `--open`: a film's own subtitles for foreign-language speech |
 | `scripts/signs.py <clip> [--preview]` | Text in the picture to translate (signs, diagrams, title cards, pages): candidates with times and boxes → `signs.json`, a sheet per candidate and shot thumbnails (subs.py's environment); `--preview` draws the script's signs into their frames |
@@ -869,7 +869,7 @@ The loop, in the order it runs:
 | `scripts/voices.py spans\|add\|check\|sim\|score` | Build the cast: speech spans around candidate clips, add a voice (locked, for parallel directors), transcribe a reference clip by clip, compare references, score any stretch against the cast |
 | `scripts/frames.py <out.jpg> <video> <t>[:label] ...` | Labelled frame grid: who is on screen at each line |
 | `scripts/asr_words.py <clip> <t0> <t1>` | Careful re-listen of one stretch of a clip's vocals, with word timings and speech spans (also takes a wav; `--lang en` for English speech) |
-| `scripts/second.py <clip> ... [--script]` | Two more recognisers over each line (ReazonSpeech and SenseVoice for Japanese, Parakeet and SenseVoice for English, Parakeet v3 and Canary for Spanish, the Korean Zipformer and SenseVoice for Korean): flags lines where both disagree with Whisper (own environment) |
+| `scripts/second.py <clip> ... [--script]` | Two more recognisers over each line (ReazonSpeech and SenseVoice for Japanese, Parakeet and SenseVoice for English, Parakeet v3 and Canary for Spanish, the Korean Zipformer and SenseVoice for Korean, Zipformer CTC and SenseVoice for Chinese): flags lines where both disagree with Whisper (own environment) |
 | `scripts/edges.py <name> [--apply]` | Find windows that cut the actor mid-sound and move the clear ones; move touching windows onto the dip between the voices |
 | `scripts/tails.py <name>` | How long each line's original voice rings on: flashback echo, PA announcements, big rooms |
 | `scripts/fit.py <name> [--voice american]` | Each line's length against its window and the actor's speech, predicted before rendering with OmniVoice's own length rule (or IndexTTS's, for the `"american"` voice): `OVER?`, `risk`, `SHORT?` |

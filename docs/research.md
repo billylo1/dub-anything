@@ -311,6 +311,19 @@ originals per part.
     and speed, a median error of +0.00 s, 70% within 0.2 s and 93% within
     0.4 s (without them -0.01 s, 75% and 94%). It awaits a listener.
 
+20. **Chinese (Mandarin) → English: keep per-line references.** A short sample
+    exercised preparation, Chinese transcription and independent recognition,
+    casting, English cloning, fitting, per-line QA, assembly and verified
+    delivery. The same script rendered without per-line references also passed
+    English QA, but keeping them improved measured voice likeness and timing
+    without weakening recognition of the English. OmniVoice's length estimates
+    held for the pair. The sample had too little speech per character for the
+    acting correlations used in the earlier comparisons, so it establishes a
+    working pipeline and a starting default, not an acting verdict. The actor
+    voice was exercised; other Chinese varieties and the American voice await
+    tests. Source-specific measurements and listening notes stay in ignored
+    `work/` files. It awaits a listener.
+
 ## What the pipeline does now
 
 `dub.py generate` renders new parts with per-line references, fill and `dips` by
@@ -330,7 +343,7 @@ without per-line references (finding 16), and `lineqa.py` compares its takes by
 their reading in kana. One dubbed from Spanish into English keeps them
 (finding 17), and so does one dubbed from English into Spanish (finding 18),
 whose takes `lineqa.py` compares word by word without accents, and one dubbed
-from Korean into English (finding 19).
+from Korean into English (finding 19) and Chinese into English (finding 20).
 
 ## Open questions
 

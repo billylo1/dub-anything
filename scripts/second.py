@@ -11,12 +11,13 @@ source_lang; SECOND_OPINIONS in languages/<code>.py) over each line of
 work/<clip>/draft.json (or script.json with --script) on the separated vocals,
 and compares them with the line's original (`ja`, or the field of the source
 language) as the language's module says (units): Japanese as kana, so spelling
-choices don't count, English and Spanish word by word, accents aside, Korean
-syllable by syllable, spacing aside. Japanese gets ReazonSpeech k2 v2 (trained
-on Japanese TV) and SenseVoice, English NVIDIA's Parakeet TDT 0.6B v2 and
+choices don't count, Chinese character by character, English and Spanish word
+by word, accents aside, Korean syllable by syllable, spacing aside. Japanese gets
+ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice, English NVIDIA's Parakeet TDT 0.6B v2 and
 SenseVoice, Spanish Parakeet TDT 0.6B v3 and Canary 180M Flash, Korean k2's
-Korean Zipformer and SenseVoice. A line is flagged when the two agree with each
-other more than either agrees with Whisper, and differ from it by 30% or more.
+Korean Zipformer and SenseVoice, Chinese Zipformer CTC and SenseVoice. A line is
+flagged when the two agree with each other more than either agrees with Whisper,
+and differ from it by 30% or more.
 Treat agreement as a review signal: re-listen with asr_words.py and decide from
 context. The models (~850 MB for Japanese, ~1 GB for English, ~900 MB for
 Spanish, ~320 MB for Korean) download to VoiceStudio's model cache on first use.
@@ -72,6 +73,11 @@ def recogniser(kind, repo, lang):
         return sherpa_onnx.OfflineRecognizer.from_sense_voice(
             model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang,
             use_itn=True)
+    if kind == "zipformer_ctc":
+        zf = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["model.int8.onnx", "tokens.txt"])
+        return sherpa_onnx.OfflineRecognizer.from_zipformer_ctc(
+            model=part(zf, "model.int8.onnx"), tokens=part(zf, "tokens.txt"), num_threads=8,
+            sample_rate=SR, feature_dim=80, decoding_method="greedy_search")
     if kind in ("reazon", "zipformer"):
         # k2 Zipformer transducers: ReazonSpeech's in full precision, the others int8.
         name = "{}-epoch-99-avg-1" + (".onnx" if kind == "reazon" else ".int8.onnx")
@@ -84,7 +90,7 @@ def recogniser(kind, repo, lang):
 
 
 def dist(a, b, lang="ja"):
-    """Edit distance between two texts (as the language's units: kana, or words),
+    """Edit distance between two texts (as the language's units: characters or words),
     relative to the longer."""
     a, b = LANGUAGES[lang].units(a), LANGUAGES[lang].units(b)
     prev = list(range(len(b) + 1))

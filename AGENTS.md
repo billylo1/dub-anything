@@ -12,7 +12,7 @@ actor) and render it with cloned voices. Read
 [docs/directing.md](docs/directing.md) before directing anything. It holds the
 workflow and the gotchas that cost the most time to find. Read the notes on the
 job's two languages in [docs/languages/](docs/languages/README.md) too (`ja.md`,
-`en.md`, `es.md`, `ko.md`): what differs with each as the source and as the target.
+`en.md`, `es.md`, `ko.md`, `zh.md`): what differs with each as the source and as the target.
 
 ## Your role
 
@@ -73,7 +73,8 @@ work; you direct.
 
 1. **Intake.** Confirm the source file and the language pair: Japanese →
    English, Spanish → English (`--source es`), Korean → English (`--source
-   ko`), English → Japanese (`--source en --target ja`) or English → Spanish
+   ko`), Chinese → English (`--source zh`, checked on Mandarin), English → Japanese
+   (`--source en --target ja`) or English → Spanish
    (`--source en --target es`), the pairs the scripts know (`PAIRS` in
    `scripts/languages/`). Into English, ask one
    question: the actor's voice (English with the actor's own accent),
@@ -84,7 +85,7 @@ work; you direct.
    nothing to ask.
    Look at the video's length and skim it for blocks that stay in the original
    (a channel card, commercial breaks, credits) so they can be split off whole.
-   `scripts/dubrama.py new <video> [--source es|ko|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+   `scripts/dubrama.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
    picture, `--signs` when it has text worth translating: title cards,

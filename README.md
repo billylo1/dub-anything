@@ -3,7 +3,8 @@
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
 tested for **Japanese → English**, **Spanish → English**, **Korean →
-English**, **English → Japanese** and **English → Spanish** on Windows with an
+English**, **Chinese (Mandarin) → English**, **English → Japanese** and
+**English → Spanish** on Windows with an
 NVIDIA GPU. Other language pairs and hardware need changes in a few known
 places, a job you can hand your coding agent: see
 [Other languages and hardware](#other-languages-and-hardware).
@@ -105,8 +106,9 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Other languages and hardware
 
-Five language pairs are built and tested, Japanese → English, Spanish →
-English, Korean → English, English → Japanese and English → Spanish, on Windows
+Six language pairs are built and tested, Japanese → English, Spanish →
+English, Korean → English, Chinese (Mandarin) → English, English → Japanese and
+English → Spanish, on Windows
 with an NVIDIA GPU. The voice engine isn't the limit: VoiceStudio clones voices in hundreds of
 languages and runs on macOS and Linux too. Each part records its pair when it's
 prepared (`dub.py prep --source en --target ja`), and the scripts read it from
@@ -116,7 +118,7 @@ there. What they know about a language is in one module,
 needs:
 
 - **Hearing it.** Whisper transcribes any language, and each line keeps its
-  transcript in a field named for it (`ja`, `en`, `es`, `ko`). The module lists the
+  transcript in a field named for it (`ja`, `en`, `es`, `ko`, `zh`). The module lists the
   stock phrases Whisper hallucinates in the language and names two recognisers
   for the second opinions (`second.py`); without them a source goes without
   that check. `draft.py` weighs Whisper's language detection against its
@@ -129,7 +131,7 @@ needs:
   out in each, accents aside in Spanish), by kana reading in Japanese. Another
   language needs its own normalization, number words and negations. Take
   lengths come from OmniVoice's own rule, with corrections measured on
-  Japanese → English takes; they held for the other four pairs. The American
+  Japanese → English takes; check them against the new pair's rendered takes. The American
   voice is English by design.
 - **Measuring the pair.** Whether a line's own original helps as its
   reference depends on the pair (it carried the English accent into Japanese

@@ -104,7 +104,7 @@ def bare(text):
     case, without spaces and punctuation, katakana as hiragana (Whisper writes a name
     or a word in either, "タロウ", "ナニ") and Latin letters without their accents
     (it writes "esta" or "está")."""
-    text = re.sub(r"[\s、。,.!?！？¿¡…・「」『』«»“”()（）ー〜~\-—'\"‘’:;]", "", text.lower())
+    text = re.sub(r"[\s、。，；：,.!?！？¿¡…・「」『』【】«»“”()（）ー〜~\-—'\"‘’:;]", "", text.lower())
     text = re.sub(r"[\u0300-\u036f]", "", unicodedata.normalize("NFD", text))
     return unicodedata.normalize("NFC", text).translate(KANA)
 

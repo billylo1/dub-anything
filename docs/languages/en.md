@@ -34,4 +34,4 @@ a flipped meaning in a close match. Numbers can stay in digits: VoiceStudio
 spells them out, and `dub.py` drops a thousands comma ("150,000"), which would
 have kept them digits for the clone to read in its reference's language
 (`speakable` in `en.py`; [ko.md](ko.md)). From Spanish, see [es.md](es.md), "As
-the source"; from Korean, [ko.md](ko.md).
+the source"; from Korean, [ko.md](ko.md); from Chinese, [zh.md](zh.md).
