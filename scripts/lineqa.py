@@ -85,11 +85,12 @@ def check(name, model, show_all, reroll):
             "sha": file_sha(wav),
             "settings": rendered.get(lid, {}),
         }
+
         # Only takes made the same way count (a moved window re-renders the line anyway);
         # a seed only tells two rolls apart.
-        same = lambda k: (
-            {**k["settings"], "speed": None, "seed": None} == {**take["settings"], "speed": None, "seed": None}
-        )  # noqa: E731
+        def same(k, take=take):
+            return {**k["settings"], "speed": None, "seed": None} == {**take["settings"], "speed": None, "seed": None}
+
         earlier = [k for k in kept.get(lid, []) if same(k) and k["sha"] != take["sha"]]
         best = max(earlier, key=lambda k: (not k["notes"], k["ratio"]), default=None)
         if best and better(best, take):

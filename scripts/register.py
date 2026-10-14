@@ -390,21 +390,21 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("report")
     p.add_argument("clips", nargs="*")
-    p.set_defaults(fn=cmd_report)  # noqa: E702
+    p.set_defaults(fn=cmd_report)
     p = sub.add_parser("build")
     p.add_argument("voice")
-    p.add_argument("band", choices=["calm", "raised"])  # noqa: E702
+    p.add_argument("band", choices=["calm", "raised"])
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("route")
     p.add_argument("clips", nargs="+")
-    p.add_argument("--apply", action="store_true")  # noqa: E702
+    p.add_argument("--apply", action="store_true")
     p.set_defaults(fn=cmd_route)
     p = sub.add_parser("check")
     p.add_argument("clips", nargs="*")
-    p.set_defaults(fn=cmd_check)  # noqa: E702
+    p.set_defaults(fn=cmd_check)
     p = sub.add_parser("drop")
     p.add_argument("voice")
-    p.set_defaults(fn=cmd_drop)  # noqa: E702
+    p.set_defaults(fn=cmd_drop)
     args = ap.parse_args()
     args.fn(args)
 

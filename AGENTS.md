@@ -182,6 +182,8 @@ sound wrong: `scripts/register.py report`, `build`, `route --apply`, `check`.
 - `videos/` and `work/` are never committed: they hold copyrighted source,
   transcripts and references to real people's voices.
 - Commit directly to `main`; no feature branches.
+- Format Python with `uvx ruff format` before committing (settings in
+  `ruff.toml`). List any formatting-only commit in `.git-blame-ignore-revs`.
 - Never delete the user's files. Delivery replaces the source only after every
   copied stream is verified; anything to throw away goes to a holding folder
   (`videos/_to-delete/`) for the user to delete.
