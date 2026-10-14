@@ -1,166 +1,181 @@
 # Dub Anything
 
-Dub video into another language **in each actor's own voice**, keeping the
-original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English**, **Spanish → English**, **Korean →
-English**, **Chinese (Mandarin) → English**, **English → Japanese** and
-**English → Spanish** on Windows with an
-NVIDIA GPU. Other language pairs and hardware need changes in a few known
-places, a job you can hand your coding agent: see
-[Other languages and hardware](#other-languages-and-hardware).
+Dub films and shows into another language **in each actor's own voice**, with
+the original music and sound effects intact. It runs on your own PC, and an AI
+coding agent directs the dub line by line, the way a dubbing director would.
 
-## What's different
+You give it a video file. You get the same file back as
+`my-show (dubbed).mkv`: the dub plays by default, the original audio is one
+track away, and subtitles in both languages are included.
+
+It dubs Japanese, Spanish, Korean and Chinese into English, and English into
+Japanese and Spanish. Need another language? Just ask: your agent adds the new
+pair as part of the job. Once it works, please
+[send it back](#other-languages-and-hardware) so everyone gets it.
+
+## Demos
+
+| A Japanese anime, dubbed into English | A Japanese film, dubbed into English |
+|---|---|
+| [![A Japanese anime, dubbed into English](https://img.youtube.com/vi/qXosYS-cTXk/maxresdefault.jpg)](https://www.youtube.com/watch?v=qXosYS-cTXk) | [![A Japanese film, dubbed into English](https://img.youtube.com/vi/2DsFAoTbQ8E/maxresdefault.jpg)](https://www.youtube.com/watch?v=2DsFAoTbQ8E) |
+
+## What makes it different
 
 Most dubbing tools run a fixed pipeline: transcribe, translate, clone each
-speaker from one clip, speed up whatever runs long. Dub Anything differs where a
-listener notices:
+speaker from one clip, speed up whatever runs long. Dub Anything differs where
+a listener notices:
 
-- **An agent directs, line by line.** It casts each line from speaker
-  embeddings, frames and the dialogue, fixes what Whisper misheard from context,
-  writes the translation timed to the actor, and triages every QA flag. It tells you
-  which lines are guesses instead of hiding them.
-- **Each line acts like the original.** The voice is prompted with the actor's
-  own delivery of that line, not one clip per character, so a shout stays a
-  shout and a murmur a murmur. A line whose window holds another voice falls
-  back to the character's usual reference, so nothing leaks in.
+- **An agent directs, line by line.** It works out who says each line from
+  voice matching, video frames and the dialogue, fixes what speech recognition
+  misheard, writes a translation timed to the actor, and triages every QA flag.
+  It tells you which lines are guesses instead of hiding them.
+- **Each line is acted like the original.** The cloned voice is prompted with
+  the actor's own delivery of that very line, so a shout stays a shout and a
+  murmur stays a murmur.
 - **Each line takes the actor's time.** Every take is re-timed to end where the
-  actor stops, so turns land where they did in the original instead of leaving
-  dead air. Each take's length is predicted before the first render, so the
-  translation is written to fill the time.
-- **Every line is checked.** Each rendered line is transcribed back; a garbled
-  one gets fresh takes, up to three rounds, and the best is kept.
-- **It reads the picture.** Burned-in closed captions become the transcript
-  (and often name the speaker), and text on screen can be translated as placed
-  subtitles.
+  actor stops, so turns land where they did in the original, without dead air.
+  Each line's length is predicted before rendering, so the translation is
+  written to fill the time.
+- **Every line is checked.** Each rendered line is transcribed back. A garbled
+  one gets fresh takes, up to three rounds, and the best take is kept.
+- **It reads the picture.** Burned-in captions become the transcript (and often
+  name the speaker), and text on screen, like title cards and signs, can be
+  translated as subtitles placed beside it.
+- **The rest stays original.** Between lines you hear the original soundtrack,
+  so songs, laughs and names stay the actor's own.
 - **Chosen by ear.** The defaults were picked by listening to the alternatives
-  side by side against the original; what was measured is in
-  [docs/research.md](docs/research.md).
+  side by side. What was measured is in [docs/research.md](docs/research.md).
 
-## How you use it
+## What you need
 
-You don't run the scripts yourself. Open this folder in an AI coding agent
-(Claude Code, Codex, Cursor or another harness that reads
-[AGENTS.md](AGENTS.md)) and ask it to dub a video. The agent directs the dub,
-and `AGENTS.md` tells it how:
+- **A Windows PC with an NVIDIA GPU** with at least 6 GB of memory. A 16 GB
+  card runs everything at once. (Linux should be a short port; see
+  [below](#other-languages-and-hardware).)
+- **Disk space:** about 40 GB for VoiceStudio, the models and the tools'
+  environments, plus room to work: a movie in both voices used about
+  85 GB until it was cleaned up.
+- **An AI coding agent** that reads [AGENTS.md](AGENTS.md): Claude Code,
+  Codex, Cursor or similar.
+- **[VoiceStudio](https://github.com/debpalash/VoiceStudio)**, the open-source
+  voice engine Dub Anything drives. The setup guide installs it.
 
-- **The scripts** do the heavy lifting: separate voices from music, transcribe,
-  clone, mix, and check every line.
-- **The agent** makes the calls: who says what, what Whisper misheard, a natural
-  translation timed to the actor's lips, what stays in the original, which QA
-  flags are real. It tells you which lines are guesses.
-- **You** listen. You judge the acting, the voices and the mix, and decide what
-  may be cloned or shared.
+## Getting started
 
-In practice:
+1. **Set up once** with [docs/setup.md](docs/setup.md): VoiceStudio, its
+   models, ffmpeg and uv.
+2. **Open this folder in your agent** and ask, for example:
 
-1. Set up once: [docs/setup.md](docs/setup.md).
-2. Ask, for example: *"Dub D:\movies\my-show.mkv."* (or *"Dub it into
-   Japanese"* for an English video).
-3. Answer one question: which voice, or both (below). Into Japanese there is
-   only the actor's voice.
-4. Wait. The agent tells you if something needs you, and at the end gives you
-   a list of moments to listen to. Say what to change.
-5. Watch the result: your file itself, renamed `my-show (dubbed).mkv`. The
-   dub plays by default (the actor's voice when you chose both), the original
-   audio is the last track, and subtitles in both languages are included.
+   > Dub D:\movies\my-show.mkv into English.
 
-## The one choice: the voice
+3. **Pick a voice** when it asks ([below](#choosing-a-voice)). Into Japanese
+   or Spanish there's nothing to pick.
+4. **Let it work.** The machines separate, transcribe, render and check while
+   the agent directs each part as soon as it's drafted. It tells you if
+   something needs you.
+5. **Listen.** At the end you get the dubbed file and a short list of moments
+   to check, with their times. Tell the agent what to change, and it
+   re-renders just those parts.
+
+The agent can't hear, so you're the ears: you judge the acting, the voices and
+the mix, and you decide what may be cloned or shared.
+
+## Choosing a voice
 
 | | **Actor's voice** (default) | **American** |
 |---|---|---|
-| Sounds like | The actor speaking English, with their own accent | Native American English, converted towards each actor's voice |
+| Sounds like | The actor speaking English, with their own accent | Native American English, converted toward each actor's voice |
 | Best for | Live action | Anime and animation |
-| Trade-off | Accented English | Less like the actors on live action, and a little less of the acting; about 4× slower to render |
+| Trade-offs | Accented English | Less like the actors in live action, a little less of the acting, and a few times slower to render |
 
-Not sure? Ask for both: each gets its own audio track, and you switch between
-them in the player. Everything else (separation, timing, voice processing) has
-defaults chosen by ear.
+Not sure? Ask for both. Each gets its own audio track, and you switch between
+them in your player (the actor's voice plays by default). The American voice
+has so far been used on Japanese sources.
 
-Dubbing English into Japanese, the actor's voice is the only one: each actor
-speaks Japanese with their own (English) accent. There is no native-Japanese
-counterpart of the American voice yet.
+Into Japanese or Spanish, the actor's voice is the only one: each actor speaks
+the new language with their own accent.
+
+## How long it takes
+
+A short clip takes minutes. A movie in both voices takes about seven
+hours of machine time on a laptop RTX 4090, nearly all of it on the GPU; the
+actor's voice alone takes about half that. The agent directs while the renders
+run, and on a long video it can split the directing across helper agents.
+
+## Privacy
+
+Your video and audio stay on your machine: the models run locally, and the
+internet is only used to download them. Your agent does read the transcripts
+and the video frames it looks at, so those go wherever your agent's model runs.
+
+## Responsible use
+
+Only dub media you have the rights to, and only clone voices with the consent
+the use requires. A dub made from someone else's film or voice is for private
+use unless you have permission.
 
 ## How it works
 
+1. **Split** the video into ~3-minute parts at pauses in speech.
+2. **Separate** the voices from the music and effects (Mel-Band Roformer).
+3. **Transcribe** each part with Whisper large-v3, with two other recognisers
+   as a second opinion, and burned-in captions where there are any.
+4. **Cast** each line by matching voices across the whole show, checked
+   against video frames.
+5. **Direct** (the agent): correct the transcript, translate, and time every
+   line to the actor.
+6. **Voice** each line. The actor's voice: OmniVoice clones the actor, prompted
+   with their own delivery of that line. American: IndexTTS speaks native
+   English following the actor's delivery, and Chatterbox converts it to the
+   actor's voice.
+7. **Fit, mix and check.** Each take is re-timed to end where the actor stops,
+   mixed over the original background, and transcribed back to catch garbled
+   words.
+8. **Deliver** into your video file. Nothing is re-encoded, and every stream is
+   checked against the original before the file is replaced.
+
+<details>
+<summary>The whole pipeline in one diagram</summary>
+
 ![How a dub gets made](docs/process.png)
 
-1. **Split** long videos into ~3-minute parts at pauses in speech.
-2. **Separate** the voices from music and effects (Mel-Band Roformer).
-3. **Transcribe** the original (Whisper large-v3, with two other recognisers as a
-   second opinion). If the picture has burned-in closed captions, they are read
-   too: the exact words, often with the speaker's name.
-4. **Direct** (the agent): cast each line, correct the transcript, translate,
-   and time every line to the actor → `work/<part>/script.json`.
-5. **Voice** each line. With the actor's voice, OmniVoice clones the actor
-   (in English or Japanese), prompted with their own delivery of that line. With American, IndexTTS
-   speaks native English following the actor's delivery, and Chatterbox then
-   converts it to the actor's voice.
-6. **Fit, mix and check.** Each take is re-timed to end where the actor stops
-   and mixed over the original background; every line is transcribed back to
-   catch garbled words.
-
-Outside the dubbed lines you hear the original soundtrack, so songs, laughs and
-names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
+The diagram is [docs/process.jg](docs/process.jg), a
 [Jumpgate](https://github.com/swax/jumpgate) file. It is rendered with
 `npm run render -- <path>/docs/process.jg --width 1800 --height 2700` from
 Jumpgate's `packages/jumpgate`.
 
-## Other languages and hardware
+</details>
 
-Six language pairs are built and tested, Japanese → English, Spanish →
-English, Korean → English, Chinese (Mandarin) → English, English → Japanese and
-English → Spanish, on Windows
-with an NVIDIA GPU. The voice engine isn't the limit: VoiceStudio clones voices in hundreds of
-languages and runs on macOS and Linux too. Each part records its pair when it's
-prepared (`dub.py prep --source en --target ja`), and the scripts read it from
-there. What they know about a language is in one module,
-`scripts/languages/<code>.py`, and the pairs they know are `PAIRS` beside it;
-[docs/languages/](docs/languages/README.md) says how to add one. A new language
-needs:
+## Documentation
 
-- **Hearing it.** Whisper transcribes any language, and each line keeps its
-  transcript in a field named for it (`ja`, `en`, `es`, `ko`, `zh`). The module lists the
-  stock phrases Whisper hallucinates in the language and names two recognisers
-  for the second opinions (`second.py`); without them a source goes without
-  that check. `draft.py` weighs Whisper's language detection against its
-  confidence, since it mistakes a language close to the target's sound (short
-  Spanish over music) for the target. The caption OCR (`subs.py`) reads
-  Chinese, Japanese, Korean and Latin letters (the module names PP-OCRv5's
-  recogniser for its script), Latin not always with its accents.
-- **Checking the dub.** QA transcribes each rendered line back and compares it
-  as the module says: word by word in English and Spanish (numbers spelled
-  out in each, accents aside in Spanish), by kana reading in Japanese. Another
-  language needs its own normalization, number words and negations. Take
-  lengths come from OmniVoice's own rule, with corrections measured on
-  Japanese → English takes; check them against the new pair's rendered takes. The American
-  voice is English by design.
-- **Measuring the pair.** Whether a line's own original helps as its
-  reference depends on the pair (it carried the English accent into Japanese
-  takes), so a new pair is rendered both ways before it goes into `PAIRS`.
-- **The directing notes.** [docs/directing.md](docs/directing.md) was written
-  from Japanese → English dubs, and most of it (casting, timing, QA) carries
-  over. What differs with each language as the source and as the target is in
-  its own notes beside the languages README.
-- **Hardware.** The models run on CUDA and mostly fall back to the CPU without
-  it, much slower. Video is encoded with NVENC when it's there, else x264. The
-  Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)
-  already check the platform, so Linux with an NVIDIA GPU should be the
-  shortest port.
+- [docs/setup.md](docs/setup.md): installing everything, step by step
+- [AGENTS.md](AGENTS.md): the agent's instructions, and a dub from start to
+  finish
+- [docs/directing.md](docs/directing.md): the directing workflow, every tool,
+  and the gotchas
+- [docs/languages/](docs/languages/README.md): notes for each language, and
+  how to add one
+- [docs/research.md](docs/research.md): what was measured and tried
+- [docs/roadmap.md](docs/roadmap.md): what's next
 
-## Doing it by hand
+## Running it without an agent
 
-With VoiceStudio's Python (`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`),
-`scripts/dub_anything.py` runs the machine work of a whole dub; you write the scripts:
+The scripts are plain Python, so you can drive a dub yourself and write the
+directed scripts by hand. With VoiceStudio's Python
+(`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`),
+`scripts/dub_anything.py` runs the machine work of a whole dub:
 
 ```powershell
 & $py scripts\dub_anything.py new D:\movies\my-show.mkv --voices both   # a job named my_show
-& $py scripts\dub_anything.py run my_show --watch     # split, prep, draft; render each part you mark ready; deliver
+& $py scripts\dub_anything.py run my_show --watch   # prep, then render each part marked ready
 # write work\my_show-NN\script.json for each part, then:
 & $py scripts\dub_anything.py ready my_show 01
 & $py scripts\dub_anything.py status my_show
 ```
 
-Or step by step, with the backend running (`scripts/backend.py start`):
+<details>
+<summary>Or one step at a time</summary>
+
+With the backend running (`scripts/backend.py start`):
 
 ```powershell
 & $py scripts\split.py videos\episode.mkv                      # long video -> parts at pauses
@@ -173,31 +188,79 @@ Or step by step, with the backend running (`scripts/backend.py start`):
 & $py scripts\deliver.py D:\movies\episode.mkv actor=videos\episode-parts\dubbed\episode.dubbed.mp4
 ```
 
-Some steps need their own environments (`separate.py`, `subs.py`, `second.py`;
-see [AGENTS.md](AGENTS.md)). The workflow, the script format, every tool and the
-gotchas are in [docs/directing.md](docs/directing.md). What was measured and
-tried is in [docs/research.md](docs/research.md), and what's next is in
-[docs/roadmap.md](docs/roadmap.md).
+Some steps need their own environments (`separate.py`, `subs.py`,
+`second.py`; see [AGENTS.md](AGENTS.md)).
 
-## Responsible use
+</details>
 
-Only dub media you have the rights to, and only clone voices with the consent
-the use requires. Output made from someone else's film or voice is for private
-use unless you have permission. `videos/` and `work/` are git-ignored, so source
-media, transcripts and voice references stay out of commits: don't force-add
-them, and use invented examples in docs and commit messages.
+The workflow, the script format and every tool are in
+[docs/directing.md](docs/directing.md).
+
+## Other languages and hardware
+
+Ask for a language pair that isn't here yet, and your agent adds it as part of
+the job. The voices aren't the limit: VoiceStudio clones voices in hundreds of
+languages. What's new for each language is what the scripts know about it: the
+phrases Whisper hallucinates in it, the recognisers that give second opinions,
+and how QA compares a take with its line. That lives in one module,
+`scripts/languages/<code>.py`. The agent writes it, then checks the pair on a
+short test dub before adding it, as
+[docs/languages/](docs/languages/README.md#adding-a-language) describes.
+
+**Please send new languages back.** If your agent added a language or a pair,
+open a pull request with its module, its notes (`docs/languages/<code>.md`)
+and the pair's entry in `PAIRS`, so the next person gets it ready-made.
+
+The models run on CUDA and mostly fall back to the CPU without it, much
+slower. Video is encoded with NVENC when it's there, else x264. The
+Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)
+already check the platform, so Linux with an NVIDIA GPU should be the shortest
+port.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome, new languages most of all.
+[docs/directing.md](docs/directing.md) explains how the pieces fit. Python is
+formatted and linted with ruff (`uvx ruff format`, `uvx ruff check`), and
+[docs/setup.md](docs/setup.md) shows how to turn on the pre-commit check.
+
+`videos/` and `work/` are git-ignored so that source media, transcripts and
+voice references stay out of the repository. Don't force-add them, and use
+invented examples in docs and commit messages.
+
+## Built on
+
+Dub Anything is direction and glue around excellent open-source work:
+
+- [VoiceStudio](https://github.com/debpalash/VoiceStudio): the voice backend
+  (dubbing jobs, cloning, mixing)
+- [OmniVoice](https://github.com/k2-fsa/OmniVoice): the actor's-voice clones
+- [IndexTTS](https://github.com/index-tts/index-tts): native English for the
+  American voice
+- [Chatterbox](https://github.com/resemble-ai/chatterbox): voice conversion to
+  each actor's timbre
+- [Whisper](https://github.com/openai/whisper), through
+  [faster-whisper](https://github.com/SYSTRAN/faster-whisper): transcription
+- [pyannote](https://github.com/pyannote/pyannote-audio) and
+  [WeSpeaker](https://github.com/wenet-e2e/wespeaker): who speaks when, and
+  voice matching
+- [Silero VAD](https://github.com/snakers4/silero-vad): where speech really
+  starts and stops
+- Mel-Band Roformer, through
+  [python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator):
+  voices apart from the music
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): the second-opinion
+  recognisers
+- [RapidOCR](https://github.com/RapidAI/RapidOCR) with
+  [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)'s PP-OCRv5: reading
+  captions and signs
+- [FFmpeg](https://ffmpeg.org): cutting, mixing and muxing
 
 ## License
 
-Dub Anything is MIT-licensed ([LICENSE](LICENSE)). It talks to
-[VoiceStudio](https://github.com/debpalash/VoiceStudio) over HTTP and does not
-include its code. VoiceStudio is AGPL-3.0, and so is
-`patches/voicestudio-local-fixes.patch`, a change to VoiceStudio's source. Models have
-their own licenses:
-- pyannote is gated on Hugging Face;
-- the Sortformer weights are CC-BY-NC;
-- Chatterbox (the American voice's converter) is MIT, and marks its output with
-  an inaudible watermark.
-
-Check each model before commercial use. Nothing is uploaded anywhere; Hugging
-Face is only used to download models.
+Dub Anything is MIT-licensed ([LICENSE](LICENSE)). It talks to VoiceStudio over
+HTTP and doesn't include its code. VoiceStudio is AGPL-3.0, and so is
+`patches/voicestudio-local-fixes.patch`, a change to VoiceStudio's source. The
+models have their own licenses: pyannote is gated on Hugging Face, the
+Sortformer weights are CC-BY-NC, and Chatterbox is MIT. Check each one before
+any commercial use.

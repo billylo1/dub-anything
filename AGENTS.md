@@ -76,7 +76,11 @@ work; you direct.
    ko`), Chinese → English (`--source zh`, checked on Mandarin), English → Japanese
    (`--source en --target ja`) or English → Spanish
    (`--source en --target es`), the pairs the scripts know (`PAIRS` in
-   `scripts/languages/`). Into English, ask one
+   `scripts/languages/`). Add a pair that isn't there first, as
+   [docs/languages/README.md](docs/languages/README.md) says under "Adding a
+   language": the module, a short test dub measured with and without per-line
+   references, the pair's entry. Tell the user it's new and what you checked,
+   and suggest they send it back to the project as a pull request. Into English, ask one
    question: the actor's voice (English with the actor's own accent),
    American, or both. Recommend by genre: the actor's voice for live action,
    American for anime (see docs/directing.md, "Voice"). With both, the actor's
