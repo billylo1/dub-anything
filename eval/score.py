@@ -33,11 +33,11 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-import draft  # noqa: E402
-import register as R  # noqa: E402
-from core import WORK, langs, line_id, load_json, speech_length, take_wav  # noqa: E402
-from gpulock import hold_gpu  # noqa: E402
-from faster_whisper.audio import decode_audio  # noqa: E402
+import draft
+import register as R
+from core import WORK, langs, line_id, load_json, speech_length, take_wav
+from gpulock import hold_gpu
+from faster_whisper.audio import decode_audio
 
 SR = 16000
 MAIN_PART = re.compile(r"^[^-]+-\d+$")  # <show>-NN; A/B copies carry a further suffix

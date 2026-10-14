@@ -21,7 +21,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from core import FILL_SPEED, FILL_TOL, WORK, actor_ends, langs, line_id, load_json, speech_length, take_wav  # noqa: E402
+from core import FILL_SPEED, FILL_TOL, WORK, actor_ends, langs, line_id, load_json, speech_length, take_wav
 
 
 def main():
