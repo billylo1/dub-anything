@@ -86,22 +86,8 @@ def engine(lang):
 
 
 def size(video):
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "csv=p=0",
-            str(video),
-        ],
-        capture_output=True,
-        text=True,
-    )
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=width,height", "-of", "csv=p=0", str(video)], capture_output=True, text=True)  # fmt: skip
     return tuple(int(v) for v in out.stdout.strip().split(",")[:2])
 
 

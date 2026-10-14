@@ -35,21 +35,9 @@ TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
 
 
 def probe(path):
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration:stream=index,codec_type,codec_name,width,height:stream_tags=language,title,handler_name",
-            "-of",
-            "json",
-            str(path),
-        ],
-        capture_output=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                          "format=duration:stream=index,codec_type,codec_name,width,height:stream_tags=language,title,handler_name",
+                          "-of", "json", str(path)], capture_output=True, encoding="utf-8", check=True).stdout  # fmt: skip
     return json.loads(out)
 
 

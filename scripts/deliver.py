@@ -51,22 +51,10 @@ def ours(name):
 
 
 def probe(path):
-    out = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name"
-            ":stream_disposition=attached_pic",
-            "-of",
-            "json",
-            str(path),
-        ],
-        capture_output=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                          "format=duration:stream=index,codec_type,codec_name:stream_tags=language,title,handler_name"
+                          ":stream_disposition=attached_pic", "-of", "json", str(path)],
+                         capture_output=True, encoding="utf-8", check=True).stdout  # fmt: skip
     return json.loads(out)
 
 

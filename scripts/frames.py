@@ -35,24 +35,8 @@ def main():
             f":fontcolor=yellow:box=1:boxcolor=black"
         )
         f = tmp / f"{k:03d}.jpg"
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-v",
-                "error",
-                "-y",
-                "-ss",
-                t,
-                "-i",
-                args.video,
-                "-frames:v",
-                "1",
-                "-vf",
-                f"scale={args.width}:-2,{draw}",
-                str(f),
-            ],
-            stderr=subprocess.DEVNULL,
-        )
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", t, "-i", args.video, "-frames:v", "1",
+                        "-vf", f"scale={args.width}:-2,{draw}", str(f)], stderr=subprocess.DEVNULL)  # fmt: skip
         if f.exists():
             frames.append(f)
         else:  # ffmpeg writes nothing for a time past the end of the video
@@ -68,40 +52,13 @@ def main():
     )
     while len(frames) % args.cols:  # blank tiles, so no time appears twice
         f = tmp / f"pad{len(frames):03d}.jpg"
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-v",
-                "error",
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=black:s={args.width}x{height}",
-                "-frames:v",
-                "1",
-                "-pix_fmt",
-                "yuvj420p",
-                str(f),
-            ],
-            check=True,
-        )
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=black:s={args.width}x{height}",
+                        "-frames:v", "1", "-pix_fmt", "yuvj420p", str(f)], check=True)  # fmt: skip
         frames.append(f)
     layout = "|".join(f"{(i % args.cols) * args.width}_{(i // args.cols) * height}" for i in range(len(frames)))
     inputs = [a for f in frames for a in ("-i", str(f))]
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            f"xstack=inputs={len(frames)}:layout={layout}",
-            args.out,
-        ],
-        check=True,
-    )
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex",
+                    f"xstack=inputs={len(frames)}:layout={layout}", args.out], check=True)  # fmt: skip
     print(args.out)
 
 

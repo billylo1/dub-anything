@@ -38,47 +38,15 @@ p.add_argument("--out")
 p.add_argument("--encoder", default="auto")
 args = p.parse_args()
 if args.encoder == "auto":
-    nvenc = subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            "color=size=256x256:duration=0.1",
-            "-c:v",
-            "h264_nvenc",
-            "-f",
-            "null",
-            "-",
-        ],
-        capture_output=True,
-    )
+    nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                            "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
     args.encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
 quality = ["-preset", "p5", "-cq", "20"] if "nvenc" in args.encoder else ["-preset", "veryfast", "-crf", "18"]
 video = pathlib.Path(args.video).resolve()
 out = pathlib.Path(args.out) if args.out else video.parent / f"{video.stem}-parts"
 # Snap cuts to whole video frames of the source (29.97, 30, 25 fps...), so parts join without drift.
-rate = (
-    subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=r_frame_rate",
-            "-of",
-            "csv=p=0",
-            str(video),
-        ],
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    or "30000/1001"
-)
+rate = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate",
+                       "-of", "csv=p=0", str(video)], capture_output=True, text=True).stdout.strip() or "30000/1001"  # fmt: skip
 num, den = (int(x) for x in rate.split("/"))
 FRAME = den / num
 out.mkdir(parents=True, exist_ok=True)
@@ -121,35 +89,8 @@ for i, (a, b) in enumerate(zip(cuts, cuts[1:]), 1):
     name = f"{video.stem}-{i:02d}"
     dst = out / f"{name}.mp4"
     print(f"{name}: {a:7.2f}-{b:7.2f}s")
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-y",
-            "-ss",
-            f"{a:.3f}",
-            "-i",
-            str(video),
-            "-t",
-            f"{b - a:.3f}",
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a:0",
-            "-c:v",
-            args.encoder,
-            *quality,
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            str(dst),
-        ],
-        check=True,
-    )
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{a:.3f}", "-i", str(video), "-t", f"{b - a:.3f}",
+                    "-map", "0:v:0", "-map", "0:a:0", "-c:v", args.encoder, *quality, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(dst)], check=True)  # fmt: skip
     parts.append({"name": name, "file": str(dst), "start": a, "end": b})
 (out / "parts.json").write_text(json.dumps({"video": str(video), "parts": parts}, indent=2), encoding="utf-8")
 print(f"wrote {len(parts)} parts to {out}")

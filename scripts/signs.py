@@ -266,25 +266,8 @@ def sheet(video, cand, path, w, h):
     import cv2
 
     t = (cand["seen"][0] + cand["seen"][1]) / 2
-    raw = subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-ss",
-            f"{t:.3f}",
-            "-i",
-            str(video),
-            "-frames:v",
-            "1",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "bgr24",
-            "-",
-        ],
-        capture_output=True,
-    ).stdout
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1",
+                          "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], capture_output=True).stdout  # fmt: skip
     if len(raw) < w * h * 3:
         return
     img = np.frombuffer(raw[: w * h * 3], np.uint8).reshape(h, w, 3).copy()
@@ -325,29 +308,9 @@ def preview(work, video, w, h, which=None):
         t = (s["start"] + s["end"]) / 2
         # -copyts keeps the frame's own time, so the subtitles line up after the seek;
         # the filter takes a bare file name, run from its folder.
-        raw = subprocess.run(
-            [
-                "ffmpeg",
-                "-v",
-                "error",
-                "-ss",
-                f"{t:.3f}",
-                "-copyts",
-                "-i",
-                str(video),
-                "-vf",
-                "ass=preview.ass,scale=960:-2",
-                "-frames:v",
-                "1",
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "bgr24",
-                "-",
-            ],
-            capture_output=True,
-            cwd=out,
-        ).stdout
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-copyts", "-i", str(video),
+                              "-vf", "ass=preview.ass,scale=960:-2", "-frames:v", "1", "-f", "rawvideo",
+                              "-pix_fmt", "bgr24", "-"], capture_output=True, cwd=out).stdout  # fmt: skip
         th = len(raw) // (960 * 3)
         if not th:
             continue
