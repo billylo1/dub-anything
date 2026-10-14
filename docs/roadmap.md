@@ -2,9 +2,9 @@
 
 ## Where it stands
 
-dubrama dubs Japanese and Spanish video into English end to end, and English
-video into Japanese or Spanish (the actor's voice only; see each language's
-notes in [languages/](languages/README.md)):
+dubrama dubs Japanese, Spanish and Korean video into English end to end, and
+English video into Japanese or Spanish (the actor's voice only; see each
+language's notes in [languages/](languages/README.md)):
 
 - **Transcript and cast.** Parts are separated with Mel-Band Roformer and
   transcribed by Whisper, with two other recognisers as a second opinion and
@@ -69,9 +69,9 @@ How each piece was chosen, and the measurements behind it, are in
 ## Later
 
 - **Lip sync** (LatentSync / MuseTalk); feasible on a decent NVIDIA GPU.
-- **Other language pairs and hardware.** What a pair beyond Japanese ↔ English
-  and Spanish ↔ English, or other hardware, needs is listed in the README,
-  "Other languages and hardware".
+- **Other language pairs and hardware.** What a pair beyond Japanese ↔ English,
+  Spanish ↔ English and Korean → English, or other hardware, needs is listed in
+  the README, "Other languages and hardware".
 - **A native Japanese or Spanish voice** for dubs into those languages, the
   counterpart of the American voice (research.md, open questions).
 - **Upstream to VoiceStudio:**

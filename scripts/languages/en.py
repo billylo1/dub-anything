@@ -15,6 +15,8 @@ HALLUCINATIONS = ("thank you for watching", "thanks for watching", "please subsc
 THANKS = ("thank you", "thanks")
 SECOND_OPINIONS = {"parakeet": "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
                    "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"}
+# The reader of captions and signs: PP-OCRv5's Chinese recogniser, which reads Latin letters too.
+OCR = ("CH", "SERVER")
 
 # ---- spoken: the dub ----
 
@@ -22,6 +24,14 @@ SECOND_OPINIONS = {"parakeet": "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2
 # voice (IndexTTS speaks native English, and vc.py gives each take the actor's timbre).
 VOICES = ("actor", "american")
 JOIN = " "  # between Whisper's segments of a take
+
+
+def speakable(text):
+    """A line's text as the voice engine gets it. VoiceStudio spells numbers out in
+    English, but leaves one with a thousands comma ("150,000") as digits, which
+    the clone then reads in the language of its reference: with a Korean actor's
+    original, "150,000" came out in Korean. Without the comma it is spelled out."""
+    return re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
 
 ONES = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
         "sixteen seventeen eighteen nineteen").split()
@@ -64,6 +74,7 @@ def words(text, reading="plain"):
     (phone numbers: "zero three three zero ...")."""
     t = text.lower().replace("’", "'")
     t = re.sub(r"(\d+)\s*%", r"\1 percent", t)
+    t = re.sub(r"\bhalf (?:a )?percent\b", "0.5 percent", t)  # Whisper writes "half a percent" as "0.5%"
     t = re.sub(r"\bno\.\s*(?=\d)", "number ", t)  # "No.1" is "number one", not a negation
     t = re.sub(r"(?<=\d),(?=\d{3})", "", t)
     t = re.sub(r"(\d)\.(\d)", r"\1 point \2", t)

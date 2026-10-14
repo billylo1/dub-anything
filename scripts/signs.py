@@ -331,7 +331,7 @@ def main():
                                      str(video)], capture_output=True, text=True).stdout.strip())
     shot_cuts = cuts(video, args.t0, args.t1)
     dialogue = dialogue_of(work)
-    ocr, cuda = subs.engine()
+    ocr, cuda = subs.engine(pair(work)[0])
     print(f"reading text in {video.name} ({'GPU' if cuda else 'CPU'}, {args.fps:g} frames/s, "
           f"{len(shot_cuts)} cuts)", file=sys.stderr)
     import cv2

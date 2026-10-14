@@ -138,9 +138,10 @@ VoiceStudio's:
 - `separate.py`: audio-separator with the CUDA 12.8 PyTorch. Its Roformer model
   (about 900 MB) downloads on first use into `%OMNIVOICE_CACHE_DIR%\audio-separator`.
 - `second.py`: sherpa-onnx (its models, about 850 MB for Japanese speech,
-  1 GB for English and 900 MB for Spanish, download into the model cache on
-  first use).
-- `subs.py`: RapidOCR.
+  1 GB for English, 900 MB for Spanish and 320 MB for Korean, download into the
+  model cache on first use).
+- `subs.py`: RapidOCR (its Korean recogniser downloads on first use, for a
+  Korean source).
 - `vc.py`: Chatterbox, which `scripts/dub.py generate` starts itself for the
   `"american"` voice.
 - `languages/kana.py`: pykakasi, which `lineqa.py` starts itself to read takes in

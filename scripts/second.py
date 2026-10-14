@@ -11,14 +11,15 @@ source_lang; SECOND_OPINIONS in languages/<code>.py) over each line of
 work/<clip>/draft.json (or script.json with --script) on the separated vocals,
 and compares them with the line's original (`ja`, or the field of the source
 language) as the language's module says (units): Japanese as kana, so spelling
-choices don't count, English and Spanish word by word, accents aside. Japanese
-gets ReazonSpeech k2 v2 (trained on Japanese TV) and SenseVoice, English NVIDIA's
-Parakeet TDT 0.6B v2 and SenseVoice, Spanish Parakeet TDT 0.6B v3 and Canary
-180M Flash. A line is flagged when the two agree with each other more than
-either agrees with Whisper, and differ from it by 30% or more. Treat agreement
-as a review signal: re-listen with asr_words.py and decide from context. The
-models (~850 MB for Japanese, ~1 GB for English, ~900 MB for Spanish) download
-to VoiceStudio's model cache on first use.
+choices don't count, English and Spanish word by word, accents aside, Korean
+syllable by syllable, spacing aside. Japanese gets ReazonSpeech k2 v2 (trained
+on Japanese TV) and SenseVoice, English NVIDIA's Parakeet TDT 0.6B v2 and
+SenseVoice, Spanish Parakeet TDT 0.6B v3 and Canary 180M Flash, Korean k2's
+Korean Zipformer and SenseVoice. A line is flagged when the two agree with each
+other more than either agrees with Whisper, and differ from it by 30% or more.
+Treat agreement as a review signal: re-listen with asr_words.py and decide from
+context. The models (~850 MB for Japanese, ~1 GB for English, ~900 MB for
+Spanish, ~320 MB for Korean) download to VoiceStudio's model cache on first use.
 """
 import argparse
 import json
@@ -71,11 +72,13 @@ def recogniser(kind, repo, lang):
         return sherpa_onnx.OfflineRecognizer.from_sense_voice(
             model=part(sv, "model.int8.onnx"), tokens=part(sv, "tokens.txt"), num_threads=8, language=lang,
             use_itn=True)
-    if kind == "reazon":
-        rz = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=["*-epoch-99-avg-1.onnx", "tokens.txt"])
+    if kind in ("reazon", "zipformer"):
+        # k2 Zipformer transducers: ReazonSpeech's in full precision, the others int8.
+        name = "{}-epoch-99-avg-1" + (".onnx" if kind == "reazon" else ".int8.onnx")
+        zf = snapshot_download(repo, cache_dir=HF_CACHE, allow_patterns=[name.format("*"), "tokens.txt"])
         return sherpa_onnx.OfflineRecognizer.from_transducer(
-            encoder=part(rz, "encoder-epoch-99-avg-1.onnx"), decoder=part(rz, "decoder-epoch-99-avg-1.onnx"),
-            joiner=part(rz, "joiner-epoch-99-avg-1.onnx"), tokens=part(rz, "tokens.txt"), num_threads=8,
+            encoder=part(zf, name.format("encoder")), decoder=part(zf, name.format("decoder")),
+            joiner=part(zf, name.format("joiner")), tokens=part(zf, "tokens.txt"), num_threads=8,
             sample_rate=SR, feature_dim=80, decoding_method="modified_beam_search", max_active_paths=4)
     raise SystemExit(f"second.py knows no {kind!r} recogniser (SECOND_OPINIONS in languages/{lang}.py)")
 

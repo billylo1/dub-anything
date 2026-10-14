@@ -430,7 +430,8 @@ def cmd_generate(args):
         # Hand-directed lines: own timing, speaker and text per line.
         voices = load_json(WORK / "voices.json", {})
         for line in script["lines"]:
-            seg = {"start": line["start"], "end": line["end"], "text": line["text"],
+            # The take keeps its line's id (line_id), whatever text the engine gets.
+            seg = {"start": line["start"], "end": line["end"], "text": LANGUAGES[tgt].speakable(line["text"]),
                    "profile_id": ensure_voice(line["voice"]), "target_lang": tgt,
                    "effect_preset": line.get("effect", args.effect)}
             if check_instruct(line):

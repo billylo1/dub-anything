@@ -18,11 +18,20 @@ HALLUCINATIONS = ("subtítulos realizados por", "subtitulado por", "amara.org", 
 THANKS = ("gracias", "muchas gracias")
 SECOND_OPINIONS = {"parakeet": "csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
                    "canary": "csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8"}
+# The reader of captions and signs: PP-OCRv5's Chinese recogniser, which reads Latin
+# letters, not always with their accents.
+OCR = ("CH", "SERVER")
 
 # ---- spoken: the dub ----
 
 VOICES = ("actor",)
 JOIN = " "  # between Whisper's segments of a take
+
+
+def speakable(text):
+    """A line's text as the voice engine gets it: VoiceStudio spells numbers out in
+    Spanish but leaves one with a thousands point ("150.000") as digits (en.py)."""
+    return re.sub(r"(?<=\d)\.(?=\d{3}\b)", "", text)
 
 ABBREV = {"sr": "senor", "sra": "senora", "srta": "senorita", "dr": "doctor", "dra": "doctora",
           "ud": "usted", "uds": "ustedes", "okey": "ok", "okay": "ok", "vs": "versus"}

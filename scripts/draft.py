@@ -33,7 +33,9 @@ Usage: scripts/draft.py <name> [<name> ...] [--cast key,key,...] [--recast]   (a
    real speech, so it's re-transcribed one stretch of speech at a time, in
    the source or the target language, whichever Whisper is surer of. Shorter
    ones are flagged, and so is a recovered phrase that only says thanks
-   ("¡Gracias!" on crowd noise).
+   ("¡Gracias!" on crowd noise) or that is a piece of a stock phrase (each
+   uncovered stretch keeps only its own words, so one stock phrase over music
+   can come back as several pieces, none of them stock on its own).
 
 --recast keeps an existing draft.json's transcript and windows and only
 suggests the speakers again: for a new show, draft the first parts, build their
@@ -314,7 +316,8 @@ def draft(name, cast, model, embed_once):
         for p in transcribe(model, audio[int(lo * SR):int(hi * SR)], lo, language=src):
             words = [w for w in p["words"] if a - 0.2 <= (w[0] + w[1]) / 2 + EARLY <= b + 0.2]
             if words:
-                phrases.append({**snap(phrase(words), spans, duration), "recovered": True})
+                phrases.append({**snap(phrase(words), spans, duration), "recovered": True,
+                                **({"suspect": True} if hallucination(p["said"], src) else {})})
     phrases = settle(phrases)
     # A hallucination over a long stretch hides real speech (a whole phone call
     # in accented English became "ご視聴ありがとうございました"): redo it a
@@ -390,7 +393,7 @@ def suggest(name, work, audio, phrases, spans, cast, embed_once):
         elif p.get("maybe"):
             tag += (f" [{NAMES.get(p['maybe']['lang'], p['maybe']['lang'])}?: \"{p['maybe']['said']}\", "
                     f"but Whisper is surer of it in {NAMES.get(src, src)}; re-listen]")
-        if hallucination(p["said"], p.get("lang", src), p.get("recovered")):
+        if p.get("suspect") or hallucination(p["said"], p.get("lang", src), p.get("recovered")):
             p["suspect"] = True
             tag += " [likely Whisper hallucination]"
         if in_song(subs, p):

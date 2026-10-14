@@ -2,8 +2,9 @@
 
 Dub video into another language **in each actor's own voice**, keeping the
 original music and sound effects. Everything runs locally on your GPU. Built and
-tested for **Japanese → English**, **Spanish → English**, **English →
-Japanese** and **English → Spanish** on Windows with an NVIDIA GPU. Other language pairs and hardware need changes in a few known
+tested for **Japanese → English**, **Spanish → English**, **Korean →
+English**, **English → Japanese** and **English → Spanish** on Windows with an
+NVIDIA GPU. Other language pairs and hardware need changes in a few known
 places, a job you can hand your coding agent: see
 [Other languages and hardware](#other-languages-and-hardware).
 
@@ -104,9 +105,9 @@ names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 
 ## Other languages and hardware
 
-Four language pairs are built and tested, Japanese → English, Spanish →
-English, English → Japanese and English → Spanish, on Windows with an NVIDIA
-GPU. The voice engine isn't the limit: VoiceStudio clones voices in hundreds of
+Five language pairs are built and tested, Japanese → English, Spanish →
+English, Korean → English, English → Japanese and English → Spanish, on Windows
+with an NVIDIA GPU. The voice engine isn't the limit: VoiceStudio clones voices in hundreds of
 languages and runs on macOS and Linux too. Each part records its pair when it's
 prepared (`dub.py prep --source en --target ja`), and the scripts read it from
 there. What they know about a language is in one module,
@@ -115,19 +116,20 @@ there. What they know about a language is in one module,
 needs:
 
 - **Hearing it.** Whisper transcribes any language, and each line keeps its
-  transcript in a field named for it (`ja`, `en`, `es`). The module lists the
+  transcript in a field named for it (`ja`, `en`, `es`, `ko`). The module lists the
   stock phrases Whisper hallucinates in the language and names two recognisers
   for the second opinions (`second.py`); without them a source goes without
   that check. `draft.py` weighs Whisper's language detection against its
   confidence, since it mistakes a language close to the target's sound (short
   Spanish over music) for the target. The caption OCR (`subs.py`) reads
-  Chinese, Japanese and Latin letters, not always with their accents.
+  Chinese, Japanese, Korean and Latin letters (the module names PP-OCRv5's
+  recogniser for its script), Latin not always with its accents.
 - **Checking the dub.** QA transcribes each rendered line back and compares it
   as the module says: word by word in English and Spanish (numbers spelled
   out in each, accents aside in Spanish), by kana reading in Japanese. Another
   language needs its own normalization, number words and negations. Take
   lengths come from OmniVoice's own rule, with corrections measured on
-  Japanese → English takes; they held for the other three pairs. The American
+  Japanese → English takes; they held for the other four pairs. The American
   voice is English by design.
 - **Measuring the pair.** Whether a line's own original helps as its
   reference depends on the pair (it carried the English accent into Japanese

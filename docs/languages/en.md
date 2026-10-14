@@ -30,5 +30,8 @@ Japanese: the actor's voice and the American one, per-line references,
 compares takes word by word: numbers spelled out in any reading ("1979" as
 "nineteen seventy nine"), contractions expanded, "Dr." as "doctor", a take
 passing at 85% of words, and "negation differs" and "number differs" catching
-a flipped meaning in a close match. From Spanish, see [es.md](es.md), "As the
-source".
+a flipped meaning in a close match. Numbers can stay in digits: VoiceStudio
+spells them out, and `dub.py` drops a thousands comma ("150,000"), which would
+have kept them digits for the clone to read in its reference's language
+(`speakable` in `en.py`; [ko.md](ko.md)). From Spanish, see [es.md](es.md), "As
+the source"; from Korean, [ko.md](ko.md).

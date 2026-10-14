@@ -4,8 +4,9 @@ Usage: scripts/deliver.py <source video> <voice>=<assembled.mp4> [<voice>=<assem
                           [--source ja --target en]
 
 Each <assembled.mp4> is assemble.py's output for one voice ("actor" or
-"american"), with its subtitles beside it (.en.srt and .ja.srt for a dub
-between Japanese and English, .en.srt and .es.srt from Spanish), and its
+"american"), with its subtitles beside it, named for their languages (.en.srt
+and .ja.srt for a dub between Japanese and English, .en.srt and .ko.srt from
+Korean), and its
 .en.ass (.ja.ass, dubbing into Japanese) and .signs.ass when the parts
 translate text in the picture. The result keeps every stream of the source
 as it is (video, audio, its own subtitles) and adds, in this order:

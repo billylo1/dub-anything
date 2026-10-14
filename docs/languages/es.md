@@ -139,7 +139,9 @@ the target").
   with the same image. Note the choice in the line's `listen` so the user can
   judge it.
 - **Numbers.** VoiceStudio spells digits out in Spanish, so a year can stay in
-  digits in the script (and the subtitles), unlike in Japanese.
+  digits in the script (and the subtitles), unlike in Japanese. It leaves a
+  number with a thousands point ("150.000") as digits, so `dub.py` drops the
+  point (`speakable` in `es.py`).
 - **QA** compares Spanish word by word, as English: accents and `¿¡` aside
   (Whisper writes "esta" or "está"), numbers spelled out in Spanish
   (num2words), `Sr.`, `Sra.`, `Dr.` and `Ud.` expanded, and "negation differs"

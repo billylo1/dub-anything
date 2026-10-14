@@ -5,7 +5,9 @@ Usage: scripts/subs.py <clip> [--open] [--fps 4] [--from T0] [--to T1]   (after 
 Some recordings carry the broadcaster's closed captions burned into the picture:
 the exact dialogue, often the speaker's name in brackets, "≪" for a voice off
 screen, and a colour of its own for each main character. This reads them with
-PaddleOCR's PP-OCRv5 models (RapidOCR on onnxruntime, GPU when available):
+PaddleOCR's PP-OCRv5 models (RapidOCR on onnxruntime, GPU when available), the
+recogniser the part's source language names (OCR in languages/<code>.py: the
+Chinese one, which reads kana and Latin letters too, or the Korean one):
 
 1. Frames are sampled over the whole picture (4 a second). A frame that barely
    differs from the last one read reuses its reading.
@@ -43,6 +45,7 @@ import sys
 import numpy as np
 
 from gpulock import hold_gpu
+from languages import LANGUAGES, pair_of
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 W, H = 960, 540      # positions are kept in these units, whatever the video's size
@@ -53,7 +56,8 @@ NAME = re.compile(r"^[(（]?([^()（）\s]{1,8})[)）]\s*")
 NOTE = re.compile(r"^[♪♫]|^月(\s|[～~]|$)")
 
 
-def engine():
+def engine(lang):
+    """RapidOCR with the recogniser that reads `lang` (its module's OCR)."""
     import onnxruntime
     onnxruntime.set_default_logger_severity(3)
     try:
@@ -63,10 +67,10 @@ def engine():
     from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
     hold_gpu()
     cuda = "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+    rec, model = LANGUAGES[lang].OCR
     return RapidOCR(params={
         "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE,
-        # PP-OCRv5's Chinese recogniser also reads Japanese kana.
-        "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.SERVER, "Rec.lang_type": LangRec.CH,
+        "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType[model], "Rec.lang_type": LangRec[rec],
         "Global.use_cls": False, "Global.log_level": "critical",
         "EngineConfig.onnxruntime.use_cuda": cuda}), cuda
 
@@ -331,14 +335,15 @@ def main():
     args.fps = args.fps or (2 if args.open else 4)
     sys.stdout.reconfigure(encoding="utf-8")
     work = ROOT / "work" / args.clip
-    video = json.loads((work / "segments.json").read_text(encoding="utf-8"))["video"]
+    seg = json.loads((work / "segments.json").read_text(encoding="utf-8"))
+    video = seg["video"]
     video = pathlib.Path(video) if pathlib.Path(video).is_absolute() else ROOT / video
     w, h = size(video)
     # Open subtitles sit in the bottom of the picture: reading only that band is
     # faster, and keeps signs and other text in the scene out.
     top = int(h * 0.68) // 2 * 2 if args.open else 0
     test = subtitle_text if args.open else caption_box
-    ocr, cuda = engine()
+    ocr, cuda = engine(pair_of(seg)[0])
     print(f"reading {'subtitles' if args.open else 'captions'} in {video.name} ({'GPU' if cuda else 'CPU'}, "
           f"{args.fps:g} frames/s)", file=sys.stderr)
     readings, last, rows, n = [], None, [], 0

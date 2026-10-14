@@ -18,7 +18,7 @@ import unicodedata
 import numpy as np
 import soundfile as sf
 
-from languages import PAIR, PAIRS, pair_of
+from languages import LANGUAGES, PAIR, PAIRS, pair_of
 
 HERE = pathlib.Path(__file__).resolve().parent     # the scripts
 ROOT = HERE.parent                                  # the repo: work/, videos/, vendor/
@@ -414,7 +414,7 @@ def take_length(ref_audio, ref_text, text, speed=1.0, lang="en"):
     estimator, add_punctuation, _, normalize = _omnivoice()
     ref = pathlib.Path(ref_audio)
     frames = _ref_frames(str(ref), ref.stat().st_mtime)
-    text, ref_text = normalize(text, lang), add_punctuation(ref_text)
+    text, ref_text = normalize(LANGUAGES[lang].speakable(text), lang), add_punctuation(ref_text)
     plain = estimator.estimate_duration(text, ref_text, frames, low_threshold=None)
     stretched = estimator.estimate_duration(text, ref_text, frames)
     return at_speed((stretched - STRETCH_USED * (stretched - plain)) / OMNIVOICE_FPS, speed)

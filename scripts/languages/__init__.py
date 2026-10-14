@@ -1,5 +1,5 @@
 """What the scripts know about each language they dub from or into: one module per
-language, named for its ISO 639-1 code (en.py, es.py, ja.py), and the pairs that
+language, named for its ISO 639-1 code (en.py, es.py, ja.py, ko.py), and the pairs that
 have been dubbed and checked end to end (PAIRS).
 
   LANGUAGES["es"].compare(want, got)   a language's module, by code
@@ -18,7 +18,8 @@ import pathlib
 REQUIRED = (
     "NAME", "ISO3", "NATIVE",                                # its names
     "HALLUCINATIONS", "THANKS", "SECOND_OPINIONS", "units",  # heard: draft.py, second.py
-    "VOICES", "JOIN", "compare",                             # spoken by the dub: dub.py, lineqa.py
+    "OCR",                                                   # read in the picture: subs.py, signs.py
+    "VOICES", "JOIN", "compare", "speakable",                # spoken by the dub: dub.py, lineqa.py
     "TITLES", "FONT", "subtitle",                            # written: track names, subtitles
 )
 
@@ -51,6 +52,9 @@ PAIRS = {
     # Finding 18: the takes followed the actors' pitch far more closely, and their
     # Spanish didn't change (P(es) 0.60 against 0.61).
     ("en", "es"): {"line_ref": True},
+    # Finding 19: the takes followed the actors' delivery far more closely (arousal 0.40
+    # against 0.01), and their English didn't change (P(en) 0.58 against 0.59).
+    ("ko", "en"): {"line_ref": True},
 }
 for _pair in PAIRS:
     if not all(code in LANGUAGES for code in _pair):
@@ -58,7 +62,7 @@ for _pair in PAIRS:
 
 # Languages a clip may also speak, left in the original and captioned (draft.py tags
 # them), that have no module: their English name and ISO 639-2 code.
-OTHERS = {"zh": ("Chinese", "zho"), "ko": ("Korean", "kor"), "fr": ("French", "fra"), "de": ("German", "deu"),
+OTHERS = {"zh": ("Chinese", "zho"), "fr": ("French", "fra"), "de": ("German", "deu"),
           "it": ("Italian", "ita"), "pt": ("Portuguese", "por"), "ru": ("Russian", "rus"),
           "fi": ("Finnish", "fin"), "sv": ("Swedish", "swe")}
 NAMES = {**{code: name for code, (name, _) in OTHERS.items()}, **{code: m.NAME for code, m in LANGUAGES.items()}}

@@ -15,6 +15,9 @@ HALLUCINATIONS = ("ご視聴ありがとうございました", "チャンネル
 THANKS = ()
 SECOND_OPINIONS = {"reazon": "reazon-research/reazonspeech-k2-v2",  # trained on Japanese TV
                    "sensevoice": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"}
+# The reader of captions and signs (subs.py, signs.py): PP-OCRv5's Chinese recogniser
+# (RapidOCR's LangRec and ModelType), which reads kana too.
+OCR = ("CH", "SERVER")
 UNIT_PUNCT = "、。,.!?！？…・「」『』()（）ー〜~-—:：;；\"' 　"
 
 
@@ -28,6 +31,12 @@ def units(text):
 
 VOICES = ("actor",)
 JOIN = ""  # between Whisper's segments of a take
+
+
+def speakable(text):
+    """A line's text as the voice engine gets it: as written. VoiceStudio leaves
+    digits as digits in Japanese, so the script spells numbers in kana (ja.md)."""
+    return text
 
 PUNCT = re.compile(r"[\s、。,.!?！？…・「」『』()（）ー〜~\-—:：;；\"'’“”]")
 NEGATION = re.compile(r"ない|なかっ|ません")

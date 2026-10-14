@@ -291,6 +291,25 @@ originals per part.
     with each take's reference and speed, a median error of +0.06 s, 71%
     within 0.2 s and all within 0.4 s (without them +0.14 s, 45% and 84%).
     One sketch is little to go on; it awaits a listener.
+19. **From Korean, the per-line reference helps too.** The first 12 minutes
+    of a live-action drama (four parts, 107 lines, five clones: narration, a
+    formal hearing, quick banter, a meeting) were rendered twice from the same scripts, with per-line references and
+    without. With them the takes followed the actors' arousal, pitch and
+    effort far more closely (rank correlation 0.40, 0.47 and 0.43 against
+    0.01, -0.01 and 0.20), a wider gap than from Spanish (finding 17), most
+    for one character (arousal 0.80 against 0.17). They matched
+    the actors' voices a little better (WeSpeaker 0.54 against 0.52), and
+    Whisper's confidence that the takes were English didn't move (0.58
+    against 0.59): the Korean original carried no heavier accent into the
+    English. Estimated quality (SQUIM PESQ 2.73 against 2.77, SDR 17.0 against
+    17.2 dB) and timing (mean distance from the actor's end 0.13 against
+    0.12 s; eight takes more than 0.25 s off against ten) were level, and 103
+    of the 107 lines kept their own reference. The first QA check
+    flagged 6 lines against 4, setting aside four flags that came from
+    problems fixed before the second variant rendered. So Korean → English
+    keeps them on. OmniVoice's length rule held: with each take's reference
+    and speed, a median error of +0.00 s, 70% within 0.2 s and 93% within
+    0.4 s (without them -0.01 s, 75% and 94%). It awaits a listener.
 
 ## What the pipeline does now
 
@@ -310,7 +329,8 @@ conversion garbled it. A part dubbed from English into Japanese renders
 without per-line references (finding 16), and `lineqa.py` compares its takes by
 their reading in kana. One dubbed from Spanish into English keeps them
 (finding 17), and so does one dubbed from English into Spanish (finding 18),
-whose takes `lineqa.py` compares word by word without accents.
+whose takes `lineqa.py` compares word by word without accents, and one dubbed
+from Korean into English (finding 19).
 
 ## Open questions
 
