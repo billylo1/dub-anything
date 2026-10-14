@@ -102,7 +102,8 @@ counterpart of the American voice yet.
 Outside the dubbed lines you hear the original soundtrack, so songs, laughs and
 names stay the actor's own. The diagram is [docs/process.jg](docs/process.jg), a
 [Jumpgate](https://github.com/swax/jumpgate) file. It is rendered with
-`npm run render -- <path>/docs/process.jg` from Jumpgate's `packages/jumpgate`.
+`npm run render -- <path>/docs/process.jg --width 1800 --height 2700` from
+Jumpgate's `packages/jumpgate`.
 
 ## Other languages and hardware
 

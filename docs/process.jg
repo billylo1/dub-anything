@@ -5,7 +5,7 @@
    "id": "title",
    "bounds": {
     "x": 0,
-    "y": -210,
+    "y": -250,
     "width": 1000,
     "height": 50
    },
@@ -17,11 +17,11 @@
    "id": "subtitle",
    "bounds": {
     "x": 0,
-    "y": -150,
+    "y": -190,
     "width": 1000,
-    "height": 80
+    "height": 110
    },
-   "label": "Video dubbing in each speaker's voice, with the original music and effects.\nMachines separate, transcribe, clone and mix. The director reviews the transcript,\ncasting, translation and timing. Current workflow: Japanese to English.",
+   "label": "Video dubbing in each speaker's voice, with the original music and effects.\nMachines separate, transcribe, clone and mix. The director, an AI agent, decides the\ntranscript, casting, translation and timing. Japanese, Spanish, Korean and Chinese\ninto English; English into Japanese and Spanish.",
    "shape": "text",
    "labelColor": "#ECEFF1"
   },
@@ -29,7 +29,7 @@
    "id": "local-note",
    "bounds": {
     "x": 1160,
-    "y": -150,
+    "y": -190,
     "width": 480,
     "height": 80
    },
@@ -40,12 +40,12 @@
   {
    "id": "source",
    "bounds": {
-    "x": 280,
+    "x": 230,
     "y": 0,
-    "width": 440,
+    "width": 540,
     "height": 70
    },
-   "label": "Source video  ·  videos/<stem>.mkv\nChoose a clip or split a longer recording",
+   "label": "Source video  ·  dub_anything.py new <video>\nthe language pair · the voice: actor, American or both",
    "shape": "cylinder",
    "nodeColor": "#546E7A",
    "labelColor": "#ECEFF1"
@@ -72,7 +72,7 @@
     "width": 450,
     "height": 120
    },
-   "label": "split.py  ·  long video → ~3-min parts\ncut in the pauses between lines (Silero VAD)\nframe-accurate · parts.json keeps offsets",
+   "label": "split.py  ·  the video → ~3-min parts\ncut in the pauses between lines (Silero VAD)\n--whole keeps a block whole (songs, breaks)\nframe-accurate · parts.json keeps offsets",
    "shape": "rounded-rectangle",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
@@ -86,7 +86,7 @@
     "width": 450,
     "height": 120
    },
-   "label": "dub.py prep  →  VoiceStudio\nDemucs: vocals.wav + background\nWhisper large-v3 · pyannote diarization\n(a rough first transcript only)",
+   "label": "dub.py prep  →  VoiceStudio\nWhisper large-v3 · pyannote diarization\n(a rough first transcript only)\nsegments.json records the language pair",
    "shape": "rounded-rectangle",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
@@ -98,23 +98,65 @@
     "x": 0,
     "y": 380,
     "width": 1000,
-    "height": 220
+    "height": 370
    },
-   "label": "2 · Draft",
+   "label": "2 · Separate & draft",
    "shape": "rectangle",
    "nodeColor": "#263238",
    "labelColor": "#B0BEC5",
    "borderColor": "#546E7A"
   },
   {
-   "id": "draft",
+   "id": "separate",
    "bounds": {
     "x": 30,
     "y": 430,
+    "width": 450,
+    "height": 100
+   },
+   "label": "separate.py  ·  Mel-Band Roformer\nvocals.wav + background, with far less\nmusic left in the vocals than htdemucs",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g2"
+  },
+  {
+   "id": "subs",
+   "bounds": {
+    "x": 520,
+    "y": 430,
+    "width": 450,
+    "height": 100
+   },
+   "label": "subs.py  ·  with --captions or --subtitles\nburned-in captions, or a film's own subtitles\n→ subs.json: the exact words, often the speaker",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g2"
+  },
+  {
+   "id": "draft",
+   "bounds": {
+    "x": 30,
+    "y": 570,
     "width": 560,
     "height": 150
    },
-   "label": "draft.py  ·  the first draft of the script\ncareful Whisper pass over the separated vocals\ntimings snapped to real speech (Whisper runs ~0.4 s early)\nre-listens to skipped speech · flags hallucinations\nsuggests a speaker per line (WeSpeaker embeddings)",
+   "label": "draft.py  ·  the first draft of the script\ncareful Whisper pass over the separated vocals\ntimings snapped to real speech (Whisper runs ~0.4 s early)\nre-listens to skipped speech · flags hallucinations\ntags speech already in the target language\nsuggests a speaker per line (WeSpeaker embeddings)",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g2"
+  },
+  {
+   "id": "second",
+   "bounds": {
+    "x": 620,
+    "y": 570,
+    "width": 350,
+    "height": 70
+   },
+   "label": "second.py  ·  CPU, in the background\ntwo more recognisers flag mishearings",
    "shape": "rounded-rectangle",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
@@ -124,11 +166,11 @@
    "id": "asr",
    "bounds": {
     "x": 620,
-    "y": 460,
+    "y": 650,
     "width": 350,
-    "height": 90
+    "height": 70
    },
-   "label": "asr_words.py\nfocused re-listen of short cuts\nwhere lines look garbled",
+   "label": "asr_words.py  ·  focused re-listen\nof stretches that look garbled",
    "shape": "rounded-rectangle",
    "nodeColor": "#546E7A",
    "labelColor": "#ECEFF1",
@@ -138,7 +180,7 @@
    "id": "g3",
    "bounds": {
     "x": 0,
-    "y": 650,
+    "y": 800,
     "width": 1000,
     "height": 300
    },
@@ -152,7 +194,7 @@
    "id": "cast",
    "bounds": {
     "x": 30,
-    "y": 700,
+    "y": 850,
     "width": 300,
     "height": 120
    },
@@ -166,7 +208,7 @@
    "id": "frames",
    "bounds": {
     "x": 350,
-    "y": 700,
+    "y": 850,
     "width": 300,
     "height": 120
    },
@@ -180,7 +222,7 @@
    "id": "pitch",
    "bounds": {
     "x": 670,
-    "y": 700,
+    "y": 850,
     "width": 300,
     "height": 120
    },
@@ -194,11 +236,11 @@
    "id": "voices",
    "bounds": {
     "x": 150,
-    "y": 850,
+    "y": 1000,
     "width": 700,
     "height": 80
    },
-   "label": "work/voices.json  ·  the cast, one voice per character\n5–15 s of clean, complete phrases + their exact text, read back by Whisper",
+   "label": "work/voices.json  ·  the cast, one voice per character\nvoices.py: clean, complete phrases (8–10 s for a lead) + their exact text",
    "shape": "document",
    "nodeColor": "#00897B",
    "labelColor": "#ffffff",
@@ -208,9 +250,9 @@
    "id": "g4",
    "bounds": {
     "x": 0,
-    "y": 1000,
+    "y": 1150,
     "width": 1000,
-    "height": 290
+    "height": 390
    },
    "label": "4 · Direct — the director's calls",
    "shape": "rectangle",
@@ -222,11 +264,11 @@
    "id": "decide",
    "bounds": {
     "x": 30,
-    "y": 1050,
+    "y": 1200,
     "width": 470,
     "height": 210
    },
-   "label": "Director's calls\nfix mishearings using context\ntranslate for meaning and consistent terminology\nmatch voices across clips\nplace windows at true speech boundaries\nsplit long lines at natural pauses\nfit the translation to each window\ncaption speech kept in the original",
+   "label": "Director's calls  (the agent)\nfix mishearings using context\nmatch voices across parts\ntranslate for meaning, in the character's voice\nend each window in a pause, nobody else in it\nfit the translation to each window\nkeep names, songs and asides original, captioned\nmark each guess for the listen list",
    "shape": "rounded-rectangle",
    "nodeColor": "#8E24AA",
    "labelColor": "#ffffff",
@@ -236,13 +278,69 @@
    "id": "script",
    "bounds": {
     "x": 530,
-    "y": 1050,
+    "y": 1200,
     "width": 440,
     "height": 210
    },
-   "label": "work/<clip>/script.json  ·  the directed dub\nper line: start · end · voice\nja (corrected) · text (English)\noptional: instruct (whisper) · effect\ncaptions: speech kept in the original,\nstill in the subtitles",
+   "label": "work/<part>/script.json  ·  the directed part\nper line: start · end · voice\nja (or en, es…): the corrected original\ntext: the dub · optional: text_us, listen…\ncaptions: speech kept in the original\nsigns: text in the picture, translated\n\"ready\": true  →  it renders",
    "shape": "document",
    "nodeColor": "#00897B",
+   "labelColor": "#ffffff",
+   "parentId": "g4"
+  },
+  {
+   "id": "edges",
+   "bounds": {
+    "x": 30,
+    "y": 1440,
+    "width": 210,
+    "height": 80
+   },
+   "label": "edges.py --apply\nno window cuts the\nactor mid-sound",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g4"
+  },
+  {
+   "id": "tails",
+   "bounds": {
+    "x": 270,
+    "y": 1440,
+    "width": 210,
+    "height": 80
+   },
+   "label": "tails.py\nechoing lines get\nthe echo or pa effect",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
+   "labelColor": "#ffffff",
+   "parentId": "g4"
+  },
+  {
+   "id": "fit",
+   "bounds": {
+    "x": 510,
+    "y": 1440,
+    "width": 210,
+    "height": 80
+   },
+   "label": "fit.py\npredicted length vs\nwindow: OVER?, SHORT?",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "g4"
+  },
+  {
+   "id": "signs",
+   "bounds": {
+    "x": 760,
+    "y": 1440,
+    "width": 210,
+    "height": 80
+   },
+   "label": "signs.py  (--signs)\ntext in the picture\nto translate",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
    "parentId": "g4"
   },
@@ -250,11 +348,11 @@
    "id": "g5",
    "bounds": {
     "x": 0,
-    "y": 1340,
+    "y": 1590,
     "width": 1000,
-    "height": 190
+    "height": 230
    },
-   "label": "5 · Render",
+   "label": "5 · Render — each part in each voice",
    "shape": "rectangle",
    "nodeColor": "#263238",
    "labelColor": "#B0BEC5",
@@ -264,11 +362,11 @@
    "id": "generate",
    "bounds": {
     "x": 30,
-    "y": 1390,
+    "y": 1640,
     "width": 560,
-    "height": 120
+    "height": 150
    },
-   "label": "dub.py generate --match-level\nOmniVoice clones each actor from their voice clip\n32 steps · natural pace from the window start\neach line levelled to its actor · only changes re-render",
+   "label": "dub.py generate --match-level\nactor's voice: OmniVoice, prompted with the voice's clips\n+ the actor's own delivery of this very line\nAmerican: IndexTTS 2.5, then vc.py to the actor's timbre\nfill: each take re-timed to end where the actor stops\nlevelled to the actor · only changes are synthesized",
    "shape": "rounded-rectangle",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
@@ -278,11 +376,11 @@
    "id": "mix",
    "bounds": {
     "x": 620,
-    "y": 1390,
+    "y": 1640,
     "width": 350,
-    "height": 120
+    "height": 150
    },
-   "label": "VoiceStudio mix  →  part .mp4\ndub over the preserved background:\noriginal sound between lines,\nDemucs bed under them",
+   "label": "VoiceStudio mix  →  part .mp4\ndub over the preserved background:\noriginal sound between lines,\nthe separated background under them",
    "shape": "rounded-rectangle",
    "nodeColor": "#455A64",
    "labelColor": "#CFD8DC",
@@ -293,81 +391,67 @@
    "id": "g6",
    "bounds": {
     "x": 0,
-    "y": 1580,
+    "y": 1870,
     "width": 1000,
     "height": 200
    },
-   "label": "6 · QA loop",
+   "label": "6 · QA loop  ·  up to three rounds per part and voice",
    "shape": "rectangle",
    "nodeColor": "#263238",
    "labelColor": "#B0BEC5",
    "borderColor": "#546E7A"
   },
   {
-   "id": "fit",
-   "bounds": {
-    "x": 30,
-    "y": 1630,
-    "width": 220,
-    "height": 120
-   },
-   "label": "fit.py\nline vs its window\n→ shorten or widen",
-   "shape": "rounded-rectangle",
-   "nodeColor": "#FB8C00",
-   "labelColor": "#000000",
-   "parentId": "g6"
-  },
-  {
    "id": "lineqa",
    "bounds": {
-    "x": 270,
-    "y": 1630,
-    "width": 270,
+    "x": 30,
+    "y": 1920,
+    "width": 450,
     "height": 120
    },
-   "label": "lineqa.py\neach line heard alone:\nleaked syllables, dropped\nor garbled words",
+   "label": "lineqa.py --reroll\neach line transcribed on its own: leaked\nsyllables, dropped or garbled words, flips\n→ fresh takes; the best take is kept",
    "shape": "rounded-rectangle",
    "nodeColor": "#FB8C00",
    "labelColor": "#000000",
    "parentId": "g6"
   },
   {
-   "id": "qa",
+   "id": "triage",
    "bounds": {
-    "x": 560,
-    "y": 1630,
-    "width": 190,
+    "x": 520,
+    "y": 1920,
+    "width": 240,
     "height": 120
    },
-   "label": "qa.py\nthe full mix\nheard back\nin English",
-   "shape": "rounded-rectangle",
-   "nodeColor": "#FB8C00",
-   "labelColor": "#000000",
-   "parentId": "g6"
-  },
-  {
-   "id": "listen",
-   "bounds": {
-    "x": 770,
-    "y": 1630,
-    "width": 200,
-    "height": 120
-   },
-   "label": "You listen\nacting · casting\n· the mix",
+   "label": "Director triages\nwhat still fails:\nreword · widen ·\nkeep the original",
    "shape": "rounded-rectangle",
    "nodeColor": "#8E24AA",
    "labelColor": "#ffffff",
    "parentId": "g6"
   },
   {
+   "id": "qa",
+   "bounds": {
+    "x": 790,
+    "y": 1920,
+    "width": 180,
+    "height": 120
+   },
+   "label": "qa.py  (by hand)\nthe full mix\nheard back",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#FB8C00",
+   "labelColor": "#000000",
+   "parentId": "g6"
+  },
+  {
    "id": "g7",
    "bounds": {
     "x": 0,
-    "y": 1830,
+    "y": 2120,
     "width": 1000,
-    "height": 190
+    "height": 200
    },
-   "label": "7 · Package",
+   "label": "7 · Package & deliver",
    "shape": "rectangle",
    "nodeColor": "#263238",
    "labelColor": "#B0BEC5",
@@ -377,41 +461,80 @@
    "id": "assemble",
    "bounds": {
     "x": 30,
-    "y": 1880,
-    "width": 600,
-    "height": 120
+    "y": 2170,
+    "width": 450,
+    "height": 130
    },
-   "label": "assemble.py  ·  parts → one video\nvideo stream-copied from the source: no seams at cuts\naudio: English dub (default) + original Japanese\nsoft subtitles: English + 日本語 (+ any in the source)",
+   "label": "assemble.py  ·  parts → one video per voice\nvideo stream-copied from the source: no seams\naudio: the dub (default) + the original\nsubtitles: the dub's and the original's language\n(+ signs placed by their text, when there are any)",
    "shape": "rounded-rectangle",
    "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
    "parentId": "g7"
   },
   {
-   "id": "srt",
+   "id": "deliver",
    "bounds": {
-    "x": 660,
-    "y": 1880,
-    "width": 310,
-    "height": 120
+    "x": 520,
+    "y": 2170,
+    "width": 450,
+    "height": 130
    },
-   "label": "sidecar subtitles\n<stem>.dubbed.en.srt\n<stem>.dubbed.ja.srt",
-   "shape": "document",
-   "nodeColor": "#00897B",
+   "label": "deliver.py  →  <name> (dubbed)\ninto the source file itself: a dub track\nper voice, then the original audio, both\nlanguages' subtitles; every copied stream\nchecked before the source is replaced",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
    "labelColor": "#ffffff",
    "parentId": "g7"
   },
   {
+   "id": "report",
+   "bounds": {
+    "x": 30,
+    "y": 2370,
+    "width": 450,
+    "height": 90
+   },
+   "label": "work/jobs/<slug>/report.md\nthe listen list: guesses and lines QA\nstill flags, with film times",
+   "shape": "document",
+   "nodeColor": "#00897B",
+   "labelColor": "#ffffff"
+  },
+  {
    "id": "output",
    "bounds": {
-    "x": 80,
-    "y": 2070,
-    "width": 500,
-    "height": 80
+    "x": 520,
+    "y": 2370,
+    "width": 450,
+    "height": 90
    },
-   "label": "<stem>.dubbed.mp4\none file · two audio tracks · two subtitle tracks",
+   "label": "<name> (dubbed).mp4  (.mkv with signs)\nthe dub plays by default · original audio\nsubtitles in both languages",
    "shape": "ellipse",
    "nodeColor": "#43A047",
+   "labelColor": "#ffffff"
+  },
+  {
+   "id": "listen",
+   "bounds": {
+    "x": 280,
+    "y": 2510,
+    "width": 480,
+    "height": 80
+   },
+   "label": "You listen  ·  acting · casting · the mix\nsay what to change: that part renders\nand is delivered again",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#8E24AA",
+   "labelColor": "#ffffff"
+  },
+  {
+   "id": "runner",
+   "bounds": {
+    "x": 1160,
+    "y": -80,
+    "width": 480,
+    "height": 150
+   },
+   "label": "dub_anything.py run --watch\nruns the machine steps in order, one GPU job\nat a time (gpulock.py): prep and drafts part\nby part, each part's render once its script\nis ready, then delivery and the report",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#1976D2",
    "labelColor": "#ffffff"
   },
   {
@@ -429,29 +552,14 @@
    "borderColor": "#546E7A"
   },
   {
-   "id": "m-demucs",
+   "id": "m-whisper",
    "bounds": {
     "x": 1190,
     "y": 170,
     "width": 420,
     "height": 70
    },
-   "label": "Demucs htdemucs\nsplits voices from music and effects",
-   "shape": "rounded-rectangle",
-   "nodeColor": "#455A64",
-   "labelColor": "#CFD8DC",
-   "borderColor": "#78909C",
-   "parentId": "backend"
-  },
-  {
-   "id": "m-whisper",
-   "bounds": {
-    "x": 1190,
-    "y": 260,
-    "width": 420,
-    "height": 70
-   },
-   "label": "Whisper large-v3 (faster-whisper)\nJapanese transcript with word times",
+   "label": "Whisper large-v3 (faster-whisper)\ntranscript with word times, any language",
    "shape": "rounded-rectangle",
    "nodeColor": "#455A64",
    "labelColor": "#CFD8DC",
@@ -462,7 +570,7 @@
    "id": "m-pyannote",
    "bounds": {
     "x": 1190,
-    "y": 350,
+    "y": 260,
     "width": 420,
     "height": 70
    },
@@ -477,11 +585,26 @@
    "id": "m-omnivoice",
    "bounds": {
     "x": 1190,
+    "y": 350,
+    "width": 420,
+    "height": 70
+   },
+   "label": "OmniVoice (k2-fsa)\nzero-shot cloning: the actor's voice",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "backend"
+  },
+  {
+   "id": "m-indextts",
+   "bounds": {
+    "x": 1190,
     "y": 440,
     "width": 420,
     "height": 70
    },
-   "label": "OmniVoice (k2-fsa)\nzero-shot voice cloning",
+   "label": "IndexTTS 2.5\nnative English: the American voice",
    "shape": "rounded-rectangle",
    "nodeColor": "#455A64",
    "labelColor": "#CFD8DC",
@@ -504,12 +627,86 @@
    "parentId": "backend"
   },
   {
+   "id": "envs",
+   "bounds": {
+    "x": 1160,
+    "y": 680,
+    "width": 480,
+    "height": 410
+   },
+   "label": "Own environments (uv)  ·  GPU or CPU",
+   "shape": "rectangle",
+   "nodeColor": "#263238",
+   "labelColor": "#B0BEC5",
+   "borderColor": "#546E7A"
+  },
+  {
+   "id": "m-roformer",
+   "bounds": {
+    "x": 1190,
+    "y": 730,
+    "width": 420,
+    "height": 70
+   },
+   "label": "Mel-Band Roformer (audio-separator)\nseparate.py: voices from music and effects",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "envs"
+  },
+  {
+   "id": "m-sherpa",
+   "bounds": {
+    "x": 1190,
+    "y": 820,
+    "width": 420,
+    "height": 70
+   },
+   "label": "sherpa-onnx recognisers, on the CPU\nsecond.py: second opinions on the transcript",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "envs"
+  },
+  {
+   "id": "m-ocr",
+   "bounds": {
+    "x": 1190,
+    "y": 910,
+    "width": 420,
+    "height": 70
+   },
+   "label": "PP-OCRv5 (RapidOCR)\nsubs.py, signs.py: text in the picture",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "envs"
+  },
+  {
+   "id": "m-chatterbox",
+   "bounds": {
+    "x": 1190,
+    "y": 1000,
+    "width": 420,
+    "height": 70
+   },
+   "label": "Chatterbox voice converter\nvc.py: the actor's timbre on American takes",
+   "shape": "rounded-rectangle",
+   "nodeColor": "#455A64",
+   "labelColor": "#CFD8DC",
+   "borderColor": "#78909C",
+   "parentId": "envs"
+  },
+  {
    "id": "key",
    "bounds": {
     "x": 1160,
-    "y": 690,
+    "y": 1140,
     "width": 480,
-    "height": 300
+    "height": 360
    },
    "label": "Key",
    "shape": "rectangle",
@@ -521,7 +718,7 @@
    "id": "k-tool",
    "bounds": {
     "x": 1190,
-    "y": 740,
+    "y": 1190,
     "width": 200,
     "height": 40
    },
@@ -535,7 +732,7 @@
    "id": "k-dir",
    "bounds": {
     "x": 1410,
-    "y": 740,
+    "y": 1190,
     "width": 200,
     "height": 40
    },
@@ -549,7 +746,7 @@
    "id": "k-qa",
    "bounds": {
     "x": 1190,
-    "y": 800,
+    "y": 1250,
     "width": 200,
     "height": 40
    },
@@ -560,14 +757,28 @@
    "parentId": "key"
   },
   {
-   "id": "k-vs",
+   "id": "k-help",
    "bounds": {
     "x": 1410,
-    "y": 800,
+    "y": 1250,
     "width": 200,
     "height": 40
    },
-   "label": "VoiceStudio / model",
+   "label": "helper, as needed",
+   "shape": "pill",
+   "nodeColor": "#546E7A",
+   "labelColor": "#ECEFF1",
+   "parentId": "key"
+  },
+  {
+   "id": "k-vs",
+   "bounds": {
+    "x": 1190,
+    "y": 1310,
+    "width": 200,
+    "height": 40
+   },
+   "label": "model / engine",
    "shape": "pill",
    "nodeColor": "#455A64",
    "labelColor": "#CFD8DC",
@@ -578,7 +789,7 @@
    "id": "k-file",
    "bounds": {
     "x": 1190,
-    "y": 860,
+    "y": 1370,
     "width": 420,
     "height": 50
    },
@@ -592,7 +803,7 @@
    "id": "k-dash",
    "bounds": {
     "x": 1190,
-    "y": 930,
+    "y": 1440,
     "width": 420,
     "height": 40
    },
@@ -605,9 +816,9 @@
    "id": "lessons",
    "bounds": {
     "x": 1160,
-    "y": 1050,
+    "y": 1550,
     "width": 480,
-    "height": 310
+    "height": 330
    },
    "label": "Hard-won lessons  (docs/directing.md)",
    "shape": "rectangle",
@@ -619,11 +830,11 @@
    "id": "lessons-body",
    "bounds": {
     "x": 1180,
-    "y": 1100,
+    "y": 1600,
     "width": 440,
-    "height": 240
+    "height": 260
    },
-   "label": "Review speech boundaries with VAD\nUse complete phrases for voice references\nCombine embeddings, frames and context\nRephrase persistent pronunciation errors\nUse only supported synthesis tags\nCheck each rendered line on its own\nAsk a listener to review acting and the mix",
+   "label": "Review speech boundaries with VAD\nEnd each window in a pause, nobody else in it\nUse complete phrases for voice references\nCombine embeddings, frames and context\nReword what a voice can't say\nUse only supported synthesis tags\nCheck each rendered line on its own\nAsk a listener to review acting and the mix",
    "shape": "rectangle",
    "nodeColor": "#37474F",
    "labelColor": "#ECEFF1",
@@ -634,11 +845,11 @@
    "id": "speed",
    "bounds": {
     "x": 1160,
-    "y": 1420,
+    "y": 1930,
     "width": 480,
     "height": 100
    },
-   "label": "Runtime depends on hardware and source material\nReuse approved takes for timing and level edits\nMeasure new synthesis and review costs per project",
+   "label": "Runtime depends on hardware and source material\nReuse approved takes for timing and level edits\nThe American voice is several times slower to render",
    "shape": "rectangle",
    "nodeColor": "#37474F",
    "labelColor": "#ECEFF1",
@@ -663,14 +874,14 @@
    "from": {
     "nodeId": "source",
     "anchor": [
-     220.0,
+     270,
      70
     ]
    },
    "to": {
     "nodeId": "split",
     "anchor": [
-     225.0,
+     225,
      0
     ]
    },
@@ -694,14 +905,14 @@
     "nodeId": "split",
     "anchor": [
      450,
-     60.0
+     60
     ]
    },
    "to": {
     "nodeId": "prep",
     "anchor": [
      0,
-     60.0
+     60
     ]
    },
    "arrow": "end",
@@ -714,7 +925,7 @@
     "nodeId": "prep",
     "anchor": [
      450,
-     60.0
+     60
     ]
    },
    "to": {
@@ -731,18 +942,18 @@
    "label": "VoiceStudio API"
   },
   {
-   "id": "e-prep-draft",
+   "id": "e-prep-sep",
    "from": {
     "nodeId": "prep",
     "anchor": [
-     225.0,
+     225,
      120
     ]
    },
    "to": {
-    "nodeId": "draft",
+    "nodeId": "separate",
     "anchor": [
-     280,
+     225,
      0
     ]
    },
@@ -752,14 +963,76 @@
    "waypoints": [
     {
      "x": 745,
-     "y": 340
+     "y": 355
     },
     {
-     "x": 310,
-     "y": 340
+     "x": 255,
+     "y": 355
     }
    ],
-   "label": "vocals.wav + rough transcript"
+   "label": "audio + rough transcript"
+  },
+  {
+   "id": "e-sep-draft",
+   "from": {
+    "nodeId": "separate",
+    "anchor": [
+     225,
+     100
+    ]
+   },
+   "to": {
+    "nodeId": "draft",
+    "anchor": [
+     225,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-subs-draft",
+   "from": {
+    "nodeId": "subs",
+    "anchor": [
+     40,
+     100
+    ]
+   },
+   "to": {
+    "nodeId": "draft",
+    "anchor": [
+     530,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
+   "id": "e-second-draft",
+   "from": {
+    "nodeId": "second",
+    "anchor": [
+     0,
+     35
+    ]
+   },
+   "to": {
+    "nodeId": "draft",
+    "anchor": [
+     560,
+     35
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
   },
   {
    "id": "e-asr-draft",
@@ -767,14 +1040,14 @@
     "nodeId": "asr",
     "anchor": [
      0,
-     45.0
+     35
     ]
    },
    "to": {
     "nodeId": "draft",
     "anchor": [
      560,
-     75
+     115
     ]
    },
    "arrow": "end",
@@ -787,14 +1060,14 @@
    "from": {
     "nodeId": "draft",
     "anchor": [
-     280,
+     225,
      150
     ]
    },
    "to": {
     "nodeId": "cast",
     "anchor": [
-     150.0,
+     150,
      0
     ]
    },
@@ -803,12 +1076,12 @@
    "labelColor": "#CFD8DC",
    "waypoints": [
     {
-     "x": 310,
-     "y": 625
+     "x": 255,
+     "y": 775
     },
     {
      "x": 180,
-     "y": 625
+     "y": 775
     }
    ],
    "label": "draft.json"
@@ -818,7 +1091,7 @@
    "from": {
     "nodeId": "cast",
     "anchor": [
-     150.0,
+     150,
      120
     ]
    },
@@ -838,7 +1111,7 @@
    "from": {
     "nodeId": "frames",
     "anchor": [
-     150.0,
+     150,
      120
     ]
    },
@@ -858,7 +1131,7 @@
    "from": {
     "nodeId": "pitch",
     "anchor": [
-     150.0,
+     150,
      120
     ]
    },
@@ -886,7 +1159,7 @@
    "to": {
     "nodeId": "decide",
     "anchor": [
-     235.0,
+     235,
      0
     ]
    },
@@ -901,14 +1174,14 @@
     "nodeId": "decide",
     "anchor": [
      470,
-     105.0
+     105
     ]
    },
    "to": {
     "nodeId": "script",
     "anchor": [
      0,
-     105.0
+     105
     ]
    },
    "arrow": "end",
@@ -916,18 +1189,102 @@
    "labelColor": "#CFD8DC"
   },
   {
+   "id": "e-edges-decide",
+   "from": {
+    "nodeId": "edges",
+    "anchor": [
+     105,
+     0
+    ]
+   },
+   "to": {
+    "nodeId": "decide",
+    "anchor": [
+     105,
+     210
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
+   "id": "e-tails-decide",
+   "from": {
+    "nodeId": "tails",
+    "anchor": [
+     105,
+     0
+    ]
+   },
+   "to": {
+    "nodeId": "decide",
+    "anchor": [
+     345,
+     210
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
+   "id": "e-fit-script",
+   "from": {
+    "nodeId": "fit",
+    "anchor": [
+     105,
+     0
+    ]
+   },
+   "to": {
+    "nodeId": "script",
+    "anchor": [
+     85,
+     210
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
+   "id": "e-signs-script",
+   "from": {
+    "nodeId": "signs",
+    "anchor": [
+     105,
+     0
+    ]
+   },
+   "to": {
+    "nodeId": "script",
+    "anchor": [
+     335,
+     210
+    ]
+   },
+   "arrow": "end",
+   "color": "#78909C",
+   "labelColor": "#B0BEC5",
+   "style": "dashed"
+  },
+  {
    "id": "e-script-gen",
    "from": {
     "nodeId": "script",
     "anchor": [
-     220.0,
+     210,
      210
     ]
    },
    "to": {
     "nodeId": "generate",
     "anchor": [
-     280,
+     225,
      0
     ]
    },
@@ -936,15 +1293,15 @@
    "labelColor": "#CFD8DC",
    "waypoints": [
     {
-     "x": 750,
-     "y": 1315
+     "x": 740,
+     "y": 1565
     },
     {
-     "x": 310,
-     "y": 1315
+     "x": 255,
+     "y": 1565
     }
    ],
-   "label": "lines"
+   "label": "\"ready\": true"
   },
   {
    "id": "e-voices-gen",
@@ -959,22 +1316,22 @@
     "nodeId": "generate",
     "anchor": [
      0,
-     60
+     75
     ]
    },
    "arrow": "end",
    "color": "#78909C",
    "labelColor": "#B0BEC5",
    "style": "dashed",
-   "labelPos": 0.32,
+   "labelPos": 0.274,
    "waypoints": [
     {
      "x": -50,
-     "y": 915
+     "y": 1065
     },
     {
      "x": -50,
-     "y": 1450
+     "y": 1715
     }
    ],
    "label": "voice clips"
@@ -985,34 +1342,14 @@
     "nodeId": "generate",
     "anchor": [
      560,
-     60.0
+     75
     ]
    },
    "to": {
     "nodeId": "mix",
     "anchor": [
      0,
-     60.0
-    ]
-   },
-   "arrow": "end",
-   "color": "#90A4AE",
-   "labelColor": "#CFD8DC"
-  },
-  {
-   "id": "e-gen-fit",
-   "from": {
-    "nodeId": "generate",
-    "anchor": [
-     110,
-     120
-    ]
-   },
-   "to": {
-    "nodeId": "fit",
-    "anchor": [
-     110.0,
-     0
+     75
     ]
    },
    "arrow": "end",
@@ -1024,14 +1361,14 @@
    "from": {
     "nodeId": "generate",
     "anchor": [
-     375,
-     120
+     225,
+     150
     ]
    },
    "to": {
     "nodeId": "lineqa",
     "anchor": [
-     135.0,
+     225,
      0
     ]
    },
@@ -1044,14 +1381,14 @@
    "from": {
     "nodeId": "mix",
     "anchor": [
-     35,
-     120
+     260,
+     150
     ]
    },
    "to": {
     "nodeId": "qa",
     "anchor": [
-     95.0,
+     90,
      0
     ]
    },
@@ -1060,19 +1397,39 @@
    "labelColor": "#CFD8DC"
   },
   {
-   "id": "e-mix-listen",
+   "id": "e-lineqa-triage",
    "from": {
-    "nodeId": "mix",
+    "nodeId": "lineqa",
     "anchor": [
-     250,
-     120
+     450,
+     60
     ]
    },
    "to": {
-    "nodeId": "listen",
+    "nodeId": "triage",
     "anchor": [
-     100.0,
-     0
+     0,
+     60
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-qa-triage",
+   "from": {
+    "nodeId": "qa",
+    "anchor": [
+     0,
+     60
+    ]
+   },
+   "to": {
+    "nodeId": "triage",
+    "anchor": [
+     240,
+     60
     ]
    },
    "arrow": "end",
@@ -1082,43 +1439,47 @@
   {
    "id": "e-fb-script",
    "from": {
-    "nodeId": "listen",
+    "nodeId": "triage",
     "anchor": [
-     200,
-     60.0
+     120,
+     120
     ]
    },
    "to": {
     "nodeId": "script",
     "anchor": [
      440,
-     105.0
+     130
     ]
    },
    "arrow": "end",
    "color": "#FB8C00",
    "labelColor": "#FFB74D",
    "style": "dashed",
-   "labelPos": 0.32,
+   "labelPos": 0.768,
    "waypoints": [
     {
-     "x": 1070,
-     "y": 1690
+     "x": 640,
+     "y": 2095
     },
     {
-     "x": 1070,
-     "y": 1155
+     "x": 1030,
+     "y": 2095
+    },
+    {
+     "x": 1030,
+     "y": 1330
     }
    ],
-   "label": "rewrite · re-time · re-roll a take"
+   "label": "reword · widen · re-roll a take"
   },
   {
    "id": "e-fb-voices",
    "from": {
-    "nodeId": "fit",
+    "nodeId": "lineqa",
     "anchor": [
      0,
-     60.0
+     60
     ]
    },
    "to": {
@@ -1132,32 +1493,93 @@
    "color": "#FB8C00",
    "labelColor": "#FFB74D",
    "style": "dashed",
-   "labelPos": 0.235,
+   "labelPos": 0.208,
    "waypoints": [
     {
      "x": -130,
-     "y": 1690
+     "y": 1980
     },
     {
      "x": -130,
-     "y": 875
+     "y": 1025
     }
    ],
    "label": "re-cut a leaking voice clip"
   },
   {
-   "id": "e-listen-asm",
+   "id": "e-lineqa-asm",
    "from": {
-    "nodeId": "listen",
+    "nodeId": "lineqa",
     "anchor": [
-     100.0,
+     225,
      120
     ]
    },
    "to": {
     "nodeId": "assemble",
     "anchor": [
-     300,
+     225,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC",
+   "label": "final parts, every voice"
+  },
+  {
+   "id": "e-asm-deliver",
+   "from": {
+    "nodeId": "assemble",
+    "anchor": [
+     450,
+     65
+    ]
+   },
+   "to": {
+    "nodeId": "deliver",
+    "anchor": [
+     0,
+     65
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-deliver-out",
+   "from": {
+    "nodeId": "deliver",
+    "anchor": [
+     225,
+     130
+    ]
+   },
+   "to": {
+    "nodeId": "output",
+    "anchor": [
+     225,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-deliver-report",
+   "from": {
+    "nodeId": "deliver",
+    "anchor": [
+     60,
+     130
+    ]
+   },
+   "to": {
+    "nodeId": "report",
+    "anchor": [
+     225,
      0
     ]
    },
@@ -1166,55 +1588,87 @@
    "labelColor": "#CFD8DC",
    "waypoints": [
     {
-     "x": 870,
-     "y": 1805
+     "x": 580,
+     "y": 2335
     },
     {
-     "x": 330,
-     "y": 1805
+     "x": 255,
+     "y": 2335
     }
-   ],
-   "label": "parts that pass"
+   ]
   },
   {
-   "id": "e-asm-srt",
+   "id": "e-report-listen",
    "from": {
-    "nodeId": "assemble",
+    "nodeId": "report",
     "anchor": [
-     600,
-     60.0
+     350,
+     90
     ]
    },
    "to": {
-    "nodeId": "srt",
+    "nodeId": "listen",
     "anchor": [
-     0,
-     60.0
-    ]
-   },
-   "arrow": "end",
-   "color": "#90A4AE",
-   "labelColor": "#CFD8DC"
-  },
-  {
-   "id": "e-asm-out",
-   "from": {
-    "nodeId": "assemble",
-    "anchor": [
-     300,
-     120
-    ]
-   },
-   "to": {
-    "nodeId": "output",
-    "anchor": [
-     250.0,
+     100,
      0
     ]
    },
    "arrow": "end",
    "color": "#90A4AE",
    "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-out-listen",
+   "from": {
+    "nodeId": "output",
+    "anchor": [
+     225,
+     90
+    ]
+   },
+   "to": {
+    "nodeId": "listen",
+    "anchor": [
+     465,
+     0
+    ]
+   },
+   "arrow": "end",
+   "color": "#90A4AE",
+   "labelColor": "#CFD8DC"
+  },
+  {
+   "id": "e-fb-listen",
+   "from": {
+    "nodeId": "listen",
+    "anchor": [
+     480,
+     40
+    ]
+   },
+   "to": {
+    "nodeId": "script",
+    "anchor": [
+     440,
+     90
+    ]
+   },
+   "arrow": "end",
+   "color": "#FB8C00",
+   "labelColor": "#FFB74D",
+   "style": "dashed",
+   "labelPos": 0.467,
+   "waypoints": [
+    {
+     "x": 1070,
+     "y": 2550
+    },
+    {
+     "x": 1070,
+     "y": 1290
+    }
+   ],
+   "label": "say what to change"
   }
  ]
 }
