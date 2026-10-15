@@ -32,6 +32,23 @@ class CantoneseLanguageTests(unittest.TestCase):
         self.assertEqual(units("你 好，ＡＢＣ１２！"), units("你好abc12"))
         self.assertNotEqual(units("我哋去"), units("我哋唔去"))
 
+    def test_common_cantonese_written_variants_do_not_fail_qa(self):
+        compare = LANGUAGES["yue"].compare
+        self.assertEqual(compare("而家我哋出發。", "依家我地出發。")[0], [])
+        self.assertEqual(compare("你哋同佢哋去。", "你地同佢地去。")[0], [])
+        self.assertEqual(compare("做咩呀？", "做咩啊？")[0], [])
+
+    def test_written_variant_folding_preserves_meaning_checks(self):
+        units = LANGUAGES["yue"].units
+        self.assertNotEqual(units("我哋出發"), units("你哋出發"))
+        self.assertIn("negation differs", LANGUAGES["yue"].compare("我哋唔去。", "我地去。")[0])
+
+    def test_question_particle_is_not_a_negative_imperative(self):
+        compare = LANGUAGES["yue"].compare
+        self.assertNotIn("negation differs", compare("係咪你？", "係你？")[0])
+        self.assertIn("negation differs", compare("咪去。", "去。")[0])
+        self.assertIn("negation differs", compare("係。咪去。", "係。去。")[0])
+
     def test_cantonese_compare(self):
         compare = LANGUAGES["yue"].compare
         # Exact match

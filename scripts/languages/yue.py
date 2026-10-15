@@ -38,7 +38,11 @@ OCR = ("CH", "SERVER")
 
 def units(text):
     """Character units with width, case, spacing and punctuation normalized."""
-    return "".join(c for c in unicodedata.normalize("NFKC", text).lower() if c.isalnum())
+    text = "".join(c for c in unicodedata.normalize("NFKC", text).lower() if c.isalnum())
+    # Common Cantonese ASR spellings; preserve unrelated words and homophones.
+    for heard, written in (("依家", "而家"), ("我地", "我哋"), ("你地", "你哋"), ("佢地", "佢哋"), ("啊", "呀")):
+        text = text.replace(heard, written)
+    return text
 
 
 # ---- spoken: dub into Cantonese ----
@@ -46,7 +50,8 @@ def units(text):
 VOICES = ("actor",)
 JOIN = ""
 MATCH = 0.8
-NEGATION = re.compile(r"唔|冇|咪|未|莫|毋|無|不|非|別|没|沒")
+# 咪 alone can mean "don't"; 係咪 is a yes/no question, not a negation.
+NEGATION = re.compile(r"唔|冇|(?<!係)咪|未|莫|毋|無|不|非|別|没|沒")
 DIGITS = str.maketrans("零〇一二兩两三四五六七八九", "0012223456789")
 NUMBER = re.compile(
     r"[-負负]?[\d零〇一二兩两三四五六七八九十百千萬万億亿廿卅卌]+(?:[.點点][\d零〇一二兩两三四五六七八九]+)?"
@@ -111,7 +116,8 @@ def compare(want, got):
         notes.append("silent or unintelligible")
     elif ratio < MATCH:
         notes.append(f"match {ratio:.2f}")
-    if got_s and len(NEGATION.findall(want_s)) != len(NEGATION.findall(got_s)):
+    # Keep punctuation here: "係。咪去" contains a negative imperative, not 係咪.
+    if got_s and len(NEGATION.findall(want_normal)) != len(NEGATION.findall(got_normal)):
         notes.append("negation differs")
     if got_s and want_numbers != got_numbers:
         notes.append(f"number differs: {want_numbers} -> {got_numbers}")

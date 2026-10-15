@@ -772,6 +772,9 @@ def cmd_run(args):
     ps = parts(job)
     job.pop("problems", None)
     save_job(job)
+    # A later failure on a previously blocked part is new, including the same
+    # failure after the director has changed its script.
+    known = set()
     for p in ps:  # a new run retries what failed for reasons outside the script
         for v in job["voices"]:
             path = WORK / voice_part(p["name"], v) / "state.json"
@@ -780,13 +783,8 @@ def cmd_run(args):
                 log(f'{voice_part(p["name"], v)}: retrying after "{st.pop("problem")[:80]}"')
                 st["fails"] = 0
                 write_json(path, st)
-    # Parts blocked before this run are known to the director; --watch stops for new ones.
-    known = {
-        voice_part(p["name"], v)
-        for p in ps
-        for v in job["voices"]
-        if load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("problem")
-    }
+            if st.get("problem"):
+                known.add((voice_part(p["name"], v), st.get("script"), st["problem"]))
     seen, new_block = set(), False
     while True:
         second(job, ps)
@@ -804,10 +802,11 @@ def cmd_run(args):
                 if state == "blocked":
                     blocked = True
                     st = load_json(WORK / name / "state.json", {})
-                    if (name, st.get("problem")) not in seen:
-                        seen.add((name, st.get("problem")))
+                    block = (name, st.get("script"), st.get("problem"))
+                    if block not in seen:
+                        seen.add(block)
                         log(f"BLOCKED {name}: {st.get('problem')}")
-                        new_block |= name not in known
+                        new_block |= block not in known
         if not busy:
             # Preparation fills the time no ready part needs: renders never wait for
             # the rest of the video to be prepped.

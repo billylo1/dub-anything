@@ -324,6 +324,22 @@ originals per part.
     tests. Source-specific measurements and listening notes stay in ignored
     `work/` files. It awaits a listener.
 
+21. **English → Cantonese: references help delivery, but speech needs review.**
+    A short Windows sample completed the actor-voice pipeline in both reference
+    modes, including independent recognition, separation, signs, fitting,
+    rerolls, assembly and verified delivery. Per-line references followed the
+    actors' pitch and intensity more closely, with slightly better measured
+    likeness and similar timing. Without them, reference-free audio-quality
+    estimates were better. Both variants still produced mispronounced words
+    and English-like phonetics, especially on names and short stylized lines;
+    an independent recognizer confirmed problems that spelling normalization
+    could not explain. Whisper generally detected Chinese rather than
+    Cantonese in both, so its Cantonese language-ID probability alone does not
+    establish fluency. Keep per-line references as the starting default and
+    compare by ear. Length estimates were useful, but rerolls still required
+    a shorter reply and a wider closing pause. Source-specific measurements
+    and listening notes stay in ignored `work/` files. It awaits a listener.
+
 ## What the pipeline does now
 
 `dub.py generate` renders new parts with per-line references, fill and `dips` by
@@ -344,6 +360,8 @@ their reading in kana. One dubbed from Spanish into English keeps them
 (finding 17), and so does one dubbed from English into Spanish (finding 18),
 whose takes `lineqa.py` compares word by word without accents, and one dubbed
 from Korean into English (finding 19) and Chinese into English (finding 20).
+English into Cantonese keeps them too (finding 21), with pronunciation review
+still needed in either mode.
 
 ## Open questions
 

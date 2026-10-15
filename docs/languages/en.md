@@ -2,15 +2,15 @@
 
 What differs when English is the source or the target. Everything in
 [directing.md](../directing.md) applies; read this beside it, and the other
-language's notes ([ja.md](ja.md), [es.md](es.md)). The code is
+language's notes ([ja.md](ja.md), [es.md](es.md), [yue.md](yue.md)). The code is
 `scripts/languages/en.py`.
 
-## As the source: English → Japanese, English → Spanish
+## As the source: English → Japanese, English → Spanish, English → Cantonese
 
 - **The script.** A line keeps its original in `en`:
   `{"start": 4.3, "end": 5.9, "voice": "speaker_1", "en": "Hello.", "text": "こんにちは。"}`,
   and so do captions. The draft tags speech already in the target language
-  (`[Japanese]`, `[Spanish]`): keep it and caption it. `second.py` runs
+  (`[Japanese]`, `[Spanish]`, `[Cantonese]`): keep it and caption it. `second.py` runs
   Parakeet TDT 0.6B v2 and SenseVoice in English and compares them with the
   draft word by word.
 - **Casting** is as in directing.md. English drafts come out with clean
@@ -20,7 +20,8 @@ language's notes ([ja.md](ja.md), [es.md](es.md)). The code is
 - **One voice.** The dub has the actor's voice only, speaking the target
   language with the actor's English accent. The American voice is English
   only. Whether per-line references carry that accent into the takes depends
-  on the target: off into Japanese, on into Spanish (see the target's notes).
+  on the target: off into Japanese, on into Spanish and Cantonese (see the
+  target's notes for measured benefits and remaining speech errors).
 
 ## As the target
 
