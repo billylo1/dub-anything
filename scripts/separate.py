@@ -18,42 +18,19 @@ voices.json changes.
 
 import argparse
 import json
-import os
 import pathlib
 import shutil
 import sys
 import tempfile
 
+from core import cache_root, default_data_dir
 from gpulock import hold_gpu
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
-DATA = (
-    pathlib.Path(os.environ["OMNIVOICE_DATA_DIR"])
-    if os.environ.get("OMNIVOICE_DATA_DIR")
-    else (
-        pathlib.Path.home() / "Library" / "Application Support" / "OmniVoice"
-        if sys.platform == "darwin"
-        else (
-            pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice"
-            if sys.platform == "win32"
-            else pathlib.Path.home() / ".local" / "share" / "OmniVoice"
-        )
-    )
-)
-JOBS = DATA / "dub_jobs"
-CACHE = (
-    os.environ.get("OMNIVOICE_CACHE_DIR")
-    or os.environ.get("HF_HUB_CACHE")
-    or (
-        str(pathlib.Path.home() / "Library" / "Caches" / "OmniVoice")
-        if sys.platform == "darwin"
-        else str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice")
-        if sys.platform == "win32"
-        else str(pathlib.Path.home() / ".cache" / "OmniVoice")
-    )
-)
-MODELS = pathlib.Path(CACHE) / "audio-separator"
+# Same resolution as core.py / VoiceStudio's backend/core/config.py.
+JOBS = default_data_dir() / "dub_jobs"
+MODELS = cache_root() / "audio-separator"
 STEMS = ("vocals.wav", "no_vocals.wav")
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

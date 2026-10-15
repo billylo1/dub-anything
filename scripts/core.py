@@ -34,17 +34,22 @@ def default_data_dir():
     return pathlib.Path.home() / ".local" / "share" / "OmniVoice"
 
 
-def default_cache_dir():
-    """Default location for Hugging Face / OmniVoice model caches."""
-    if os.environ.get("HF_HUB_CACHE"):
-        return os.environ["HF_HUB_CACHE"]
+def cache_root():
+    """OmniVoice's model folder: $OMNIVOICE_CACHE_DIR, else the platform's default.
+    Tools' own models (separate.py's audio-separator/) go in it."""
     if os.environ.get("OMNIVOICE_CACHE_DIR"):
-        return os.environ["OMNIVOICE_CACHE_DIR"]
+        return pathlib.Path(os.environ["OMNIVOICE_CACHE_DIR"])
     if sys.platform == "win32":
-        return str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
+        return pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice"
     if sys.platform == "darwin":
-        return str(pathlib.Path.home() / "Library" / "Caches" / "OmniVoice" / "hf_cache")
-    return str(pathlib.Path.home() / ".cache" / "OmniVoice" / "hf_cache")
+        return pathlib.Path.home() / "Library" / "Caches" / "OmniVoice"
+    return pathlib.Path.home() / ".cache" / "OmniVoice"
+
+
+def default_cache_dir():
+    """The Hugging Face model cache: $HF_HUB_CACHE, else $OMNIVOICE_CACHE_DIR
+    itself, else hf_cache in the platform's default."""
+    return os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DIR") or str(cache_root() / "hf_cache")
 
 
 # Same resolution as VoiceStudio's backend/core/config.py.

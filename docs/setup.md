@@ -77,6 +77,11 @@ git -C ~/python/VoiceStudio apply <path-to-dub-anything>/patches/voicestudio-loc
 cd ~/python/VoiceStudio && uv sync
 uv run python backend/main.py --diagnose
 ```
+The scripts find a source checkout only beside this repo (or the desktop app's
+runtime). For one elsewhere, like this one, add to your `~/.zshrc`:
+```bash
+export VOICESTUDIO_DIR="$HOME/python/VoiceStudio"
+```
 *(On macOS, PyTorch on Apple Silicon uses Metal / MPS acceleration; `scripts/setup.py` cuDNN 8 installation is Windows-only).*
 
 ### Windows

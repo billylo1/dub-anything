@@ -57,9 +57,55 @@ class PlatformPathTests(FixedHomeTests):
         ):
             self.assertEqual(core.default_data_dir(), pathlib.Path("/custom/data"))
             self.assertEqual(core.default_cache_dir(), "/custom/cache")
+            self.assertEqual(core.cache_root(), pathlib.Path("/custom/cache"))
+
+    def test_hf_hub_cache_does_not_move_the_model_folder(self):
+        # separate.py keeps audio-separator/ where it was; only the Hugging Face cache follows HF_HUB_CACHE.
+        with (
+            patch.dict(os.environ, {"HF_HUB_CACHE": "/hf", "LOCALAPPDATA": "/mock/LocalAppData"}, clear=True),
+            patch("sys.platform", "win32"),
+        ):
+            self.assertEqual(core.cache_root(), pathlib.Path("/mock/LocalAppData/OmniVoice"))
+            self.assertEqual(core.default_cache_dir(), "/hf")
 
 
 class BackendPlatformTests(FixedHomeTests):
+    def launch(self, platform, venv, uv="/tools/uv"):
+        with (
+            patch("sys.platform", platform),
+            patch.object(backend, "venv_python", return_value=venv),
+            patch("shutil.which", return_value=uv),
+            patch.object(pathlib.Path, "is_file", return_value=False),
+        ):
+            return backend.launch_cmd({"PATH": ""})
+
+    def test_windows_starts_through_uv_beside_a_venv(self):
+        cmd = self.launch("win32", "C:/VoiceStudio/.venv/Scripts/python.exe")
+        self.assertEqual(cmd[:4], ["/tools/uv", "run", "--no-sync", "uvicorn"])
+
+    def test_windows_still_needs_uv(self):
+        with self.assertRaises(SystemExit):
+            self.launch("win32", "C:/VoiceStudio/.venv/Scripts/python.exe", uv=None)
+
+    def test_macos_starts_with_the_venv_whatever_python_runs_this(self):
+        for exe in ("/usr/bin/python3", "/vs/.venv/bin/python"):
+            with self.subTest(exe=exe), patch("sys.executable", exe):
+                self.assertEqual(
+                    self.launch("darwin", "/vs/.venv/bin/python")[:3], ["/vs/.venv/bin/python", "-m", "uvicorn"]
+                )
+
+    def test_macos_without_a_venv_uses_uv(self):
+        self.assertEqual(self.launch("darwin", None)[:3], ["/tools/uv", "run", "--no-sync"])
+
+    def test_backend_health_with_requests_asks_once(self):
+        requests = types.ModuleType("requests")
+        requests.RequestException = type("RequestException", (OSError,), {})
+        requests.get = MagicMock(side_effect=requests.RequestException("timed out"))
+        with patch.dict(sys.modules, {"requests": requests}), patch("urllib.request.urlopen") as urlopen:
+            self.assertIsNone(backend.health(timeout=0.1))
+        requests.get.assert_called_once()
+        urlopen.assert_not_called()
+
     def test_backend_log_path_darwin_default(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("sys.platform", "darwin"):
