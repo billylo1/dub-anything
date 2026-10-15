@@ -22,7 +22,36 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 PORT = int(re.search(r":(\d+)", API.split("//", 1)[-1]).group(1)) if re.search(r":\d+", API.split("//", 1)[-1]) else 80
-VS_DIR = pathlib.Path(os.environ.get("VOICESTUDIO_DIR") or ROOT.parent / "VoiceStudio")
+
+
+def find_vs_dir():
+    if os.environ.get("VOICESTUDIO_DIR"):
+        return pathlib.Path(os.environ["VOICESTUDIO_DIR"])
+    candidates = []
+    if sys.platform == "darwin":
+        candidates.append(
+            pathlib.Path.home() / "Library" / "Application Support" / "VoiceStudio" / "runtime" / "project"
+        )
+        candidates.append(pathlib.Path("/Applications/VoiceStudio.app/Contents/Resources"))
+    candidates.append(ROOT.parent / "VoiceStudio")
+    for c in candidates:
+        if (c / "backend").is_dir():
+            return c
+    return ROOT.parent / "VoiceStudio"
+
+
+VS_DIR = find_vs_dir()
+
+
+def vs_python():
+    """Path to VoiceStudio's virtualenv Python if available, else sys.executable."""
+    if sys.platform == "win32":
+        py = VS_DIR / ".venv" / "Scripts" / "python.exe"
+    else:
+        py = VS_DIR / ".venv" / "bin" / "python"
+    if py.is_file():
+        return str(py)
+    return sys.executable
 
 
 def user_env(name):
@@ -186,24 +215,43 @@ def start(wait=600):
         stop()
     env = full_env()
     log = log_path(env)
+    py = vs_python()
     uv = shutil.which("uv", path=env["PATH"])
-    if not uv:
+    if not uv and sys.platform == "darwin":
+        bundled_uv = pathlib.Path("/Applications/VoiceStudio.app/Contents/Resources/tools/uv")
+        if bundled_uv.is_file():
+            uv = str(bundled_uv)
+    if not uv and py == sys.executable:
         raise SystemExit("backend: uv not found on PATH (see docs/setup.md)")
     if not (VS_DIR / "backend").is_dir():
         raise SystemExit(f"backend: no VoiceStudio checkout at {VS_DIR} (set VOICESTUDIO_DIR)")
-    cmd = [
-        uv,
-        "run",
-        "--no-sync",
-        "uvicorn",
-        "main:app",
-        "--app-dir",
-        "backend",
-        "--host",
-        re.sub(r"^\w+://|:\d+.*$", "", API),
-        "--port",
-        str(PORT),
-    ]
+    if py != sys.executable:
+        cmd = [
+            py,
+            "-m",
+            "uvicorn",
+            "main:app",
+            "--app-dir",
+            "backend",
+            "--host",
+            re.sub(r"^\w+://|:\d+.*$", "", API),
+            "--port",
+            str(PORT),
+        ]
+    else:
+        cmd = [
+            uv,
+            "run",
+            "--no-sync",
+            "uvicorn",
+            "main:app",
+            "--app-dir",
+            "backend",
+            "--host",
+            re.sub(r"^\w+://|:\d+.*$", "", API),
+            "--port",
+            str(PORT),
+        ]
     if sys.platform == "win32":
         # A child of this shell dies with an agent's session; one started by the
         # process service (WMI) doesn't. A batch file carries the environment.

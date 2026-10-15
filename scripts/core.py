@@ -237,12 +237,16 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
         embed = draft.embedder()
         voices = load_json(WORK / "voices.json", {})
         who = lambda v: voices[v].get("register_of", v)  # noqa: E731
-        cast = {
-            v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
-            for v in {line["voice"] for line in lines}
-        }
+        cast = (
+            {
+                v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
+                for v in {line["voice"] for line in lines}
+            }
+            if embed
+            else {}
+        )
         # Exclude this part's own lines: a line mustn't vouch for itself.
-        cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
+        cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if (cast_lines and embed) else {}
         for line, key in zip(lines, keys):
             if key in cache:
                 continue

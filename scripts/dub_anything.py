@@ -71,7 +71,7 @@ JOB_DIR = WORK / "jobs"
 VIDEOS = ROOT / "videos"
 QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
-PY = sys.executable
+PY = backend.vs_python()
 UV = ["uv", "run", "--no-project"]
 if sys.platform == "darwin":
     SEPARATE = UV + [

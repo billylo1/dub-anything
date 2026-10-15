@@ -6,8 +6,9 @@ it means in English, and exactly when it is spoken. This guide is the workflow
 that produced good results, plus the traps found along the way.
 
 Run everything from the repo folder with VoiceStudio's Python
-(`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"`), with the backend up
-(see [setup.md](setup.md)).
+(`$py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"` on Windows, or
+`~/Library/Application Support/VoiceStudio/runtime/project/.venv/bin/python` on macOS),
+with the backend up (see [setup.md](setup.md)).
 
 ## Files
 

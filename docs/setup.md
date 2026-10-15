@@ -62,6 +62,14 @@ Dub Anything's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR` (or 
 ## 3. VoiceStudio, pinned, with local fixes
 
 ### macOS
+VoiceStudio can be installed either via the official desktop application or by checking out the source:
+
+#### Option A: Official VoiceStudio Desktop App (Recommended)
+1. Download and install `VoiceStudio-Electron-*-mac-arm64.dmg` from the VoiceStudio releases.
+2. Launch VoiceStudio once so it initializes its runtime at `~/Library/Application Support/VoiceStudio/runtime/project`.
+Dub Anything automatically detects this installation, its runtime backend, and its bundled virtualenv.
+
+#### Option B: From Source
 ```bash
 git clone https://github.com/debpalash/VoiceStudio.git ~/python/VoiceStudio
 git -C ~/python/VoiceStudio checkout -b local-fixes c52618af
