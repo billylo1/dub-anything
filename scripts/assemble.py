@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 import ass
-from core import ROOT, VOICE_LABEL, WORK, langs, load_json, out_dir, said, srt_time, voice_part
+from core import ROOT, VOICE_LABEL, WORK, langs, load_json, original_audio_language, out_dir, said, srt_time, voice_part
 from languages import ISO3, LANGUAGES, PAIR
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -66,13 +66,18 @@ def main():
     ap.add_argument("--parts", help="range of split parts, e.g. 1-4 (default: all)")
     ap.add_argument("--out")
     ap.add_argument(
+        "--quicktime-audio",
+        action="store_true",
+        help="tag English original audio as und to prefer the dub in QuickTime",
+    )
+    ap.add_argument(
         "--sub",
         action="append",
         default=[],
         help="extra subtitle file timed to the source video: FILE.srt:lang[:title]",
     )
     ap.add_argument(
-        "--encoder", default="h264_nvenc", help="video encoder when the range doesn't start at 0 (else stream copy)"
+        "--encoder", default="auto", help="video encoder when the range doesn't start at 0 (else stream copy)"
     )
     args = ap.parse_args()
 
@@ -163,12 +168,24 @@ def main():
         cmd += ["-map", f"0:{s['index']}"]
     for k in range(len(subs)):
         cmd += ["-map", f"{1 + len(dubs) + k}:0"]
+    encoder = args.encoder
+    if encoder == "auto":
+        if sys.platform == "darwin":
+            vt = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                                 "-c:v", "h264_videotoolbox", "-f", "null", "-"], capture_output=True)  # fmt: skip
+            encoder = "h264_videotoolbox" if vt.returncode == 0 else "libx264"
+        else:
+            nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                                    "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
+            encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
     cmd += (
         ["-c:v", "copy"]
         if copy_video
-        else ["-c:v", args.encoder, "-cq", "19"]
-        if "nvenc" in args.encoder
-        else ["-c:v", args.encoder, "-crf", "18"]
+        else ["-c:v", encoder, "-cq", "19"]
+        if "nvenc" in encoder
+        else ["-c:v", encoder, "-q:v", "65"]
+        if "videotoolbox" in encoder
+        else ["-c:v", encoder, "-crf", "18"]
     )
     cmd += [
         "-c:a",
@@ -191,8 +208,9 @@ def main():
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else []
         )
 
+    orig_lang = original_audio_language(ISO3[src], src, args.quicktime_audio)
     cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + label(
-        "a:1", ISO3[src], LANGUAGES[src].TITLES["original"]
+        "a:1", orig_lang, LANGUAGES[src].TITLES["original"]
     )
     sub_meta = [
         ((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs

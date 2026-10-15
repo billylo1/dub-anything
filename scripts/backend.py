@@ -6,7 +6,8 @@ start launches the backend detached from the shell that asks (on Windows through
 the process service, so it outlives an agent's session), with OMNIVOICE_DATA_DIR,
 OMNIVOICE_CACHE_DIR and the full PATH set, and waits until /health says ok. The
 log goes to backend.log beside the data folder (or $VOICESTUDIO_LOG). The
-checkout is $VOICESTUDIO_DIR, or VoiceStudio beside this repo. dub_anything.py calls
+checkout is $VOICESTUDIO_DIR, else (macOS) the desktop app's runtime, else
+VoiceStudio beside this repo. dub_anything.py calls
 ensure() before GPU work and restarts a backend that stopped answering.
 """
 
@@ -19,12 +20,39 @@ import subprocess
 import sys
 import time
 
-import requests
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 PORT = int(re.search(r":(\d+)", API.split("//", 1)[-1]).group(1)) if re.search(r":\d+", API.split("//", 1)[-1]) else 80
-VS_DIR = pathlib.Path(os.environ.get("VOICESTUDIO_DIR") or ROOT.parent / "VoiceStudio")
+
+
+def find_vs_dir():
+    if os.environ.get("VOICESTUDIO_DIR"):
+        return pathlib.Path(os.environ["VOICESTUDIO_DIR"])
+    candidates = []
+    if sys.platform == "darwin":
+        candidates.append(
+            pathlib.Path.home() / "Library" / "Application Support" / "VoiceStudio" / "runtime" / "project"
+        )
+        candidates.append(pathlib.Path("/Applications/VoiceStudio.app/Contents/Resources"))
+    candidates.append(ROOT.parent / "VoiceStudio")
+    for c in candidates:
+        if (c / "backend").is_dir():
+            return c
+    return ROOT.parent / "VoiceStudio"
+
+
+VS_DIR = find_vs_dir()
+
+
+def venv_python():
+    """VoiceStudio's own virtualenv Python, or None without one."""
+    py = VS_DIR / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    return str(py) if py.is_file() else None
+
+
+def vs_python():
+    """The Python that runs the scripts: VoiceStudio's, else this one."""
+    return venv_python() or sys.executable
 
 
 def user_env(name):
@@ -68,18 +96,47 @@ def full_env():
                 seen.add(p.lower())
                 parts.append(p)
         env["PATH"] = ";".join(parts)
+    else:
+        # On macOS and Linux, ensure Homebrew and standard user bin dirs are on PATH
+        extra_paths = [
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            str(pathlib.Path.home() / ".local" / "bin"),
+            str(pathlib.Path.home() / ".cargo" / "bin"),
+        ]
+        curr = env.get("PATH", "").split(":")
+        for p in extra_paths:
+            if p not in curr and os.path.isdir(p):
+                curr.append(p)
+        env["PATH"] = ":".join(curr)
     return env
 
 
 def log_path(env=None):
-    env = env or full_env()
+    env = full_env() if env is None else env
     if os.environ.get("VOICESTUDIO_LOG"):
         return pathlib.Path(os.environ["VOICESTUDIO_LOG"])
     data = env.get("OMNIVOICE_DATA_DIR")
-    return (pathlib.Path(data).parent if data else VS_DIR) / "backend.log"
+    if data:
+        return pathlib.Path(data).parent / "backend.log"
+    if sys.platform == "darwin":
+        return pathlib.Path.home() / "Library" / "Application Support" / "OmniVoice" / "backend.log"
+    return VS_DIR / "backend.log"
 
 
 def health(timeout=5):
+    try:
+        import requests
+    except ImportError:  # a bare python3 (macOS): ask with the standard library
+        import json
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(f"{API}/health", timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
     try:
         return requests.get(f"{API}/health", timeout=timeout).json()
     except (requests.RequestException, ValueError):
@@ -123,12 +180,43 @@ def stop():
         for p in [pid] + ([int(parent)] if parent.isdigit() else []):
             subprocess.run(["taskkill", "/PID", str(p), "/T", "/F"], capture_output=True)
     else:
-        os.kill(pid, 15)
+        # A GUI or another launcher may share its process group with the backend.
+        # Port discovery does not establish ownership of that group: signal only
+        # the listener, including when escalating below.
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            pass
     for _ in range(30):
-        if not listening_pid():
+        if listening_pid() != pid:
             break
         time.sleep(1)
+    if sys.platform != "win32" and listening_pid() == pid:
+        try:
+            os.kill(pid, 9)
+        except ProcessLookupError:
+            pass
     print(f"backend: stopped (pid {pid})")
+
+
+def launch_cmd(env):
+    """The command that runs the backend. Windows starts it through uv, as it
+    always has. Elsewhere VoiceStudio's own virtualenv runs it when there is one
+    (the desktop app's runtime). Which Python runs this script, or how its path
+    was typed, doesn't change that."""
+    host = re.sub(r"^\w+://|:\d+.*$", "", API)
+    app = ["uvicorn", "main:app", "--app-dir", "backend", "--host", host, "--port", str(PORT)]
+    venv = venv_python()
+    if venv and sys.platform != "win32":
+        return [venv, "-m"] + app
+    uv = shutil.which("uv", path=env["PATH"])
+    if not uv and sys.platform == "darwin":
+        bundled_uv = pathlib.Path("/Applications/VoiceStudio.app/Contents/Resources/tools/uv")
+        if bundled_uv.is_file():
+            uv = str(bundled_uv)
+    if not uv:
+        raise SystemExit("backend: uv not found on PATH (see docs/setup.md)")
+    return [uv, "run", "--no-sync"] + app
 
 
 def start(wait=600):
@@ -146,24 +234,9 @@ def start(wait=600):
         stop()
     env = full_env()
     log = log_path(env)
-    uv = shutil.which("uv", path=env["PATH"])
-    if not uv:
-        raise SystemExit("backend: uv not found on PATH (see docs/setup.md)")
+    cmd = launch_cmd(env)
     if not (VS_DIR / "backend").is_dir():
         raise SystemExit(f"backend: no VoiceStudio checkout at {VS_DIR} (set VOICESTUDIO_DIR)")
-    cmd = [
-        uv,
-        "run",
-        "--no-sync",
-        "uvicorn",
-        "main:app",
-        "--app-dir",
-        "backend",
-        "--host",
-        re.sub(r"^\w+://|:\d+.*$", "", API),
-        "--port",
-        str(PORT),
-    ]
     if sys.platform == "win32":
         # A child of this shell dies with an agent's session; one started by the
         # process service (WMI) doesn't. A batch file carries the environment.
@@ -186,6 +259,7 @@ def start(wait=600):
         if r.returncode:
             raise SystemExit(f"backend: could not start it ({r.returncode}): {r.stderr.strip()[:300]}")
     else:
+        log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "ab") as f:
             subprocess.Popen(cmd, cwd=VS_DIR, env=env, stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
     print(f"backend: starting (log {log})", flush=True)

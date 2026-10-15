@@ -38,49 +38,90 @@ from gpulock import hold_gpu
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # The environment it runs in (dub.py prepends this to "python vc.py ...").
-UV_RUN = [
-    "uv",
-    "run",
-    "--no-project",
-    "--python",
-    "3.11",
-    "--index",
-    "https://download.pytorch.org/whl/cu128",
-    "--index-strategy",
-    "unsafe-best-match",
-    "--with",
-    "torch==2.8.0",
-    "--with",
-    "torchaudio==2.8.0",
-    "--with",
-    "numpy<2",
-    "--with",
-    "scipy",
-    "--with",
-    "librosa==0.11.0",
-    "--with",
-    "soundfile",
-    "--with",
-    "huggingface_hub==0.25.2",
-    "--with",
-    "s3tokenizer",
-    "--with",
-    "diffusers==0.29.0",
-    "--with",
-    "conformer==0.3.2",
-    "--with",
-    "safetensors==0.5.3",
-    "--with",
-    "omegaconf",
-    "--with",
-    "einops",
-    "--with",
-    "resemble-perth",
-    "--with",
-    "setuptools<81",
-    "--with",
-    "tqdm",
-]
+if sys.platform == "darwin":
+    UV_RUN = [
+        "uv",
+        "run",
+        "--no-project",
+        "--python",
+        "3.11",
+        "--with",
+        "torch",
+        "--with",
+        "torchaudio",
+        "--with",
+        "numpy<2",
+        "--with",
+        "scipy",
+        "--with",
+        "librosa==0.11.0",
+        "--with",
+        "soundfile",
+        "--with",
+        "huggingface_hub==0.25.2",
+        "--with",
+        "s3tokenizer",
+        "--with",
+        "diffusers==0.29.0",
+        "--with",
+        "conformer==0.3.2",
+        "--with",
+        "safetensors==0.5.3",
+        "--with",
+        "omegaconf",
+        "--with",
+        "einops",
+        "--with",
+        "resemble-perth",
+        "--with",
+        "setuptools<81",
+        "--with",
+        "tqdm",
+    ]
+else:
+    UV_RUN = [
+        "uv",
+        "run",
+        "--no-project",
+        "--python",
+        "3.11",
+        "--index",
+        "https://download.pytorch.org/whl/cu128",
+        "--index-strategy",
+        "unsafe-best-match",
+        "--with",
+        "torch==2.8.0",
+        "--with",
+        "torchaudio==2.8.0",
+        "--with",
+        "numpy<2",
+        "--with",
+        "scipy",
+        "--with",
+        "librosa==0.11.0",
+        "--with",
+        "soundfile",
+        "--with",
+        "huggingface_hub==0.25.2",
+        "--with",
+        "s3tokenizer",
+        "--with",
+        "diffusers==0.29.0",
+        "--with",
+        "conformer==0.3.2",
+        "--with",
+        "safetensors==0.5.3",
+        "--with",
+        "omegaconf",
+        "--with",
+        "einops",
+        "--with",
+        "resemble-perth",
+        "--with",
+        "setuptools<81",
+        "--with",
+        "tqdm",
+    ]
 
 
 def resample(x, sr, to):
@@ -139,7 +180,24 @@ class Chatterbox:
         from chatterbox.vc import ChatterboxVC
 
         self.torch, self.S3_SR = torch, S3_SR
-        self.vc = ChatterboxVC.from_pretrained("cuda" if torch.cuda.is_available() else "cpu")
+        device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+        try:
+            self.vc = ChatterboxVC.from_pretrained(device)
+        except (RuntimeError, NotImplementedError) as exc:
+            # CUDA failures must reach the runner's OOM/restart handling. Only
+            # unsupported MPS operations get a CPU retry; memory errors still fail.
+            message = str(exc).lower()
+            unsupported = isinstance(exc, NotImplementedError) or (
+                "mps" in message
+                and any(
+                    s in message
+                    for s in ("not implemented", "not currently implemented", "not supported", "unsupported")
+                )
+            )
+            if device != "mps" or not unsupported or "out of memory" in message:
+                raise
+            print(f"  Chatterbox: MPS initialization failed ({exc}); retrying on CPU", flush=True)
+            self.vc = ChatterboxVC.from_pretrained("cpu")
         self.sr = self.vc.sr
         self.target = None
 

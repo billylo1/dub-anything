@@ -2,14 +2,16 @@
 
 The directing notes for each language, on what differs with it as the source
 and as the target, are beside this file: [ja.md](ja.md), [en.md](en.md),
-[es.md](es.md), [ko.md](ko.md), [zh.md](zh.md). Read the job's two beside
+[es.md](es.md), [ko.md](ko.md), [zh.md](zh.md), [yue.md](yue.md). Read the job's two beside
 [directing.md](../directing.md).
 
 The scripts dub the pairs listed in `PAIRS` (`scripts/languages/__init__.py`):
 Japanese → English, Spanish → English, Korean → English, Chinese (Mandarin) →
-English, English → Japanese and English → Spanish.
+English, English → Japanese, English → Spanish, and English → Cantonese.
 What they know about a language is in one module, `scripts/languages/<code>.py`,
-named for its ISO 639-1 code. What was measured for a pair is its entry in
+named for its ISO 639-1 code, or its ISO 639-3 code when it has no two-letter
+one (`yue`). A file with a longer name there is a helper, not a language. What
+was measured for a pair is its entry in
 `PAIRS`. The scripts look a language up by its code (`LANGUAGES["es"]`) and
 never branch on it, so a new language is a new module and a new pair is a new
 entry, with no change anywhere else unless a tool itself can't handle the

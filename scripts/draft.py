@@ -189,13 +189,27 @@ def embedder():
     from pyannote.audio import Inference, Model
     from pyannote.audio.core.task import Problem, Resolution, Specifications
 
+    import pathlib
+
     # pyannote 3.4's from_pretrained breaks on huggingface_hub 1.x: load the file.
     torch.serialization.add_safe_globals([torch.torch_version.TorchVersion, Problem, Resolution, Specifications])
-    ckpt = glob.glob(
-        os.path.join(
-            HF_CACHE, "models--pyannote--wespeaker-voxceleb-resnet34-LM", "snapshots", "*", "pytorch_model.bin"
+    ckpt = []
+    for base in (HF_CACHE, str(pathlib.Path.home() / ".cache" / "huggingface" / "hub")):
+        ckpt = glob.glob(
+            os.path.join(
+                base, "models--pyannote--wespeaker-voxceleb-resnet34-LM", "snapshots", "*", "pytorch_model.bin"
+            )
         )
-    )
+        if ckpt:
+            break
+    if not ckpt:
+        try:
+            from huggingface_hub import snapshot_download
+
+            p = snapshot_download("pyannote/wespeaker-voxceleb-resnet34-LM")
+            ckpt = glob.glob(os.path.join(p, "pytorch_model.bin"))
+        except Exception:
+            pass
     if not ckpt:
         return None
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")

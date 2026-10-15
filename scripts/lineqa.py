@@ -92,6 +92,11 @@ def check(name, model, show_all, reroll):
             return {**k["settings"], "speed": None, "seed": None} == {**take["settings"], "speed": None, "seed": None}
 
         earlier = [k for k in kept.get(lid, []) if same(k) and k["sha"] != take["sha"]]
+        # Stored scores predate later language-normalization fixes. Compare all
+        # candidates with today's rules before choosing or restoring a take.
+        for k in earlier:
+            notes_now, ratio_now = LANGUAGES[tgt].compare(line["text"], k["got"])
+            k.update(notes=notes_now, ratio=round(ratio_now, 3))
         best = max(earlier, key=lambda k: (not k["notes"], k["ratio"]), default=None)
         if best and better(best, take):
             shutil.copy2(work / "takes" / best["file"], wav)

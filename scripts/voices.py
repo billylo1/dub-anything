@@ -88,7 +88,7 @@ def check(keys):
     from faster_whisper import WhisperModel
     from faster_whisper.audio import decode_audio
 
-    model = WhisperModel("Systran/faster-whisper-large-v3", device="cuda", compute_type="float16")
+    model = WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
     for k in keys:
         audio = decode_audio(str(wavs[k]), sampling_rate=SR)
         print(f"=== {k}  {len(audio) / SR:.1f} s  ref_text: {voices[k]['ref_text']}")

@@ -1,13 +1,25 @@
-# Setup (Windows + NVIDIA)
+# Setup
 
 Dub Anything needs a running [VoiceStudio](https://github.com/debpalash/VoiceStudio)
-backend, its models, and ffmpeg. The paths below are the ones used so far; any
-others work.
+backend, its models, and ffmpeg.
 
 ## 1. Tools
 
-- An NVIDIA GPU with ≥ 6 GB of VRAM (VoiceStudio's default voice engine). On a
-  16 GB RTX 4090 laptop everything runs at once. `nvidia-smi` should work.
+### macOS (Apple Silicon or Intel)
+- macOS 13.3+ (Ventura or newer). On Apple Silicon (M1/M2/M3/M4), Metal (MPS) acceleration is used automatically.
+- Install tools via Homebrew:
+  ```bash
+  brew install git uv ffmpeg
+  ```
+  *(Note: Standard Homebrew `ffmpeg` is sufficient. Dub Anything includes automatic PIL fallbacks for casting previews when FFmpeg is built without `drawtext`.)*
+- In the clone, turn on pre-commit hooks and git blame filters:
+  ```bash
+  git config core.hooksPath .githooks
+  git config blame.ignoreRevsFile .git-blame-ignore-revs
+  ```
+
+### Windows (NVIDIA)
+- An NVIDIA GPU with ≥ 6 GB of VRAM. `nvidia-smi` should work.
 - NVIDIA driver ≥ 610 if you want `scripts/split.py --encoder h264_nvenc` (current
   FFmpeg builds need NVENC API 13.1). Otherwise use the default x264.
 - `winget install Git.Git astral-sh.uv Gyan.FFmpeg`, then open a new terminal.
@@ -15,8 +27,20 @@ others work.
   check (ruff format and lint) and `git config blame.ignoreRevsFile
   .git-blame-ignore-revs` keeps formatting commits out of `git blame`.
 
-## 2. Keep models and data out of AppData
+## 2. Models and Data Directories
 
+### macOS
+By default, Dub Anything and VoiceStudio place data in:
+- Data / dub jobs: `~/Library/Application Support/OmniVoice/dub_jobs`
+- Model caches: `~/Library/Caches/OmniVoice/hf_cache`
+
+To customize these or keep them on a specific drive, add to your `~/.zshrc`:
+```bash
+export OMNIVOICE_DATA_DIR="$HOME/VoiceStudioData/data"
+export OMNIVOICE_CACHE_DIR="$HOME/VoiceStudioData/models"
+```
+
+### Windows
 Put VoiceStudio's data, its model cache and uv's Python installs somewhere
 neutral. The VoiceStudio GUI can share them, and they survive sandboxed shells.
 Some sandboxed agent apps (the Claude desktop app, for one) redirect AppData
@@ -33,11 +57,34 @@ $d = "C:\VoiceStudioData"
 [Environment]::SetEnvironmentVariable("HF_TOKEN_PATH", "$env:USERPROFILE\.cache\huggingface\token", "User")
 ```
 
-Dub Anything's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR`, so it
-must be set in any shell that runs them.
+Dub Anything's scripts find VoiceStudio's jobs through `OMNIVOICE_DATA_DIR` (or system defaults), so set it in any shell that runs them if you use a custom path.
 
 ## 3. VoiceStudio, pinned, with local fixes
 
+### macOS
+VoiceStudio can be installed either via the official desktop application or by checking out the source:
+
+#### Option A: Official VoiceStudio Desktop App (Recommended)
+1. Download and install `VoiceStudio-Electron-*-mac-arm64.dmg` from the VoiceStudio releases.
+2. Launch VoiceStudio once so it initializes its runtime at `~/Library/Application Support/VoiceStudio/runtime/project`.
+Dub Anything automatically detects this installation, its runtime backend, and its bundled virtualenv.
+
+#### Option B: From Source
+```bash
+git clone https://github.com/debpalash/VoiceStudio.git ~/python/VoiceStudio
+git -C ~/python/VoiceStudio checkout -b local-fixes c52618af
+git -C ~/python/VoiceStudio apply <path-to-dub-anything>/patches/voicestudio-local-fixes.patch
+cd ~/python/VoiceStudio && uv sync
+uv run python backend/main.py --diagnose
+```
+The scripts find a source checkout only beside this repo (or the desktop app's
+runtime). For one elsewhere, like this one, add to your `~/.zshrc`:
+```bash
+export VOICESTUDIO_DIR="$HOME/python/VoiceStudio"
+```
+*(On macOS, PyTorch on Apple Silicon uses Metal / MPS acceleration; `scripts/setup.py` cuDNN 8 installation is Windows-only).*
+
+### Windows
 ```powershell
 git clone https://github.com/debpalash/VoiceStudio.git C:\git\VoiceStudio
 git -C C:\git\VoiceStudio checkout -b local-fixes c52618af
@@ -68,6 +115,17 @@ IndexTTS 2.5 is optional (about 12 GB). Install it through the running backend:
 
 ## 4. Start the backend
 
+### macOS
+From this repo:
+```bash
+python3 scripts/backend.py start
+```
+Or directly from VoiceStudio:
+```bash
+cd ~/python/VoiceStudio && uv run --no-sync uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900
+```
+
+### Windows
 From this repo, with VoiceStudio's Python:
 
 ```powershell
@@ -77,7 +135,7 @@ From this repo, with VoiceStudio's Python:
 It starts the backend detached (it keeps running after the terminal or the
 agent's session closes), logs to `backend.log` beside the data folder, and
 waits until `http://127.0.0.1:3900/health` returns
-`{"status":"ok","device":"cuda (...)"}`. `scripts/backend.py status`, `stop` and
+`{"status":"ok","device":"cuda (...)"}` (or `"device":"mps"` on Apple Silicon). `scripts/backend.py status`, `stop` and
 `restart` do what they say; `scripts/dub_anything.py run` starts it when it's down.
 Or run it yourself in a terminal you leave open:
 
@@ -91,6 +149,17 @@ while `/health` still says `cuda`.
 
 ## 5. Models (~15 GB)
 
+### macOS
+```bash
+api="http://127.0.0.1:3900"
+for r in "k2-fsa/OmniVoice" "Systran/faster-whisper-large-v3" "audio-cpp/audio.cpp-gguf"; do
+  curl -s -X POST "$api/models/install" -H "Content-Type: application/json" -d "{\"repo_id\":\"$r\"}"
+done
+curl -s -X POST "$api/engines/audiocpp/runtime/install"
+curl -s "$api/models/install/status"
+```
+
+### Windows
 ```powershell
 $api = "http://127.0.0.1:3900"
 foreach ($r in "k2-fsa/OmniVoice", "Systran/faster-whisper-large-v3", "audio-cpp/audio.cpp-gguf") {
@@ -104,6 +173,14 @@ the licenses of `pyannote/speaker-diarization-3.1` and
 `pyannote/segmentation-3.0` on Hugging Face. Then log in with a read token and
 install it:
 
+#### macOS
+```bash
+hf auth login   # or hf login
+curl -s -X POST "http://127.0.0.1:3900/models/install" -H "Content-Type: application/json" -d '{"repo_id":"pyannote/speaker-diarization-3.1"}'
+curl -s -X POST "http://127.0.0.1:3900/engines/diarisation/select" -H "Content-Type: application/json" -d '{"engine_id":"pyannote"}'
+```
+
+#### Windows
 ```powershell
 C:\git\VoiceStudio\.venv\Scripts\hf.exe auth login
 Invoke-RestMethod -Method Post "$api/models/install" -ContentType application/json -Body '{"repo_id":"pyannote/speaker-diarization-3.1"}'
@@ -128,8 +205,23 @@ git clone --depth 1 https://github.com/resemble-ai/chatterbox vendor\chatterbox
 The weights (`ResembleAI/chatterbox`, about 1 GB) download into the Hugging Face
 cache (`HF_HUB_CACHE`, else `OMNIVOICE_CACHE_DIR`) on the first conversion.
 
+## Playback in QuickTime
+
+Original audio keeps its language tags by default. If QuickTime selects an
+English original instead of the default dub, add `--quicktime-audio` when
+creating the job with `scripts/dub_anything.py new`. This optional workaround
+tags retained English original audio as `und` while preserving other languages.
+For manual assembly and delivery, pass `--quicktime-audio` to both
+`scripts/assemble.py` and `scripts/deliver.py`.
+
 ## 6. Check
 
+### macOS
+```bash
+python3 scripts/dub.py prep <some short clip>.mp4      # prints a Japanese transcript
+```
+
+### Windows
 ```powershell
 cd <path-to-dub-anything>
 $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
@@ -138,13 +230,13 @@ $py = "C:\git\VoiceStudio\.venv\Scripts\python.exe"
 
 Five tools run in their own throwaway uv environments, so they can't disturb
 VoiceStudio's:
-- `separate.py`: audio-separator with the CUDA 12.8 PyTorch. Its Roformer model
-  (about 900 MB) downloads on first use into `%OMNIVOICE_CACHE_DIR%\audio-separator`.
+- `separate.py`: audio-separator (on macOS with PyPI torch; on Windows with CUDA 12.8 PyTorch). Its Roformer model
+  (about 900 MB) downloads on first use into the model cache (`audio-separator`).
 - `second.py`: sherpa-onnx (its models, about 850 MB for Japanese speech,
   1 GB for English, 900 MB for Spanish and 320 MB for Korean, download into the
   model cache on first use).
 - `subs.py`: RapidOCR (its Korean recogniser downloads on first use, for a
-  Korean source).
+  Korean source; uses standard onnxruntime on macOS, onnxruntime-gpu on Windows).
 - `vc.py`: Chatterbox, which `scripts/dub.py generate` starts itself for the
   `"american"` voice.
 - `languages/kana.py`: pykakasi, which `lineqa.py` starts itself to read takes in

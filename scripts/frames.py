@@ -13,7 +13,49 @@ import subprocess
 import tempfile
 
 # Escaped twice: once for the drawtext option, once for the filtergraph.
-FONT = "C\\\\:/Windows/Fonts/arial.ttf" if os.name == "nt" else None
+if os.name == "nt":
+    FONT = "C\\\\:/Windows/Fonts/arial.ttf"
+elif os.path.exists("/System/Library/Fonts/Supplemental/Arial.ttf"):
+    FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
+elif os.path.exists("/System/Library/Fonts/Helvetica.ttc"):
+    FONT = "/System/Library/Fonts/Helvetica.ttc"
+else:
+    FONT = None
+
+
+def has_drawtext():
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-filters"], capture_output=True, text=True)
+        return "drawtext" in r.stdout
+    except Exception:
+        return False
+
+
+def stamp_pil(frame_path, text):
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        with Image.open(frame_path) as img:
+            draw = ImageDraw.Draw(img)
+            font = None
+            for p in (
+                "/System/Library/Fonts/Supplemental/Arial.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/Library/Fonts/Arial.ttf",
+            ):
+                if os.path.exists(p):
+                    try:
+                        font = ImageFont.truetype(p, 17)
+                        break
+                    except Exception:
+                        pass
+            font = font or ImageFont.load_default()
+            bbox = draw.textbbox((4, 4), text, font=font)
+            draw.rectangle((bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2), fill="black")
+            draw.text((4, 4), text, fill="yellow", font=font)
+            img.save(frame_path)
+    except Exception:
+        pass
 
 
 def main():
@@ -25,18 +67,26 @@ def main():
     ap.add_argument("--width", type=int, default=400)
     args = ap.parse_args()
 
+    drawtext_ok = has_drawtext()
     tmp = pathlib.Path(tempfile.mkdtemp())
     frames = []
     for k, spec in enumerate(args.times):
         t, _, label = spec.partition(":")
-        text = f"{float(t):.1f} {label}".strip().replace(":", "\\:").replace("'", "")
-        draw = (
-            f"drawtext={'fontfile=' + FONT + ':' if FONT else ''}text='{text}':x=4:y=4:fontsize=17"
-            f":fontcolor=yellow:box=1:boxcolor=black"
-        )
+        display_text = f"{float(t):.1f} {label}".strip()
         f = tmp / f"{k:03d}.jpg"
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", t, "-i", args.video, "-frames:v", "1",
-                        "-vf", f"scale={args.width}:-2,{draw}", str(f)], stderr=subprocess.DEVNULL)  # fmt: skip
+        if drawtext_ok:
+            esc_text = display_text.replace(":", "\\:").replace("'", "")
+            draw = (
+                f"drawtext={'fontfile=' + FONT + ':' if FONT else ''}text='{esc_text}':x=4:y=4:fontsize=17"
+                f":fontcolor=yellow:box=1:boxcolor=black"
+            )
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", t, "-i", args.video, "-frames:v", "1",
+                            "-vf", f"scale={args.width}:-2,{draw}", str(f)], stderr=subprocess.DEVNULL)  # fmt: skip
+        else:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", t, "-i", args.video, "-frames:v", "1",
+                            "-vf", f"scale={args.width}:-2", str(f)], stderr=subprocess.DEVNULL)  # fmt: skip
+            if f.exists():
+                stamp_pil(f, display_text)
         if f.exists():
             frames.append(f)
         else:  # ffmpeg writes nothing for a time past the end of the video

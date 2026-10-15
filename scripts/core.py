@@ -16,30 +16,77 @@ import sys
 import time
 import unicodedata
 
-import numpy as np
-import soundfile as sf
-
 from languages import LANGUAGES, PAIR, PAIRS, pair_of
 
 HERE = pathlib.Path(__file__).resolve().parent  # the scripts
 ROOT = HERE.parent  # the repo: work/, videos/, vendor/
 WORK = ROOT / "work"
+
+
+def default_data_dir():
+    """Default location for VoiceStudio / OmniVoice data (same as backend/core/config.py)."""
+    if os.environ.get("OMNIVOICE_DATA_DIR"):
+        return pathlib.Path(os.environ["OMNIVOICE_DATA_DIR"])
+    if sys.platform == "win32":
+        return pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice"
+    if sys.platform == "darwin":
+        return pathlib.Path.home() / "Library" / "Application Support" / "OmniVoice"
+    return pathlib.Path.home() / ".local" / "share" / "OmniVoice"
+
+
+def cache_root():
+    """OmniVoice's model folder: $OMNIVOICE_CACHE_DIR, else the platform's default.
+    Tools' own models (separate.py's audio-separator/) go in it."""
+    if os.environ.get("OMNIVOICE_CACHE_DIR"):
+        return pathlib.Path(os.environ["OMNIVOICE_CACHE_DIR"])
+    if sys.platform == "win32":
+        return pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice"
+    if sys.platform == "darwin":
+        return pathlib.Path.home() / "Library" / "Caches" / "OmniVoice"
+    return pathlib.Path.home() / ".cache" / "OmniVoice"
+
+
+def default_cache_dir():
+    """The Hugging Face model cache: $HF_HUB_CACHE, else $OMNIVOICE_CACHE_DIR
+    itself, else hf_cache in the platform's default."""
+    return os.environ.get("HF_HUB_CACHE") or os.environ.get("OMNIVOICE_CACHE_DIR") or str(cache_root() / "hf_cache")
+
+
 # Same resolution as VoiceStudio's backend/core/config.py.
-JOBS = (
-    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
-    / "dub_jobs"
-)
-HF_CACHE = (
-    os.environ.get("HF_HUB_CACHE")
-    or os.environ.get("OMNIVOICE_CACHE_DIR")
-    or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
-)
+JOBS = default_data_dir() / "dub_jobs"
+HF_CACHE = default_cache_dir()
+
+
+def patch_av_open():
+    """PyAV 19.0.0 removed the metadata_errors argument from av.open(), which
+    faster-whisper's decode_audio still passes. Compatibility wrapper."""
+    try:
+        import av
+
+        orig_open = av.open
+
+        def _compat_open(*args, **kwargs):
+            if "metadata_errors" in kwargs:
+                try:
+                    return orig_open(*args, **kwargs)
+                except TypeError:
+                    kwargs.pop("metadata_errors", None)
+                    return orig_open(*args, **kwargs)
+            return orig_open(*args, **kwargs)
+
+        av.open = _compat_open
+    except Exception:
+        pass
+
+
+patch_av_open()
 
 
 def whisper_setup():
     """Prepare a standalone faster-whisper: reuse VoiceStudio's downloaded models
     and preload the cuDNN 8 DLLs CTranslate2 needs on CUDA (PyTorch ships cuDNN 9;
     the backend does the same in backend/core/cudnn8.py)."""
+    patch_av_open()
     os.environ.setdefault("HF_HUB_CACHE", HF_CACHE)
     lib = pathlib.Path(sys.prefix) / "Lib" / "site-packages" / "cudnn8_compat" / "nvidia" / "cudnn" / "bin"
     if sys.platform == "win32" and lib.is_dir():
@@ -53,6 +100,11 @@ def whisper_setup():
 def out_dir(doc):
     """Finished dubs go to a 'dubbed' folder beside the source video (or $DUB_OUT)."""
     return pathlib.Path(os.environ.get("DUB_OUT") or pathlib.Path(doc["video"]).parent / "dubbed")
+
+
+def original_audio_language(lang, source, quicktime_audio=False):
+    """Optional QuickTime playback preference workaround; preserve other languages."""
+    return "und" if quicktime_audio and source == "en" and lang == "eng" else lang
 
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -129,6 +181,8 @@ def end_dip(db, start, end):
     """The time of the deepest dip in the voice within DIP_REACH of a window's end
     (5 ms frames of edges.frames_db, smoothed over 20 ms), if it is at least DIP_DB
     below the line's speech level; else None."""
+    import numpy as np
+
     import edges
 
     frame = edges.HOP / edges.SR
@@ -193,12 +247,16 @@ def unclean_windows(work, job_id, lines, ids, dips=False, cast_lines=False):
         embed = draft.embedder()
         voices = load_json(WORK / "voices.json", {})
         who = lambda v: voices[v].get("register_of", v)  # noqa: E731
-        cast = {
-            v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
-            for v in {line["voice"] for line in lines}
-        }
+        cast = (
+            {
+                v: embed(draft.decode_audio(str(WORK / "voices" / f"{v}.wav"), sampling_rate=sr))
+                for v in {line["voice"] for line in lines}
+            }
+            if embed
+            else {}
+        )
         # Exclude this part's own lines: a line mustn't vouch for itself.
-        cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if cast_lines else {}
+        cents = draft.cast_centroids(embed, {who(v) for v in cast}, exclude=work.name) if (cast_lines and embed) else {}
         for line, key in zip(lines, keys):
             if key in cache:
                 continue
@@ -239,6 +297,9 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
     original is cut at the dip) and lines too long to fit OmniVoice's limit with
     the clips. Returns {id: (path, transcript)}; the path's name ends with the
     window (and the cut), which dub.py records as how the take was made."""
+    import numpy as np
+    import soundfile as sf
+
     voices = load_json(WORK / "voices.json", {})
     src = langs(work.name)[0]
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
@@ -348,6 +409,9 @@ def voice_wav(key, rebuild=False):
     """work/voices/<key>.wav: the voice's clips from voices.json joined with 0.3 s
     pauses. Built when missing, when rebuild is set, or when the voice's entry no
     longer matches the profile it was last uploaded as."""
+    import numpy as np
+    import soundfile as sf
+
     spec = load_json(WORK / "voices.json", {})[key]
     ref = WORK / "voices" / f"{key}.wav"
     uploaded = load_json(WORK / "profiles.json", {}).get(key, {})
@@ -370,6 +434,9 @@ def speech_length(wav):
     """A take's length as VoiceStudio times it: generated edge silence trimmed
     to the first/last sample above -50 dBFS, plus 50 ms either side
     (services/audio_dsp.trim_speech_padding)."""
+    import numpy as np
+    import soundfile as sf
+
     audio, sr = sf.read(wav, dtype="float32")
     env = np.abs(audio).max(axis=1) if audio.ndim > 1 else np.abs(audio)
     voiced = np.nonzero(env > 10 ** (-50 / 20))[0]
@@ -416,6 +483,7 @@ def _ref_frames(path, mtime):
     (create_voice_clone_prompt): mono at 24 kHz, pauses over 0.2 s shortened and
     the edges trimmed. (OmniVoice also raises a quiet clip's level before
     trimming; leaving that out predicted rendered takes better.)"""
+    import soundfile as sf
     import torch
     import torchaudio
 

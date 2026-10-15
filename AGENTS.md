@@ -45,18 +45,24 @@ cloned or shared are final.
   per-show notes: story, cast, word choices. Read it, and add to it when you
   learn something about a show.
 - The scripts are in `scripts/`. Run them from the repo root with VoiceStudio's
-  Python: `C:\git\VoiceStudio\.venv\Scripts\python.exe scripts/fit.py <part>`.
-  A script named alone in these docs (`fit.py`) is one of them. Make sure
-  `OMNIVOICE_DATA_DIR` / `OMNIVOICE_CACHE_DIR` are set in the shell. They're user
-  env vars, but a shell started before they were set won't have them.
+  Python (on Windows: `C:\git\VoiceStudio\.venv\Scripts\python.exe scripts/fit.py <part>`;
+  on macOS: `python3 scripts/fit.py <part>` or with VoiceStudio's virtualenv python).
+  A script named alone in these docs (`fit.py`) is one of them.
+  Make sure `OMNIVOICE_DATA_DIR` / `OMNIVOICE_CACHE_DIR` are set in the shell if using
+  custom paths (on macOS, standard defaults in `~/Library/Application Support/OmniVoice`
+  and `~/Library/Caches/OmniVoice` are used automatically when unset).
 - The VoiceStudio backend must be up: `scripts/backend.py status`.
   `scripts/backend.py start` starts it detached from your shell, so it outlives
-  your session, and waits until it answers (`restart` after an NVIDIA driver
+  your session, and waits until it answers (`restart` after a driver/system
   update, or when renders crawl). `scripts/dub_anything.py run` starts it too.
 - Tools in their own environments (`scripts/dub_anything.py run` starts them itself):
-  - `separate.py`: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python scripts/separate.py <clip> ...`
+  - `separate.py`:
+    macOS: `uv run --no-project --python 3.11 --with torch --with audio-separator --with onnxruntime python scripts/separate.py <clip> ...`
+    Windows: `uv run --no-project --python 3.11 --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match --with torch==2.8.0 --with audio-separator --with onnxruntime python scripts/separate.py <clip> ...`
   - `second.py`: `uv run --no-project --python 3.12 --with sherpa-onnx --with soundfile --with scipy --with pykakasi --with huggingface_hub python scripts/second.py <clip> ...`
-  - `subs.py` (burned-in captions): `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python scripts/subs.py <clip>`;
+  - `subs.py` (burned-in captions):
+    macOS: `uv run --no-project --python 3.12 --with rapidocr --with onnxruntime python scripts/subs.py <clip>`
+    Windows: `uv run --no-project --python 3.12 --with rapidocr --with "onnxruntime-gpu[cuda,cudnn]" python scripts/subs.py <clip>`;
     `signs.py` (text in the picture to translate) runs the same way
   - `pitch.py`, `contour.py`: `uv run --no-project --python 3.12 --with librosa --with soundfile python scripts/<script>`
   - `vc.py` (the `"american"` voice), which `scripts/dub.py generate` starts
@@ -74,8 +80,8 @@ work; you direct.
 1. **Intake.** Confirm the source file and the language pair: Japanese →
    English, Spanish → English (`--source es`), Korean → English (`--source
    ko`), Chinese → English (`--source zh`, checked on Mandarin), English → Japanese
-   (`--source en --target ja`) or English → Spanish
-   (`--source en --target es`), the pairs the scripts know (`PAIRS` in
+   (`--source en --target ja`), English → Spanish (`--source en --target es`)
+   or English → Cantonese (`--source en --target yue`), the pairs the scripts know (`PAIRS` in
    `scripts/languages/`). Add a pair that isn't there first, as
    [docs/languages/README.md](docs/languages/README.md) says under "Adding a
    language": the module, a short test dub measured with and without per-line

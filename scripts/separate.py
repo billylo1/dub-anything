@@ -18,25 +18,19 @@ voices.json changes.
 
 import argparse
 import json
-import os
 import pathlib
 import shutil
 import sys
 import tempfile
 
+from core import cache_root, default_data_dir
 from gpulock import hold_gpu
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
 # Same resolution as core.py / VoiceStudio's backend/core/config.py.
-DATA = pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
-JOBS = DATA / "dub_jobs"
-MODELS = (
-    pathlib.Path(
-        os.environ.get("OMNIVOICE_CACHE_DIR") or pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice"
-    )
-    / "audio-separator"
-)
+JOBS = default_data_dir() / "dub_jobs"
+MODELS = cache_root() / "audio-separator"
 STEMS = ("vocals.wav", "no_vocals.wav")
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

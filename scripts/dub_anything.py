@@ -71,24 +71,38 @@ JOB_DIR = WORK / "jobs"
 VIDEOS = ROOT / "videos"
 QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
-PY = sys.executable
+PY = backend.vs_python()
 UV = ["uv", "run", "--no-project"]
-SEPARATE = UV + [
-    "--python",
-    "3.11",
-    "--index",
-    "https://download.pytorch.org/whl/cu128",
-    "--index-strategy",
-    "unsafe-best-match",
-    "--with",
-    "torch==2.8.0",
-    "--with",
-    "audio-separator",
-    "--with",
-    "onnxruntime",
-    "python",
-    "scripts/separate.py",
-]
+if sys.platform == "darwin":
+    SEPARATE = UV + [
+        "--python",
+        "3.11",
+        "--with",
+        "torch",
+        "--with",
+        "audio-separator",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/separate.py",
+    ]
+else:
+    SEPARATE = UV + [
+        "--python",
+        "3.11",
+        "--index",
+        "https://download.pytorch.org/whl/cu128",
+        "--index-strategy",
+        "unsafe-best-match",
+        "--with",
+        "torch==2.8.0",
+        "--with",
+        "audio-separator",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/separate.py",
+    ]
 SECOND = UV + [
     "--python",
     "3.12",
@@ -105,16 +119,28 @@ SECOND = UV + [
     "python",
     "scripts/second.py",
 ]
-SUBS = UV + [
-    "--python",
-    "3.12",
-    "--with",
-    "rapidocr",
-    "--with",
-    "onnxruntime-gpu[cuda,cudnn]",
-    "python",
-    "scripts/subs.py",
-]
+if sys.platform == "darwin":
+    SUBS = UV + [
+        "--python",
+        "3.12",
+        "--with",
+        "rapidocr",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/subs.py",
+    ]
+else:
+    SUBS = UV + [
+        "--python",
+        "3.12",
+        "--with",
+        "rapidocr",
+        "--with",
+        "onnxruntime-gpu[cuda,cudnn]",
+        "python",
+        "scripts/subs.py",
+    ]
 SIGNS = SUBS[:-1] + ["scripts/signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "cast_lines": False, "voice": "american"}
@@ -192,7 +218,13 @@ def split(job):
     pdir = VIDEOS / f"{job['slug']}-parts"
     if (pdir / "parts.json").exists():
         return True
-    cmd = [PY, "scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
+    try:
+        import faster_whisper  # noqa: F401
+
+        py = [PY]
+    except ImportError:
+        py = UV + ["--python", "3.12", "--with", "faster-whisper", "python"]
+    cmd = py + ["scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
     for w in job["split"]["whole"]:
         cmd += ["--whole", w]
     return tool(job, "split", cmd, "split")[0]
@@ -504,6 +536,8 @@ def advance(job, name):
 
 def delivery_sha(job, ps):
     h = hashlib.sha1()
+    if job.get("quicktime_audio"):
+        h.update(b"quicktime-audio")
     for p in ps:
         for voice in job["voices"]:
             name = voice_part(p["name"], voice)
@@ -526,15 +560,18 @@ def deliver_job(job, ps):
         return True
     dubs = {}
     for voice in job["voices"]:
-        ok, out = tool(
-            job, f"assemble {voice}", [PY, "scripts/assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}"
-        )
+        cmd = [PY, "scripts/assemble.py", job["slug"], "--voice", voice]
+        if job.get("quicktime_audio"):
+            cmd.append("--quicktime-audio")
+        ok, out = tool(job, f"assemble {voice}", cmd, f"assemble-{voice}")
         m = re.search(r"-> (.+\.mp4)", out)
         if not ok or not m:
             return problem(job, f"assemble.py failed for the {voice} voice: {last_error(out)}")
         dubs[voice] = pathlib.Path(m.group(1).strip())
     log(f"deliver into {pathlib.Path(job['source']).name}")
-    out = deliver.deliver(job["source"], dubs, job["default"], job_langs(job))
+    out = deliver.deliver(
+        job["source"], dubs, job["default"], job_langs(job), quicktime_audio=bool(job.get("quicktime_audio"))
+    )
     job["source"] = str(out)
     job["delivered"] = {"path": str(out), "at": time.strftime("%Y-%m-%d %H:%M"), "state": sha}
     job.pop("problems", None)
@@ -663,6 +700,7 @@ def cmd_new(args):
         "split": {"minutes": args.minutes, "whole": args.whole},
         "captions": "open" if args.subtitles else args.captions,
         "signs": args.signs,
+        "quicktime_audio": args.quicktime_audio,
         "created": time.strftime("%Y-%m-%d %H:%M"),
     }
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
@@ -734,6 +772,9 @@ def cmd_run(args):
     ps = parts(job)
     job.pop("problems", None)
     save_job(job)
+    # A later failure on a previously blocked part is new, including the same
+    # failure after the director has changed its script.
+    known = set()
     for p in ps:  # a new run retries what failed for reasons outside the script
         for v in job["voices"]:
             path = WORK / voice_part(p["name"], v) / "state.json"
@@ -742,13 +783,8 @@ def cmd_run(args):
                 log(f'{voice_part(p["name"], v)}: retrying after "{st.pop("problem")[:80]}"')
                 st["fails"] = 0
                 write_json(path, st)
-    # Parts blocked before this run are known to the director; --watch stops for new ones.
-    known = {
-        voice_part(p["name"], v)
-        for p in ps
-        for v in job["voices"]
-        if load_json(WORK / voice_part(p["name"], v) / "state.json", {}).get("problem")
-    }
+            if st.get("problem"):
+                known.add((voice_part(p["name"], v), st.get("script"), st["problem"]))
     seen, new_block = set(), False
     while True:
         second(job, ps)
@@ -766,10 +802,11 @@ def cmd_run(args):
                 if state == "blocked":
                     blocked = True
                     st = load_json(WORK / name / "state.json", {})
-                    if (name, st.get("problem")) not in seen:
-                        seen.add((name, st.get("problem")))
+                    block = (name, st.get("script"), st.get("problem"))
+                    if block not in seen:
+                        seen.add(block)
                         log(f"BLOCKED {name}: {st.get('problem')}")
-                        new_block |= name not in known
+                        new_block |= block not in known
         if not busy:
             # Preparation fills the time no ready part needs: renders never wait for
             # the rest of the video to be prepped.
@@ -845,6 +882,11 @@ def main():
     a.add_argument("--source", default="ja", help="language the video speaks (default ja)")
     a.add_argument("--target", default="en", help="language to dub it into (default en)")
     a.add_argument("--voices", choices=["actor", "american", "both"], default="actor")
+    a.add_argument(
+        "--quicktime-audio",
+        action="store_true",
+        help="tag English original audio as und to prefer the dub in QuickTime",
+    )
     a.add_argument("--slug")
     a.add_argument("--minutes", type=float, default=3)
     a.add_argument("--whole", action="append", default=[], metavar="A-B")

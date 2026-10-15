@@ -99,8 +99,9 @@ def main():
     from torchaudio.pipelines import SQUIM_OBJECTIVE
 
     hold_gpu()
-    squim = SQUIM_OBJECTIVE.get_model().to("cuda").eval()
-    whisper = draft.WhisperModel("Systran/faster-whisper-large-v3", device="cuda", compute_type="float16")
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    squim = SQUIM_OBJECTIVE.get_model().to(dev).eval()
+    whisper = draft.WhisperModel("Systran/faster-whisper-large-v3", device="auto", compute_type="default")
 
     print(
         f"{','.join(origs)}: {len(keep)} lines; "
@@ -124,7 +125,7 @@ def main():
             if orig[k][2] is not None:
                 ends.append(speech_length(wav) - orig[k][2])
             with torch.no_grad():
-                _, pesq, sdr = (float(v) for v in squim(torch.from_numpy(t)[None].cuda()))
+                _, pesq, sdr = (float(v) for v in squim(torch.from_numpy(t)[None].to(dev)))
             _, info = whisper.transcribe(t, language=None, beam_size=1, without_timestamps=True)
             q.append((pesq, sdr, floor_db(t), dict(info.all_language_probs or []).get(tgt, 0)))
         rho, prh, erh, n, per = [], [], [], [], []
