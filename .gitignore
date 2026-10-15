@@ -25,3 +25,7 @@ __pycache__/
 
 # Third-party code fetched at setup (vc.py: Chatterbox).
 vendor/
+
+# Local helper scripts
+scripts/dub_youtube.py
+dub_youtube.py
