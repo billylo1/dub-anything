@@ -9,7 +9,7 @@ You give it a video file. You get the same file back as
 track away, and subtitles in both languages are included.
 
 It dubs Japanese, Spanish, Korean and Chinese into English, and English into
-Japanese and Spanish. Need another language? Just ask: your agent adds the new
+Japanese, Spanish and Cantonese (yue). Need another language? Just ask: your agent adds the new
 pair as part of the job. Once it works, please
 [send it back](#other-languages-and-hardware) so everyone gets it.
 
@@ -48,7 +48,8 @@ a listener notices:
 
 ## What you need
 
-- **A Windows PC with an NVIDIA GPU** with at least 6 GB of memory. A 16 GB
+- **macOS (Apple Silicon M1/M2/M3/M4 or Intel)** with Metal (MPS) acceleration,
+  or **a Windows PC with an NVIDIA GPU** with at least 6 GB of memory. A 16 GB
   card runs everything at once. (Linux should be a short port; see
   [below](#other-languages-and-hardware).)
 - **Disk space:** about 40 GB for VoiceStudio, the models and the tools'
@@ -211,11 +212,11 @@ short test dub before adding it, as
 open a pull request with its module, its notes (`docs/languages/<code>.md`)
 and the pair's entry in `PAIRS`, so the next person gets it ready-made.
 
-The models run on CUDA and mostly fall back to the CPU without it, much
-slower. Video is encoded with NVENC when it's there, else x264. The
-Windows-only parts (starting the backend, the GPU lock, a cuDNN workaround)
-already check the platform, so Linux with an NVIDIA GPU should be the shortest
-port.
+The models run on Metal MPS (on Apple Silicon macOS) or CUDA (on Windows/Linux)
+and fall back to the CPU without it, slower. Video is encoded with
+Apple VideoToolbox on macOS, NVENC on Windows/Linux when NVIDIA is present,
+else x264. Platform differences (paths, desktop app runtime detection, GPU locks,
+audio separation environments) are handled automatically across macOS and Windows.
 
 ## Contributing
 

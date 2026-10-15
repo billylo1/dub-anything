@@ -144,6 +144,17 @@ while `/health` still says `cuda`.
 
 ## 5. Models (~15 GB)
 
+### macOS
+```bash
+api="http://127.0.0.1:3900"
+for r in "k2-fsa/OmniVoice" "Systran/faster-whisper-large-v3" "audio-cpp/audio.cpp-gguf"; do
+  curl -s -X POST "$api/models/install" -H "Content-Type: application/json" -d "{\"repo_id\":\"$r\"}"
+done
+curl -s -X POST "$api/engines/audiocpp/runtime/install"
+curl -s "$api/models/install/status"
+```
+
+### Windows
 ```powershell
 $api = "http://127.0.0.1:3900"
 foreach ($r in "k2-fsa/OmniVoice", "Systran/faster-whisper-large-v3", "audio-cpp/audio.cpp-gguf") {
@@ -157,6 +168,14 @@ the licenses of `pyannote/speaker-diarization-3.1` and
 `pyannote/segmentation-3.0` on Hugging Face. Then log in with a read token and
 install it:
 
+#### macOS
+```bash
+hf auth login   # or hf login
+curl -s -X POST "http://127.0.0.1:3900/models/install" -H "Content-Type: application/json" -d '{"repo_id":"pyannote/speaker-diarization-3.1"}'
+curl -s -X POST "http://127.0.0.1:3900/engines/diarisation/select" -H "Content-Type: application/json" -d '{"engine_id":"pyannote"}'
+```
+
+#### Windows
 ```powershell
 C:\git\VoiceStudio\.venv\Scripts\hf.exe auth login
 Invoke-RestMethod -Method Post "$api/models/install" -ContentType application/json -Body '{"repo_id":"pyannote/speaker-diarization-3.1"}'

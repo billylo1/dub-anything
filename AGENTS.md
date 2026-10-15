@@ -80,8 +80,8 @@ work; you direct.
 1. **Intake.** Confirm the source file and the language pair: Japanese →
    English, Spanish → English (`--source es`), Korean → English (`--source
    ko`), Chinese → English (`--source zh`, checked on Mandarin), English → Japanese
-   (`--source en --target ja`) or English → Spanish
-   (`--source en --target es`), the pairs the scripts know (`PAIRS` in
+   (`--source en --target ja`), English → Spanish (`--source en --target es`)
+   or English → Cantonese (`--source en --target yue`), the pairs the scripts know (`PAIRS` in
    `scripts/languages/`). Add a pair that isn't there first, as
    [docs/languages/README.md](docs/languages/README.md) says under "Adding a
    language": the module, a short test dub measured with and without per-line
