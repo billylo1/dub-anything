@@ -24,22 +24,67 @@ from languages import LANGUAGES, PAIR, PAIRS, pair_of
 HERE = pathlib.Path(__file__).resolve().parent  # the scripts
 ROOT = HERE.parent  # the repo: work/, videos/, vendor/
 WORK = ROOT / "work"
+
+
+def default_data_dir():
+    """Default location for VoiceStudio / OmniVoice data (same as backend/core/config.py)."""
+    if os.environ.get("OMNIVOICE_DATA_DIR"):
+        return pathlib.Path(os.environ["OMNIVOICE_DATA_DIR"])
+    if sys.platform == "win32":
+        return pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice"
+    if sys.platform == "darwin":
+        return pathlib.Path.home() / "Library" / "Application Support" / "OmniVoice"
+    return pathlib.Path.home() / ".local" / "share" / "OmniVoice"
+
+
+def default_cache_dir():
+    """Default location for Hugging Face / OmniVoice model caches."""
+    if os.environ.get("HF_HUB_CACHE"):
+        return os.environ["HF_HUB_CACHE"]
+    if os.environ.get("OMNIVOICE_CACHE_DIR"):
+        return os.environ["OMNIVOICE_CACHE_DIR"]
+    if sys.platform == "win32":
+        return str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
+    if sys.platform == "darwin":
+        return str(pathlib.Path.home() / "Library" / "Caches" / "OmniVoice" / "hf_cache")
+    return str(pathlib.Path.home() / ".cache" / "OmniVoice" / "hf_cache")
+
+
 # Same resolution as VoiceStudio's backend/core/config.py.
-JOBS = (
-    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
-    / "dub_jobs"
-)
-HF_CACHE = (
-    os.environ.get("HF_HUB_CACHE")
-    or os.environ.get("OMNIVOICE_CACHE_DIR")
-    or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
-)
+JOBS = default_data_dir() / "dub_jobs"
+HF_CACHE = default_cache_dir()
+
+
+def patch_av_open():
+    """PyAV 19.0.0 removed the metadata_errors argument from av.open(), which
+    faster-whisper's decode_audio still passes. Compatibility wrapper."""
+    try:
+        import av
+
+        orig_open = av.open
+
+        def _compat_open(*args, **kwargs):
+            if "metadata_errors" in kwargs:
+                try:
+                    return orig_open(*args, **kwargs)
+                except TypeError:
+                    kwargs.pop("metadata_errors", None)
+                    return orig_open(*args, **kwargs)
+            return orig_open(*args, **kwargs)
+
+        av.open = _compat_open
+    except Exception:
+        pass
+
+
+patch_av_open()
 
 
 def whisper_setup():
     """Prepare a standalone faster-whisper: reuse VoiceStudio's downloaded models
     and preload the cuDNN 8 DLLs CTranslate2 needs on CUDA (PyTorch ships cuDNN 9;
     the backend does the same in backend/core/cudnn8.py)."""
+    patch_av_open()
     os.environ.setdefault("HF_HUB_CACHE", HF_CACHE)
     lib = pathlib.Path(sys.prefix) / "Lib" / "site-packages" / "cudnn8_compat" / "nvidia" / "cudnn" / "bin"
     if sys.platform == "win32" and lib.is_dir():

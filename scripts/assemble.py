@@ -72,7 +72,7 @@ def main():
         help="extra subtitle file timed to the source video: FILE.srt:lang[:title]",
     )
     ap.add_argument(
-        "--encoder", default="h264_nvenc", help="video encoder when the range doesn't start at 0 (else stream copy)"
+        "--encoder", default="auto", help="video encoder when the range doesn't start at 0 (else stream copy)"
     )
     args = ap.parse_args()
 
@@ -163,12 +163,24 @@ def main():
         cmd += ["-map", f"0:{s['index']}"]
     for k in range(len(subs)):
         cmd += ["-map", f"{1 + len(dubs) + k}:0"]
+    encoder = args.encoder
+    if encoder == "auto":
+        if sys.platform == "darwin":
+            vt = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                                 "-c:v", "h264_videotoolbox", "-f", "null", "-"], capture_output=True)  # fmt: skip
+            encoder = "h264_videotoolbox" if vt.returncode == 0 else "libx264"
+        else:
+            nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                                    "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
+            encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
     cmd += (
         ["-c:v", "copy"]
         if copy_video
-        else ["-c:v", args.encoder, "-cq", "19"]
-        if "nvenc" in args.encoder
-        else ["-c:v", args.encoder, "-crf", "18"]
+        else ["-c:v", encoder, "-cq", "19"]
+        if "nvenc" in encoder
+        else ["-c:v", encoder, "-q:v", "65"]
+        if "videotoolbox" in encoder
+        else ["-c:v", encoder, "-crf", "18"]
     )
     cmd += [
         "-c:a",

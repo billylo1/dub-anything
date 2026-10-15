@@ -19,8 +19,6 @@ import subprocess
 import sys
 import time
 
-import requests
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 API = os.environ.get("VOICESTUDIO_API", "http://127.0.0.1:3900")
 PORT = int(re.search(r":(\d+)", API.split("//", 1)[-1]).group(1)) if re.search(r":\d+", API.split("//", 1)[-1]) else 80
@@ -68,6 +66,20 @@ def full_env():
                 seen.add(p.lower())
                 parts.append(p)
         env["PATH"] = ";".join(parts)
+    else:
+        # On macOS and Linux, ensure Homebrew and standard user bin dirs are on PATH
+        extra_paths = [
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            str(pathlib.Path.home() / ".local" / "bin"),
+            str(pathlib.Path.home() / ".cargo" / "bin"),
+        ]
+        curr = env.get("PATH", "").split(":")
+        for p in extra_paths:
+            if p not in curr and os.path.isdir(p):
+                curr.append(p)
+        env["PATH"] = ":".join(curr)
     return env
 
 
@@ -76,13 +88,27 @@ def log_path(env=None):
     if os.environ.get("VOICESTUDIO_LOG"):
         return pathlib.Path(os.environ["VOICESTUDIO_LOG"])
     data = env.get("OMNIVOICE_DATA_DIR")
-    return (pathlib.Path(data).parent if data else VS_DIR) / "backend.log"
+    if data:
+        return pathlib.Path(data).parent / "backend.log"
+    if sys.platform == "darwin":
+        return pathlib.Path.home() / "Library" / "Application Support" / "OmniVoice" / "backend.log"
+    return VS_DIR / "backend.log"
 
 
 def health(timeout=5):
     try:
+        import requests
+
         return requests.get(f"{API}/health", timeout=timeout).json()
-    except (requests.RequestException, ValueError):
+    except Exception:
+        pass
+    try:
+        import json
+        import urllib.request
+
+        with urllib.request.urlopen(f"{API}/health", timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
         return None
 
 
@@ -123,11 +149,25 @@ def stop():
         for p in [pid] + ([int(parent)] if parent.isdigit() else []):
             subprocess.run(["taskkill", "/PID", str(p), "/T", "/F"], capture_output=True)
     else:
-        os.kill(pid, 15)
-    for _ in range(30):
+        try:
+            os.killpg(os.getpgid(pid), 15)
+        except OSError:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+    for _ in range(15):
         if not listening_pid():
             break
         time.sleep(1)
+    if listening_pid() and sys.platform != "win32":
+        try:
+            os.killpg(os.getpgid(pid), 9)
+        except OSError:
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
     print(f"backend: stopped (pid {pid})")
 
 
@@ -186,6 +226,7 @@ def start(wait=600):
         if r.returncode:
             raise SystemExit(f"backend: could not start it ({r.returncode}): {r.stderr.strip()[:300]}")
     else:
+        log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "ab") as f:
             subprocess.Popen(cmd, cwd=VS_DIR, env=env, stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
     print(f"backend: starting (log {log})", flush=True)

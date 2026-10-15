@@ -35,19 +35,13 @@ import soundfile as sf
 from huggingface_hub import snapshot_download
 from scipy.signal import resample_poly
 
+from core import default_cache_dir, default_data_dir
 from languages import LANGUAGES, pair_of
 
 # Same resolution as core.py.
 WORK = pathlib.Path(__file__).resolve().parents[1] / "work"
-JOBS = (
-    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
-    / "dub_jobs"
-)
-HF_CACHE = (
-    os.environ.get("HF_HUB_CACHE")
-    or os.environ.get("OMNIVOICE_CACHE_DIR")
-    or str(pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "OmniVoice" / "hf_cache")
-)
+JOBS = default_data_dir() / "dub_jobs"
+HF_CACHE = default_cache_dir()
 SR = 16000
 PAD = 0.15  # s around each line
 FLAG = 0.3

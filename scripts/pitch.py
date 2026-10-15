@@ -6,18 +6,16 @@ Needs librosa, so run it in a throwaway env:
 """
 
 import json
-import os
 import pathlib
 import sys
 
 import librosa
 import numpy as np
 
+from core import default_data_dir
+
 # Same job-folder resolution as core.py / VoiceStudio's backend/core/config.py.
-JOBS = (
-    pathlib.Path(os.environ.get("OMNIVOICE_DATA_DIR") or pathlib.Path(os.environ.get("APPDATA", "")) / "OmniVoice")
-    / "dub_jobs"
-)
+JOBS = default_data_dir() / "dub_jobs"
 
 sys.stdout.reconfigure(encoding="utf-8")
 work = pathlib.Path(__file__).resolve().parents[1] / "work" / sys.argv[1]

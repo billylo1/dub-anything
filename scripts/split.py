@@ -17,8 +17,30 @@ import pathlib
 import subprocess
 import sys
 
-from faster_whisper.audio import decode_audio
-from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+def patch_av_open():
+    try:
+        import av
+
+        orig_open = av.open
+
+        def _compat_open(*args, **kwargs):
+            if "metadata_errors" in kwargs:
+                try:
+                    return orig_open(*args, **kwargs)
+                except TypeError:
+                    kwargs.pop("metadata_errors", None)
+                    return orig_open(*args, **kwargs)
+            return orig_open(*args, **kwargs)
+
+        av.open = _compat_open
+    except Exception:
+        pass
+
+
+patch_av_open()
+from faster_whisper.audio import decode_audio  # noqa: E402
+from faster_whisper.vad import VadOptions, get_speech_timestamps  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SR = 16000
@@ -34,14 +56,24 @@ p.add_argument(
     help="keep A-B (seconds) as one part, cut exactly at its ends (repeatable)",
 )
 p.add_argument("--out")
-# auto: NVENC when it works (current FFmpeg builds need NVIDIA driver >= 610), else x264.
+# auto: VideoToolbox on macOS, NVENC on Windows/NVIDIA when it works, else libx264.
 p.add_argument("--encoder", default="auto")
 args = p.parse_args()
 if args.encoder == "auto":
-    nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
-                            "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
-    args.encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
-quality = ["-preset", "p5", "-cq", "20"] if "nvenc" in args.encoder else ["-preset", "veryfast", "-crf", "18"]
+    if sys.platform == "darwin":
+        vt = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                             "-c:v", "h264_videotoolbox", "-f", "null", "-"], capture_output=True)  # fmt: skip
+        args.encoder = "h264_videotoolbox" if vt.returncode == 0 else "libx264"
+    else:
+        nvenc = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=size=256x256:duration=0.1",
+                                "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
+        args.encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
+if "nvenc" in args.encoder:
+    quality = ["-preset", "p5", "-cq", "20"]
+elif "videotoolbox" in args.encoder:
+    quality = ["-q:v", "65"]
+else:
+    quality = ["-preset", "veryfast", "-crf", "18"]
 video = pathlib.Path(args.video).resolve()
 out = pathlib.Path(args.out) if args.out else video.parent / f"{video.stem}-parts"
 # Snap cuts to whole video frames of the source (29.97, 30, 25 fps...), so parts join without drift.

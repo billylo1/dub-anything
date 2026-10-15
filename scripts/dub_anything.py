@@ -73,22 +73,36 @@ QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = sys.executable
 UV = ["uv", "run", "--no-project"]
-SEPARATE = UV + [
-    "--python",
-    "3.11",
-    "--index",
-    "https://download.pytorch.org/whl/cu128",
-    "--index-strategy",
-    "unsafe-best-match",
-    "--with",
-    "torch==2.8.0",
-    "--with",
-    "audio-separator",
-    "--with",
-    "onnxruntime",
-    "python",
-    "scripts/separate.py",
-]
+if sys.platform == "darwin":
+    SEPARATE = UV + [
+        "--python",
+        "3.11",
+        "--with",
+        "torch",
+        "--with",
+        "audio-separator",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/separate.py",
+    ]
+else:
+    SEPARATE = UV + [
+        "--python",
+        "3.11",
+        "--index",
+        "https://download.pytorch.org/whl/cu128",
+        "--index-strategy",
+        "unsafe-best-match",
+        "--with",
+        "torch==2.8.0",
+        "--with",
+        "audio-separator",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/separate.py",
+    ]
 SECOND = UV + [
     "--python",
     "3.12",
@@ -105,16 +119,28 @@ SECOND = UV + [
     "python",
     "scripts/second.py",
 ]
-SUBS = UV + [
-    "--python",
-    "3.12",
-    "--with",
-    "rapidocr",
-    "--with",
-    "onnxruntime-gpu[cuda,cudnn]",
-    "python",
-    "scripts/subs.py",
-]
+if sys.platform == "darwin":
+    SUBS = UV + [
+        "--python",
+        "3.12",
+        "--with",
+        "rapidocr",
+        "--with",
+        "onnxruntime",
+        "python",
+        "scripts/subs.py",
+    ]
+else:
+    SUBS = UV + [
+        "--python",
+        "3.12",
+        "--with",
+        "rapidocr",
+        "--with",
+        "onnxruntime-gpu[cuda,cudnn]",
+        "python",
+        "scripts/subs.py",
+    ]
 SIGNS = SUBS[:-1] + ["scripts/signs.py"]
 STEMS = ("vocals.wav", "no_vocals.wav")
 AMERICAN_RENDER = {"line_ref": False, "fill": True, "dips": False, "cast_lines": False, "voice": "american"}
