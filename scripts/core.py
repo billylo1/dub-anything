@@ -16,9 +16,6 @@ import sys
 import time
 import unicodedata
 
-import numpy as np
-import soundfile as sf
-
 from languages import LANGUAGES, PAIR, PAIRS, pair_of
 
 HERE = pathlib.Path(__file__).resolve().parent  # the scripts
@@ -174,6 +171,8 @@ def end_dip(db, start, end):
     """The time of the deepest dip in the voice within DIP_REACH of a window's end
     (5 ms frames of edges.frames_db, smoothed over 20 ms), if it is at least DIP_DB
     below the line's speech level; else None."""
+    import numpy as np
+
     import edges
 
     frame = edges.HOP / edges.SR
@@ -284,6 +283,9 @@ def line_refs(work, job_id, lines, ids, verbose=True, dips=False, cast_lines=Fal
     original is cut at the dip) and lines too long to fit OmniVoice's limit with
     the clips. Returns {id: (path, transcript)}; the path's name ends with the
     window (and the cut), which dub.py records as how the take was made."""
+    import numpy as np
+    import soundfile as sf
+
     voices = load_json(WORK / "voices.json", {})
     src = langs(work.name)[0]
     vocals, sr = sf.read(JOBS / job_id / "vocals.wav", dtype="float32")
@@ -393,6 +395,9 @@ def voice_wav(key, rebuild=False):
     """work/voices/<key>.wav: the voice's clips from voices.json joined with 0.3 s
     pauses. Built when missing, when rebuild is set, or when the voice's entry no
     longer matches the profile it was last uploaded as."""
+    import numpy as np
+    import soundfile as sf
+
     spec = load_json(WORK / "voices.json", {})[key]
     ref = WORK / "voices" / f"{key}.wav"
     uploaded = load_json(WORK / "profiles.json", {}).get(key, {})
@@ -415,6 +420,9 @@ def speech_length(wav):
     """A take's length as VoiceStudio times it: generated edge silence trimmed
     to the first/last sample above -50 dBFS, plus 50 ms either side
     (services/audio_dsp.trim_speech_padding)."""
+    import numpy as np
+    import soundfile as sf
+
     audio, sr = sf.read(wav, dtype="float32")
     env = np.abs(audio).max(axis=1) if audio.ndim > 1 else np.abs(audio)
     voiced = np.nonzero(env > 10 ** (-50 / 20))[0]
@@ -461,6 +469,7 @@ def _ref_frames(path, mtime):
     (create_voice_clone_prompt): mono at 24 kHz, pauses over 0.2 s shortened and
     the edges trimmed. (OmniVoice also raises a quiet clip's level before
     trimming; leaving that out predicted rendered takes better.)"""
+    import soundfile as sf
     import torch
     import torchaudio
 

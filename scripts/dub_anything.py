@@ -218,7 +218,13 @@ def split(job):
     pdir = VIDEOS / f"{job['slug']}-parts"
     if (pdir / "parts.json").exists():
         return True
-    cmd = [PY, "scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
+    try:
+        import faster_whisper  # noqa: F401
+
+        py = [PY]
+    except ImportError:
+        py = UV + ["--python", "3.12", "--with", "faster-whisper", "python"]
+    cmd = py + ["scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
     for w in job["split"]["whole"]:
         cmd += ["--whole", w]
     return tool(job, "split", cmd, "split")[0]
