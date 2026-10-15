@@ -35,7 +35,9 @@ REQUIRED = (
 )
 
 LANGUAGES = {}
-for _path in sorted(pathlib.Path(__file__).parent.glob("??.py")):
+for _path in sorted(pathlib.Path(__file__).parent.glob("*.py")):
+    if _path.stem in ("__init__", "kana", "latin"):
+        continue
     _module = importlib.import_module(f"{__name__}.{_path.stem}")
     _missing = [name for name in REQUIRED if not hasattr(_module, name)]
     if _missing:
@@ -69,6 +71,8 @@ PAIRS = {
     # Finding 20: the Mandarin sample's per-line references improved voice likeness
     # and timing without weakening its English. Only the actor voice was exercised.
     ("zh", "en"): {"line_ref": True},
+    # English -> Cantonese (yue): OmniVoice native Cantonese zero-shot with actor's voice reference.
+    ("en", "yue"): {"line_ref": True},
 }
 for _pair in PAIRS:
     if not all(code in LANGUAGES for code in _pair):
