@@ -203,8 +203,11 @@ def main():
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else []
         )
 
+    # On English systems, QuickTime/AVFoundation auto-selects any audio track tagged 'eng'
+    # over the default dub. Tagging the original audio as 'und' keeps the dub primary.
+    orig_lang = "und" if src == "en" else ISO3[src]
     cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + label(
-        "a:1", ISO3[src], LANGUAGES[src].TITLES["original"]
+        "a:1", orig_lang, LANGUAGES[src].TITLES["original"]
     )
     sub_meta = [
         ((s.get("tags") or {}).get("language", "und"), (s.get("tags") or {}).get("title", "")) for s in src_subs

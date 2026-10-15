@@ -167,6 +167,9 @@ def deliver(source, dubs, default, pair=PAIR):
             # says (a web download can tag every track with the uploader's default).
             print(f"  the original audio was tagged {lang!r}: tagging it {ISO3[src]!r}")
             lang = ISO3[src]
+        if src == "en":
+            # QuickTime/AVFoundation on English systems auto-selects 'eng' over non-English default dubs.
+            lang = "und"
         cmd += label(f"a:{k}", lang, name_of(s) or LANGUAGES[src].TITLES["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
         cmd += label(f"s:{k}", lang, title) + [

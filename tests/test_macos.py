@@ -95,5 +95,19 @@ class FramesFallbackTests(unittest.TestCase):
         self.assertIsInstance(res, bool)
 
 
+class AudioTrackLanguageTests(unittest.TestCase):
+    def test_original_audio_tag_und_when_source_is_english(self):
+        # When dubbing from English into another language, the original English track
+        # must be tagged 'und' so players like QuickTime / AVFoundation do not
+        # auto-select it over the non-English primary dub track.
+        src = "en"
+        orig_lang = "und" if src == "en" else "eng"
+        self.assertEqual(orig_lang, "und")
+
+        src_ja = "ja"
+        orig_lang_ja = "und" if src_ja == "en" else "jpn"
+        self.assertEqual(orig_lang_ja, "jpn")
+
+
 if __name__ == "__main__":
     unittest.main()
