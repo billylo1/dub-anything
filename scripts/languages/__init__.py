@@ -71,7 +71,8 @@ PAIRS = {
     # Finding 20: the Mandarin sample's per-line references improved voice likeness
     # and timing without weakening its English. Only the actor voice was exercised.
     ("zh", "en"): {"line_ref": True},
-    # English -> Cantonese (yue): OmniVoice native Cantonese zero-shot with actor's voice reference.
+    # Cantonese uses per-line references; a measured short-dub comparison remains
+    # to be done (docs/languages/yue.md).
     ("en", "yue"): {"line_ref": True},
 }
 for _pair in PAIRS:

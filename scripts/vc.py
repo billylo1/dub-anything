@@ -183,7 +183,20 @@ class Chatterbox:
         device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
         try:
             self.vc = ChatterboxVC.from_pretrained(device)
-        except Exception:
+        except (RuntimeError, NotImplementedError) as exc:
+            # CUDA failures must reach the runner's OOM/restart handling. Only
+            # unsupported MPS operations get a CPU retry; memory errors still fail.
+            message = str(exc).lower()
+            unsupported = isinstance(exc, NotImplementedError) or (
+                "mps" in message
+                and any(
+                    s in message
+                    for s in ("not implemented", "not currently implemented", "not supported", "unsupported")
+                )
+            )
+            if device != "mps" or not unsupported or "out of memory" in message:
+                raise
+            print(f"  Chatterbox: MPS initialization failed ({exc}); retrying on CPU", flush=True)
             self.vc = ChatterboxVC.from_pretrained("cpu")
         self.sr = self.vc.sr
         self.target = None

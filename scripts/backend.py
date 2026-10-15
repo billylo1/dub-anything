@@ -113,7 +113,7 @@ def full_env():
 
 
 def log_path(env=None):
-    env = env or full_env()
+    env = full_env() if env is None else env
     if os.environ.get("VOICESTUDIO_LOG"):
         return pathlib.Path(os.environ["VOICESTUDIO_LOG"])
     data = env.get("OMNIVOICE_DATA_DIR")
@@ -178,25 +178,22 @@ def stop():
         for p in [pid] + ([int(parent)] if parent.isdigit() else []):
             subprocess.run(["taskkill", "/PID", str(p), "/T", "/F"], capture_output=True)
     else:
+        # A GUI or another launcher may share its process group with the backend.
+        # Port discovery does not establish ownership of that group: signal only
+        # the listener, including when escalating below.
         try:
-            os.killpg(os.getpgid(pid), 15)
-        except OSError:
-            try:
-                os.kill(pid, 15)
-            except OSError:
-                pass
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            pass
     for _ in range(15):
-        if not listening_pid():
+        if listening_pid() != pid:
             break
         time.sleep(1)
-    if listening_pid() and sys.platform != "win32":
+    if sys.platform != "win32" and listening_pid() == pid:
         try:
-            os.killpg(os.getpgid(pid), 9)
-        except OSError:
-            try:
-                os.kill(pid, 9)
-            except OSError:
-                pass
+            os.kill(pid, 9)
+        except ProcessLookupError:
+            pass
     print(f"backend: stopped (pid {pid})")
 
 

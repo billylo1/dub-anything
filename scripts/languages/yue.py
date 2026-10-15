@@ -47,6 +47,49 @@ VOICES = ("actor",)
 JOIN = ""
 MATCH = 0.8
 NEGATION = re.compile(r"唔|冇|咪|未|莫|毋|無|不|非|別|没|沒")
+DIGITS = str.maketrans("零〇一二兩两三四五六七八九", "0012223456789")
+NUMBER = re.compile(
+    r"[-負负]?[\d零〇一二兩两三四五六七八九十百千萬万億亿廿卅卌]+(?:[.點点][\d零〇一二兩两三四五六七八九]+)?"
+)
+PLACES = {"十": 10, "百": 100, "千": 1000, "萬": 10000, "万": 10000, "億": 100000000, "亿": 100000000}
+
+
+def normalize_numbers(text):
+    """Canonicalize digit sequences, decimal and place-value numerals for QA.
+    Colloquial implied units and idioms still need the listener's judgement.
+    """
+    numbers = []
+
+    def replace(match):
+        token = match.group().replace("廿", "二十").replace("卅", "三十").replace("卌", "四十")
+        sign = "-" if token[0] in "-負负" else ""
+        token = token.lstrip("-負负").translate(DIGITS).replace("點", ".").replace("点", ".")
+        whole, dot, fraction = token.partition(".")
+        if any(c in PLACES for c in whole):
+            total, section, current = 0, 0, 0
+            for c in whole:
+                if c.isdecimal():
+                    current = current * 10 + int(c)
+                else:
+                    place = PLACES[c]
+                    if place < 10000:
+                        section += (current or 1) * place
+                    elif place == 10000:
+                        total += (section + current) * place
+                        section = 0
+                    else:
+                        total = (total + section + current) * place
+                        section = 0
+                    current = 0
+            whole = str(total + section + current)
+        fraction = fraction.rstrip("0")
+        value = sign + whole + ("." + fraction if dot and fraction else "")
+        numbers.append(value)
+        return value
+
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"(?<=\d),(?=\d{3}(?:\D|$))", "", text)
+    return NUMBER.sub(replace, text), numbers
 
 
 def speakable(text):
@@ -55,7 +98,9 @@ def speakable(text):
 
 def compare(want, got):
     """Compare desired Cantonese text with transcription from QA."""
-    want_s, got_s = units(want), units(got)
+    want_normal, want_numbers = normalize_numbers(want)
+    got_normal, got_numbers = normalize_numbers(got)
+    want_s, got_s = units(want_normal), units(got_normal)
     notes = []
     head = want_s[:3]
     k = got_s.find(head) if len(head) == 3 else -1
@@ -68,9 +113,8 @@ def compare(want, got):
         notes.append(f"match {ratio:.2f}")
     if got_s and len(NEGATION.findall(want_s)) != len(NEGATION.findall(got_s)):
         notes.append("negation differs")
-    digits = lambda s: re.findall(r"\d+", s)  # noqa: E731
-    if got_s and digits(want_s) and digits(want_s) != digits(got_s):
-        notes.append(f"number differs: {digits(want_s)} -> {digits(got_s)}")
+    if got_s and want_numbers != got_numbers:
+        notes.append(f"number differs: {want_numbers} -> {got_numbers}")
     return notes, ratio
 
 

@@ -97,6 +97,11 @@ def out_dir(doc):
     return pathlib.Path(os.environ.get("DUB_OUT") or pathlib.Path(doc["video"]).parent / "dubbed")
 
 
+def original_audio_language(lang, source, quicktime_audio=False):
+    """Optional QuickTime playback preference workaround; preserve other languages."""
+    return "und" if quicktime_audio and source == "en" and lang == "eng" else lang
+
+
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 

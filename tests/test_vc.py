@@ -1,0 +1,74 @@
+"""Voice-converter initialization failures must preserve CUDA recovery."""
+
+import contextlib
+import io
+import pathlib
+import sys
+import types
+import unittest
+from unittest.mock import MagicMock, patch
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
+import vc
+
+
+class ChatterboxInitializationTests(unittest.TestCase):
+    def load(self, device, error):
+        torch = types.ModuleType("torch")
+        torch.cuda = types.SimpleNamespace(is_available=lambda: device == "cuda")
+        torch.backends = types.SimpleNamespace(mps=types.SimpleNamespace(is_available=lambda: device == "mps"))
+        tokenizer = types.ModuleType("chatterbox.models.s3tokenizer")
+        tokenizer.S3_SR = 16000
+        converter = types.ModuleType("chatterbox.vc")
+        loaded = types.SimpleNamespace(sr=24000, device="cpu" if error else device)
+        self.loader = MagicMock(side_effect=[error, loaded] if error else [loaded])
+        converter.ChatterboxVC = types.SimpleNamespace(from_pretrained=self.loader)
+        self.output = io.StringIO()
+        with (
+            patch.dict(
+                sys.modules, {"torch": torch, "chatterbox.models.s3tokenizer": tokenizer, "chatterbox.vc": converter}
+            ),
+            patch.object(pathlib.Path, "exists", return_value=True),
+            contextlib.redirect_stdout(self.output),
+        ):
+            return vc.Chatterbox()
+
+    def test_cuda_oom_reaches_runner(self):
+        with self.assertRaisesRegex(RuntimeError, "CUDA out of memory"):
+            self.load("cuda", RuntimeError("CUDA out of memory"))
+        self.loader.assert_called_once_with("cuda")
+
+    def test_successful_cuda_load_stays_on_cuda(self):
+        model = self.load("cuda", None)
+        self.assertEqual(model.vc.device, "cuda")
+        self.loader.assert_called_once_with("cuda")
+
+    def test_cpu_failure_is_not_retried(self):
+        with self.assertRaisesRegex(RuntimeError, "invalid checkpoint"):
+            self.load("cpu", RuntimeError("invalid checkpoint"))
+        self.loader.assert_called_once_with("cpu")
+
+    def test_mps_unsupported_operation_falls_back_with_a_message(self):
+        model = self.load("mps", NotImplementedError("operation not supported on MPS"))
+        self.assertEqual(model.vc.device, "cpu")
+        self.assertEqual([c.args[0] for c in self.loader.call_args_list], ["mps", "cpu"])
+        self.assertIn("retrying on CPU", self.output.getvalue())
+
+    def test_mps_oom_is_not_hidden(self):
+        with self.assertRaisesRegex(RuntimeError, "out of memory"):
+            self.load("mps", RuntimeError("MPS backend out of memory"))
+        self.loader.assert_called_once_with("mps")
+
+    def test_mps_runtime_unsupported_operation_can_fall_back(self):
+        model = self.load("mps", RuntimeError("operator not currently implemented for the MPS device"))
+        self.assertEqual(model.vc.device, "cpu")
+
+    def test_unrelated_mps_failure_is_not_hidden(self):
+        with self.assertRaisesRegex(RuntimeError, "invalid checkpoint"):
+            self.load("mps", RuntimeError("invalid checkpoint"))
+        self.loader.assert_called_once_with("mps")
+
+    def test_missing_checkpoint_is_not_hidden(self):
+        with self.assertRaises(FileNotFoundError):
+            self.load("mps", FileNotFoundError("checkpoint"))
+        self.loader.assert_called_once_with("mps")

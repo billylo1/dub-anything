@@ -2,9 +2,12 @@
 
 import os
 import pathlib
+import runpy
 import sys
+import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from urllib.error import URLError
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 import backend
@@ -13,7 +16,13 @@ import dub_anything
 import frames
 
 
-class PlatformPathTests(unittest.TestCase):
+class FixedHomeTests(unittest.TestCase):
+    def setUp(self):
+        self.home = pathlib.Path("/mock/home")
+        self.enterContext(patch.object(pathlib.Path, "home", return_value=self.home))
+
+
+class PlatformPathTests(FixedHomeTests):
     def test_default_data_dir_resolution(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("sys.platform", "darwin"):
@@ -44,12 +53,13 @@ class PlatformPathTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {"OMNIVOICE_DATA_DIR": "/custom/data", "OMNIVOICE_CACHE_DIR": "/custom/cache"},
+            clear=True,
         ):
             self.assertEqual(core.default_data_dir(), pathlib.Path("/custom/data"))
             self.assertEqual(core.default_cache_dir(), "/custom/cache")
 
 
-class BackendPlatformTests(unittest.TestCase):
+class BackendPlatformTests(FixedHomeTests):
     def test_backend_log_path_darwin_default(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("sys.platform", "darwin"):
@@ -60,53 +70,131 @@ class BackendPlatformTests(unittest.TestCase):
                 )
 
     def test_backend_health_fallback_urllib(self):
-        # Even if requests is not installed, health() handles urllib cleanly
-        with patch("sys.modules", {"requests": None}):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"status":"ok","device":"mps"}'
+        with patch.dict(sys.modules, {"requests": None}), patch("urllib.request.urlopen", return_value=response):
+            self.assertEqual(backend.health(timeout=0.1), {"status": "ok", "device": "mps"})
+
+    def test_backend_health_down(self):
+        with (
+            patch.dict(sys.modules, {"requests": None}),
+            patch("urllib.request.urlopen", side_effect=URLError("offline")),
+        ):
             h = backend.health(timeout=0.1)
-            # Backend may be down, but it should return None rather than raising an uncaught exception
             self.assertIsNone(h)
 
     def test_full_env_includes_homebrew_on_darwin(self):
-        with patch("sys.platform", "darwin"):
+        with (
+            patch("sys.platform", "darwin"),
+            patch.dict(os.environ, {"PATH": "/bin"}, clear=True),
+            patch("os.path.isdir", side_effect=lambda p: p.startswith("/opt/homebrew/")),
+        ):
             env = backend.full_env()
-            if os.path.isdir("/opt/homebrew/bin"):
-                self.assertIn("/opt/homebrew/bin", env.get("PATH", "").split(":"))
+            self.assertIn("/opt/homebrew/bin", env["PATH"].split(":"))
+            self.assertIn("/opt/homebrew/sbin", env["PATH"].split(":"))
+
+    def test_stop_posix_only_signals_the_listener(self):
+        with (
+            patch("sys.platform", "darwin"),
+            patch.object(backend, "listening_pid", side_effect=[4242, None, None]),
+            patch("os.kill") as kill,
+            patch("os.killpg", create=True) as killpg,
+        ):
+            backend.stop()
+        kill.assert_called_once_with(4242, 15)
+        killpg.assert_not_called()
+
+    def test_stop_posix_escalates_only_the_same_listener(self):
+        with (
+            patch("sys.platform", "darwin"),
+            patch.object(backend, "listening_pid", return_value=4242),
+            patch("os.kill") as kill,
+            patch("os.killpg", create=True) as killpg,
+            patch("time.sleep"),
+        ):
+            backend.stop()
+        self.assertEqual([c.args for c in kill.call_args_list], [(4242, 15), (4242, 9)])
+        killpg.assert_not_called()
+
+    def test_stop_posix_does_not_escalate_a_replacement_listener(self):
+        with (
+            patch("sys.platform", "darwin"),
+            patch.object(backend, "listening_pid", side_effect=[4242, 5678, 5678]),
+            patch("os.kill") as kill,
+        ):
+            backend.stop()
+        kill.assert_called_once_with(4242, 15)
 
 
 class DubAnythingDependencyTests(unittest.TestCase):
+    def commands(self, platform):
+        with patch("sys.platform", platform):
+            return runpy.run_path(str(pathlib.Path(dub_anything.__file__)))
+
     def test_darwin_separate_dependencies_do_not_contain_cu128(self):
-        if sys.platform == "darwin":
-            cmd_str = " ".join(dub_anything.SEPARATE)
-            self.assertNotIn("cu128", cmd_str)
-            self.assertNotIn("torch==2.8.0", cmd_str)
-            self.assertIn("audio-separator", cmd_str)
+        cmd_str = " ".join(self.commands("darwin")["SEPARATE"])
+        self.assertNotIn("cu128", cmd_str)
+        self.assertNotIn("torch==2.8.0", cmd_str)
+        self.assertIn("audio-separator", cmd_str)
 
     def test_darwin_subs_dependencies_do_not_contain_onnxruntime_gpu(self):
-        if sys.platform == "darwin":
-            cmd_str = " ".join(dub_anything.SUBS)
-            self.assertNotIn("onnxruntime-gpu", cmd_str)
-            self.assertIn("onnxruntime", cmd_str)
-            self.assertIn("rapidocr", cmd_str)
+        cmd_str = " ".join(self.commands("darwin")["SUBS"])
+        self.assertNotIn("onnxruntime-gpu", cmd_str)
+        self.assertIn("onnxruntime", cmd_str)
+        self.assertIn("rapidocr", cmd_str)
+
+    def test_windows_keeps_cuda_dependencies(self):
+        commands = self.commands("win32")
+        self.assertIn("https://download.pytorch.org/whl/cu128", commands["SEPARATE"])
+        self.assertIn("torch==2.8.0", commands["SEPARATE"])
+        self.assertIn("onnxruntime-gpu[cuda,cudnn]", commands["SUBS"])
 
 
 class FramesFallbackTests(unittest.TestCase):
     def test_has_drawtext_boolean(self):
-        res = frames.has_drawtext()
-        self.assertIsInstance(res, bool)
+        with patch.object(frames.subprocess, "run", return_value=types.SimpleNamespace(stdout="T.C drawtext V->V")):
+            self.assertTrue(frames.has_drawtext())
+        with patch.object(frames.subprocess, "run", return_value=types.SimpleNamespace(stdout="scale V->V")):
+            self.assertFalse(frames.has_drawtext())
+        with patch.object(frames.subprocess, "run", side_effect=FileNotFoundError):
+            self.assertFalse(frames.has_drawtext())
 
 
 class AudioTrackLanguageTests(unittest.TestCase):
-    def test_original_audio_tag_und_when_source_is_english(self):
-        # When dubbing from English into another language, the original English track
-        # must be tagged 'und' so players like QuickTime / AVFoundation do not
-        # auto-select it over the non-English primary dub track.
-        src = "en"
-        orig_lang = "und" if src == "en" else "eng"
-        self.assertEqual(orig_lang, "und")
+    def test_original_languages_are_preserved_by_default(self):
+        for lang in ("eng", "fra", "jpn"):
+            self.assertEqual(core.original_audio_language(lang, "en"), lang)
 
-        src_ja = "ja"
-        orig_lang_ja = "und" if src_ja == "en" else "jpn"
-        self.assertEqual(orig_lang_ja, "jpn")
+    def test_quicktime_option_only_changes_english_source_tracks(self):
+        self.assertEqual(core.original_audio_language("eng", "en", True), "und")
+        self.assertEqual(core.original_audio_language("fra", "en", True), "fra")
+        self.assertEqual(core.original_audio_language("jpn", "ja", True), "jpn")
+        self.assertEqual(core.original_audio_language("eng", "ja", True), "eng")
+
+    def test_runner_forwards_quicktime_option_to_assembly_and_delivery(self):
+        import deliver
+
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                job = {
+                    "slug": "review",
+                    "source": "source.mp4",
+                    "voices": ["actor"],
+                    "default": "actor",
+                    "langs": ["en", "es"],
+                    "quicktime_audio": enabled,
+                }
+                with (
+                    patch.object(dub_anything, "tool", return_value=(True, "-> assembled.mp4")) as tool,
+                    patch.object(deliver, "deliver", return_value=pathlib.Path("delivered.mp4")) as delivery,
+                    patch.object(dub_anything, "save_job"),
+                ):
+                    self.assertTrue(dub_anything.deliver_job(job, []))
+                self.assertEqual("--quicktime-audio" in tool.call_args.args[2], enabled)
+                self.assertEqual(delivery.call_args.kwargs["quicktime_audio"], enabled)
+
+    def test_changed_playback_option_requires_redelivery(self):
+        self.assertNotEqual(dub_anything.delivery_sha({}, []), dub_anything.delivery_sha({"quicktime_audio": True}, []))
 
 
 if __name__ == "__main__":

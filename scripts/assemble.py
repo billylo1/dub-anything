@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 import ass
-from core import ROOT, VOICE_LABEL, WORK, langs, load_json, out_dir, said, srt_time, voice_part
+from core import ROOT, VOICE_LABEL, WORK, langs, load_json, original_audio_language, out_dir, said, srt_time, voice_part
 from languages import ISO3, LANGUAGES, PAIR
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -65,6 +65,11 @@ def main():
     )
     ap.add_argument("--parts", help="range of split parts, e.g. 1-4 (default: all)")
     ap.add_argument("--out")
+    ap.add_argument(
+        "--quicktime-audio",
+        action="store_true",
+        help="tag English original audio as und to prefer the dub in QuickTime",
+    )
     ap.add_argument(
         "--sub",
         action="append",
@@ -203,9 +208,7 @@ def main():
             [f"-metadata:s:{spec}", f"title={title}", f"-metadata:s:{spec}", f"handler_name={title}"] if title else []
         )
 
-    # On English systems, QuickTime/AVFoundation auto-selects any audio track tagged 'eng'
-    # over the default dub. Tagging the original audio as 'und' keeps the dub primary.
-    orig_lang = "und" if src == "en" else ISO3[src]
+    orig_lang = original_audio_language(ISO3[src], src, args.quicktime_audio)
     cmd += label("a:0", ISO3[tgt], LANGUAGES[tgt].TITLES["dub"][args.voice]) + label(
         "a:1", orig_lang, LANGUAGES[src].TITLES["original"]
     )

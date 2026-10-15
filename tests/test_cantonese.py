@@ -48,3 +48,35 @@ class CantoneseLanguageTests(unittest.TestCase):
         wrapped = yue.subtitle(text)
         self.assertEqual(wrapped.replace("\n", ""), text)
         self.assertEqual(wrapped.count("\n"), 1)
+
+    def test_changed_number_in_long_line_is_flagged(self):
+        notes, ratio = LANGUAGES["yue"].compare("我哋有三個蘋果喺枱面", "我哋有四個蘋果喺枱面")
+        self.assertGreaterEqual(ratio, 0.8)
+        self.assertTrue(any("number differs" in n for n in notes))
+
+    def test_digit_and_written_numbers_compare_equally(self):
+        for written, digits in (
+            ("三", "3"),
+            ("兩", "2"),
+            ("廿三", "23"),
+            ("一百零二", "102"),
+            ("二〇二六", "2026"),
+            ("三點五", "3.5"),
+            ("負三", "-3"),
+            ("一萬二千三百四十五", "12,345"),
+            ("一億二千萬", "120000000"),
+        ):
+            with self.subTest(written=written):
+                notes, ratio = LANGUAGES["yue"].compare(f"有{written}個", f"有{digits}個")
+                self.assertEqual(notes, [])
+                self.assertEqual(ratio, 1)
+
+    def test_missing_extra_and_changed_decimal_numbers_are_flagged(self):
+        for want, got in (
+            ("有三個蘋果喺枱面", "有蘋果喺枱面"),
+            ("有蘋果喺枱面", "有三個蘋果喺枱面"),
+            ("價錢係三點五元", "價錢係三十五元"),
+        ):
+            with self.subTest(want=want):
+                notes, _ = LANGUAGES["yue"].compare(want, got)
+                self.assertTrue(any("number differs" in n for n in notes))

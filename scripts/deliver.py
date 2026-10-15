@@ -34,7 +34,7 @@ import re
 import subprocess
 import sys
 
-from core import VOICE_LABEL
+from core import VOICE_LABEL, original_audio_language
 from languages import ISO3, LANGUAGES, PAIR, PAIRS
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -91,7 +91,7 @@ def delivered_name(source, mkv=False):
     return source.with_name(f"{stem}{SUFFIX}{ext}")
 
 
-def deliver(source, dubs, default, pair=PAIR):
+def deliver(source, dubs, default, pair=PAIR, quicktime_audio=False):
     """dubs: {voice: assembled mp4}; pair: (source, target) languages. Returns the
     delivered file's path."""
     src, tgt = pair
@@ -167,9 +167,7 @@ def deliver(source, dubs, default, pair=PAIR):
             # says (a web download can tag every track with the uploader's default).
             print(f"  the original audio was tagged {lang!r}: tagging it {ISO3[src]!r}")
             lang = ISO3[src]
-        if src == "en":
-            # QuickTime/AVFoundation on English systems auto-selects 'eng' over non-English default dubs.
-            lang = "und"
+        lang = original_audio_language(lang, src, quicktime_audio)
         cmd += label(f"a:{k}", lang, name_of(s) or LANGUAGES[src].TITLES["original"]) + [f"-disposition:a:{k}", "0"]
     for k, (_, lang, title) in enumerate(srts):
         cmd += label(f"s:{k}", lang, title) + [
@@ -219,6 +217,11 @@ def main():
     ap.add_argument("--default", help="the voice that plays first (default: actor if given, else the first)")
     ap.add_argument("--source", default="ja", help="language the source speaks (default ja)")
     ap.add_argument("--target", default="en", help="language of the dubs (default en)")
+    ap.add_argument(
+        "--quicktime-audio",
+        action="store_true",
+        help="tag English original audio as und to prefer the dub in QuickTime",
+    )
     args = ap.parse_args()
     if (args.source, args.target) not in PAIRS:
         raise SystemExit(f"{args.source} -> {args.target}: the scripts know {sorted(PAIRS)}")
@@ -229,7 +232,7 @@ def main():
             raise SystemExit(f"{d}: expected actor=FILE or american=FILE")
         dubs[voice] = pathlib.Path(path)
     default = args.default or ("actor" if "actor" in dubs else next(iter(dubs)))
-    deliver(args.source_video, dubs, default, (args.source, args.target))
+    deliver(args.source_video, dubs, default, (args.source, args.target), quicktime_audio=args.quicktime_audio)
 
 
 if __name__ == "__main__":

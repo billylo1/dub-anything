@@ -200,6 +200,15 @@ git clone --depth 1 https://github.com/resemble-ai/chatterbox vendor\chatterbox
 The weights (`ResembleAI/chatterbox`, about 1 GB) download into the Hugging Face
 cache (`HF_HUB_CACHE`, else `OMNIVOICE_CACHE_DIR`) on the first conversion.
 
+## Playback in QuickTime
+
+Original audio keeps its language tags by default. If QuickTime selects an
+English original instead of the default dub, add `--quicktime-audio` when
+creating the job with `scripts/dub_anything.py new`. This optional workaround
+tags retained English original audio as `und` while preserving other languages.
+For manual assembly and delivery, pass `--quicktime-audio` to both
+`scripts/assemble.py` and `scripts/deliver.py`.
+
 ## 6. Check
 
 ### macOS

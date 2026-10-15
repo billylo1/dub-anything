@@ -536,6 +536,8 @@ def advance(job, name):
 
 def delivery_sha(job, ps):
     h = hashlib.sha1()
+    if job.get("quicktime_audio"):
+        h.update(b"quicktime-audio")
     for p in ps:
         for voice in job["voices"]:
             name = voice_part(p["name"], voice)
@@ -558,15 +560,18 @@ def deliver_job(job, ps):
         return True
     dubs = {}
     for voice in job["voices"]:
-        ok, out = tool(
-            job, f"assemble {voice}", [PY, "scripts/assemble.py", job["slug"], "--voice", voice], f"assemble-{voice}"
-        )
+        cmd = [PY, "scripts/assemble.py", job["slug"], "--voice", voice]
+        if job.get("quicktime_audio"):
+            cmd.append("--quicktime-audio")
+        ok, out = tool(job, f"assemble {voice}", cmd, f"assemble-{voice}")
         m = re.search(r"-> (.+\.mp4)", out)
         if not ok or not m:
             return problem(job, f"assemble.py failed for the {voice} voice: {last_error(out)}")
         dubs[voice] = pathlib.Path(m.group(1).strip())
     log(f"deliver into {pathlib.Path(job['source']).name}")
-    out = deliver.deliver(job["source"], dubs, job["default"], job_langs(job))
+    out = deliver.deliver(
+        job["source"], dubs, job["default"], job_langs(job), quicktime_audio=bool(job.get("quicktime_audio"))
+    )
     job["source"] = str(out)
     job["delivered"] = {"path": str(out), "at": time.strftime("%Y-%m-%d %H:%M"), "state": sha}
     job.pop("problems", None)
@@ -695,6 +700,7 @@ def cmd_new(args):
         "split": {"minutes": args.minutes, "whole": args.whole},
         "captions": "open" if args.subtitles else args.captions,
         "signs": args.signs,
+        "quicktime_audio": args.quicktime_audio,
         "created": time.strftime("%Y-%m-%d %H:%M"),
     }
     job_file(slug).parent.mkdir(parents=True, exist_ok=True)
@@ -877,6 +883,11 @@ def main():
     a.add_argument("--source", default="ja", help="language the video speaks (default ja)")
     a.add_argument("--target", default="en", help="language to dub it into (default en)")
     a.add_argument("--voices", choices=["actor", "american", "both"], default="actor")
+    a.add_argument(
+        "--quicktime-audio",
+        action="store_true",
+        help="tag English original audio as und to prefer the dub in QuickTime",
+    )
     a.add_argument("--slug")
     a.add_argument("--minutes", type=float, default=3)
     a.add_argument("--whole", action="append", default=[], metavar="A-B")
