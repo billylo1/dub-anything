@@ -1,4 +1,4 @@
-"""A resumed watcher must stop for a new failure on a previously blocked part."""
+"""Direct job creation, checkpoint pauses, and resumed watcher failures."""
 
 import contextlib
 import io
@@ -8,10 +8,75 @@ import sys
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 import dub_anything as runner
+
+
+class TextEvidenceTests(unittest.TestCase):
+    def test_cli_preserves_text_modes_and_routes_caption_reading(self):
+        for flag, mode, signs, extra in (
+            (None, False, False, None),
+            ("--captions", True, False, []),
+            ("--subtitles", "open", False, ["--open"]),
+            ("--auto-text", "auto", True, ["--auto"]),
+        ):
+            with self.subTest(flag=flag), tempfile.TemporaryDirectory() as tmp:
+                root = pathlib.Path(tmp)
+                source = root / "sample.mp4"
+                source.touch()
+                work = root / "work"
+                folder = work / "sample-01"
+                folder.mkdir(parents=True)
+                (folder / "segments.json").write_text('{"job_id": "sample"}', encoding="utf-8")
+                (root / "separator.json").write_text("{}", encoding="utf-8")
+                argv = ["dub_anything.py", "new", str(source)] + ([flag] if flag else [])
+                with (
+                    patch.object(runner, "VIDEOS", root / "videos"),
+                    patch.object(runner, "JOB_DIR", work / "jobs"),
+                    patch.object(runner, "WORK", work),
+                    patch.object(sys, "argv", argv),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    with self.assertRaises(SystemExit) as stopped:
+                        runner.main()
+                    self.assertEqual(stopped.exception.code, 0)
+                    job = runner.load_job("sample")
+                    self.assertEqual(job["captions"], mode)
+                    self.assertEqual(job["signs"], signs)
+                    with (
+                        patch.object(runner, "job_dir_of", return_value=root),
+                        patch.object(runner, "tool", return_value=(True, "")) as tool,
+                    ):
+                        self.assertEqual(runner.prepare_step(job, [{"name": "sample-01"}]), "busy")
+                    command = tool.call_args.args[2]
+                    if extra is None:
+                        self.assertIn("scripts/draft.py", command)
+                    else:
+                        self.assertEqual(command, runner.SUBS + ["sample-01"] + extra)
+
+
+class PauseCheckpointTests(unittest.TestCase):
+    def test_pause_waits_for_background_checks_and_skips_the_next_tool(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = pathlib.Path(tmp) / "pause"
+            marker.touch()
+            background = Mock()
+            with (
+                patch.dict(runner.os.environ, {"DUB_PAUSE_FILE": str(marker)}),
+                patch.object(runner, "SECOND_RUN", {"sample": (background, [])}),
+                patch.object(runner.subprocess, "run") as launch,
+            ):
+                with self.assertRaises(SystemExit) as stopped:
+                    runner.tool({"slug": "sample"}, "next step", [], "next")
+                self.assertEqual(stopped.exception.code, 75)
+                background.wait.assert_called_once()
+                launch.assert_not_called()
+
+    def test_direct_dubs_have_no_pause_marker(self):
+        with patch.dict(runner.os.environ, {"DUB_PAUSE_FILE": ""}):
+            runner.pause_checkpoint()
 
 
 class WatchBlockTests(unittest.TestCase):

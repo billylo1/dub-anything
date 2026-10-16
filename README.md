@@ -148,6 +148,7 @@ Jumpgate's `packages/jumpgate`.
 
 ## Documentation
 
+- [scripts/README.md](scripts/README.md): script entry points and shared tools
 - [docs/setup.md](docs/setup.md): installing everything, step by step
 - [AGENTS.md](AGENTS.md): the agent's instructions, and a dub from start to
   finish

@@ -95,10 +95,11 @@ work; you direct.
    nothing to ask.
    Look at the video's length and skim it for blocks that stay in the original
    (a channel card, commercial breaks, credits) so they can be split off whole.
-   `scripts/dub_anything.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles] [--signs]`
+   `scripts/dub_anything.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles|--auto-text] [--signs]`
    (`--captions` when the picture carries burned-in closed captions,
    `--subtitles` when a film subtitles its foreign-language speech in the
-   picture, `--signs` when it has text worth translating: title cards,
+   picture, `--auto-text` to inspect both styles and signs when unsure,
+   `--signs` when it has text worth translating: title cards,
    explainer diagrams, pages to read). Record the
    show and the choice in `work/NOTES.md`.
 2. **Start the machine** in the background and leave it running:
