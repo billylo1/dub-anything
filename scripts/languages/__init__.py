@@ -77,6 +77,8 @@ PAIRS = {
     # Finding 21: the Windows A/B followed the actors' delivery more closely with
     # per-line references. Both modes still need Cantonese pronunciation review.
     ("en", "yue"): {"line_ref": True},
+    # English -> Chinese (Mandarin) via OmniVoice zero-shot actor cloning.
+    ("en", "zh"): {"line_ref": True},
 }
 for _pair in PAIRS:
     if not all(code in LANGUAGES for code in _pair):
