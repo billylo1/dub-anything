@@ -1,4 +1,12 @@
-# Setup
+# Setup for agents
+
+**If you're a human, start with the [README](../README.md#getting-started).**
+Ask your desktop AI coding app to dub your movie or show; it handles setup for you.
+
+Agents: follow this guide to install and verify any missing prerequisites before
+starting the dub. Reuse working installations and handle routine setup issues
+yourself. Ask the user when a step needs their sign-in, license acceptance or
+permissions you don't have.
 
 Dub Anything needs a running [VoiceStudio](https://github.com/debpalash/VoiceStudio)
 backend, its models, and ffmpeg.

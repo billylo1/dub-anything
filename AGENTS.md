@@ -41,6 +41,11 @@ cloned or shared are final.
 
 ## Before you start
 
+- Handle setup for the user. If the repository isn't local yet, clone it, then
+  follow [docs/setup.md](docs/setup.md) to install and verify missing tools,
+  VoiceStudio and models. Reuse working installations and fix routine setup
+  issues yourself. Ask the user only for choices or steps that need them, such
+  as signing in, accepting a model license or granting required permissions.
 - `work/NOTES.md` (git-ignored, may not exist) has this machine's paths and
   per-show notes: story, cast, word choices. Read it, and add to it when you
   learn something about a show.
@@ -86,13 +91,11 @@ work; you direct.
    [docs/languages/README.md](docs/languages/README.md) says under "Adding a
    language": the module, a short test dub measured with and without per-line
    references, the pair's entry. Tell the user it's new and what you checked,
-   and suggest they send it back to the project as a pull request. Into English, ask one
-   question: the actor's voice (English with the actor's own accent),
-   American, or both. Recommend by genre: the actor's voice for live action,
-   American for anime (see docs/directing.md, "Voice"). With both, the actor's
-   voice plays by default.
-   Into Japanese or Spanish there is only the actor's voice, so there is
-   nothing to ask.
+   and suggest they send it back to the project as a pull request. Use the actor's
+   voice with their native accent by default (`--voices actor`), without asking
+   the user to choose. For English dubs, honor requests for American English
+   (`--voices american`) or both (`--voices both`); with both, the actor's voice
+   plays by default. Other target languages use the actor's voice.
    Look at the video's length and skim it for blocks that stay in the original
    (a channel card, commercial breaks, credits) so they can be split off whole.
    `scripts/dub_anything.py new <video> [--source es|ko|zh|en --target en|ja|es] --voices actor|american|both [--whole A-B ...] [--captions|--subtitles|--auto-text] [--signs]`
