@@ -83,13 +83,37 @@ def main():
         bed = next(f for f in out if f is not vocals)
         for stem in STEMS:
             keep = job / stem.replace(".wav", ".htdemucs.wav")
-            if not keep.exists():
+            if not keep.exists() and (job / stem).exists():
                 shutil.copy2(job / stem, keep)
         shutil.move(vocals, job / "vocals.wav")
         shutil.move(bed, job / "no_vocals.wav")
         mark.write_text(json.dumps({"model": args.model}), encoding="utf-8")
+        _sync_dub_history(job)
         print(f"{clip}: stems from {args.model} (htdemucs kept as *.htdemucs.wav)")
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _sync_dub_history(job_dir):
+    db_path = DATA / "omnivoice.db"
+    if not db_path.exists():
+        return
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT job_data FROM dub_history WHERE id=?", (job_dir.name,)).fetchone()
+        if row:
+            jd = json.loads(row["job_data"])
+            nv = str(job_dir / "no_vocals.wav")
+            v = str(job_dir / "vocals.wav")
+            if jd.get("no_vocals_path") != nv or jd.get("vocals_path") != v:
+                jd["no_vocals_path"] = nv
+                jd["vocals_path"] = v
+                conn.execute("UPDATE dub_history SET job_data=? WHERE id=?", (json.dumps(jd), job_dir.name))
+                conn.commit()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
