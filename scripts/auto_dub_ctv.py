@@ -272,13 +272,19 @@ def ensure_backend():
 
 
 def find_yt_cookies() -> str | None:
-    for c in [
-        pathlib.Path(os.environ.get("YOUTUBE_COOKIES_FILE", "")),
-        pathlib.Path("/models/youtube_cookies.txt"),
-        ROOT / "youtube_cookies.txt",
-        pathlib.Path("/tmp/yt_cookies.txt"),
-    ]:
-        if c and c.exists() and c.stat().st_size > 0:
+    candidates = []
+    env_cookie = os.environ.get("YOUTUBE_COOKIES_FILE")
+    if env_cookie:
+        candidates.append(pathlib.Path(env_cookie))
+    candidates.extend(
+        [
+            pathlib.Path("/models/youtube_cookies.txt"),
+            ROOT / "youtube_cookies.txt",
+            pathlib.Path("/tmp/yt_cookies.txt"),
+        ]
+    )
+    for c in candidates:
+        if c.is_file() and c.stat().st_size > 0:
             return str(c)
     return None
 

@@ -5,7 +5,7 @@ FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    OMNIVOICE_DATA_DIR=/models/data \
+    OMNIVOICE_DATA_DIR=/app/data \
     OMNIVOICE_CACHE_DIR=/models \
     HF_HUB_CACHE=/models/hf_cache \
     VOICESTUDIO_DIR=/app/VoiceStudio \
