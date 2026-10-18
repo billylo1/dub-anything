@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OMNIVOICE_CACHE_DIR=/models \
     HF_HUB_CACHE=/models/hf_cache \
     VOICESTUDIO_DIR=/app/VoiceStudio \
-    PATH="/root/.cargo/bin:/usr/local/bin:${PATH}"
+    PATH="/root/.local/bin:/usr/local/bin:${PATH}"
 
 # 1. System packages, FFmpeg, Python 3.11, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -40,7 +40,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
