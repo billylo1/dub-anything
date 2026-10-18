@@ -15,7 +15,7 @@ else
 fi
 
 # Set directories
-export OMNIVOICE_DATA_DIR="${OMNIVOICE_DATA_DIR:-/models/data}"
+export OMNIVOICE_DATA_DIR="${OMNIVOICE_DATA_DIR:-/app/data}"
 export OMNIVOICE_CACHE_DIR="${OMNIVOICE_CACHE_DIR:-/models}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/models/hf_cache}"
 export VOICESTUDIO_DIR="${VOICESTUDIO_DIR:-/app/VoiceStudio}"

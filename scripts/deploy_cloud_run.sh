@@ -5,7 +5,7 @@
 set -eo pipefail
 
 PROJECT_ID="${GCP_PROJECT:-videos-billylo}"
-REGION="${GCP_REGION:-us-central1}"
+REGION="${GCP_REGION:-us-east4}"
 REPO_NAME="dub-anything-repo"
 IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/dub-runner:latest"
 JOB_NAME="ctv-news-dub"
