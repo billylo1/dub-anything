@@ -60,7 +60,21 @@ WORK_DIR = ROOT / "work"
 JOBS_DIR = WORK_DIR / "jobs"
 SCRIPTS_DIR = ROOT / "scripts"
 HISTORY_FILE = WORK_DIR / "ctv_history.json"
-WEB_DIR = pathlib.Path(os.environ.get("WEB_DIR", "/Users/billylo/web/video.billylo.ca"))
+
+
+def find_web_dir() -> pathlib.Path:
+    if os.environ.get("WEB_DIR"):
+        return pathlib.Path(os.environ["WEB_DIR"])
+    local_dev = pathlib.Path("/Users/billylo/web/video.billylo.ca")
+    if (local_dev / "firebase.json").exists():
+        return local_dev
+    bundled = ROOT / "web_app"
+    if (bundled / "firebase.json").exists():
+        return bundled
+    return local_dev
+
+
+WEB_DIR = find_web_dir()
 WEB_VIDEOS_DIR = WEB_DIR / "videos"
 
 # VoiceStudio Python executable

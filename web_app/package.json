@@ -1,0 +1,10 @@
+{
+  "name": "videos-billylo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "manifest": "node generate-manifest.mjs",
+    "deploy": "node generate-manifest.mjs && npx -y firebase-tools@latest deploy --only hosting --project videos-billylo --non-interactive"
+  }
+}
