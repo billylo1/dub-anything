@@ -50,6 +50,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -638,41 +639,61 @@ def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
     """Run dub_anything.py run --watch with automated recovery on timing overflows."""
     api_key = os.environ.get("GEMINI_API_KEY")
 
-    for attempt in range(1 + max_retries):
-        log(f"Starting pipeline watcher for '{slug}' (attempt {attempt + 1}/{1 + max_retries})...")
-        cmd = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug, "--watch"]
-        res = subprocess.run(cmd)
+    stop_event = threading.Event()
 
-        if res.returncode == 0:
-            log("Pipeline completed successfully!")
-            return True
+    def continuous_director():
+        while not stop_event.is_set():
+            try:
+                direct_parts(slug, retranslate=False)
+            except Exception as e:
+                warn(f"Continuous director background pass encountered: {e}")
+            stop_event.wait(5.0)
 
-        if res.returncode == 2:
-            warn("Pipeline paused: timing window overflow (OVER) or review needed.")
-            if attempt < max_retries:
-                # Inspect all parts for OVER lines and fix
-                fixed_any = False
-                parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "script.json").exists()])
-                for part in parts:
-                    n = check_and_fix_overflows(part, api_key)
-                    if n > 0:
-                        fixed_any = True
-                if fixed_any:
-                    log("Auto-corrected timing overflows across parts. Retrying pipeline...")
-                    time.sleep(2)
-                    continue
-            warn("Manual intervention requested or max retries reached.")
-            print("\n" + "=" * 60)
-            print("MANUAL INTERVENTION REQUIRED:")
-            print("  To review and fix a part, run:")
-            print(f"    {PY} scripts/fit.py <part> --only-flags")
-            print("  Edit work/<part>/script.json, then resume:")
-            print(f"    python3 scripts/auto_dub_ctv.py --slug {slug} --step render")
-            print("=" * 60 + "\n")
+    director_thread = threading.Thread(target=continuous_director, daemon=True)
+    director_thread.start()
+    log(f"Started continuous automated director thread for '{slug}'.")
+
+    try:
+        for attempt in range(1 + max_retries):
+            log(f"Starting pipeline watcher for '{slug}' (attempt {attempt + 1}/{1 + max_retries})...")
+            # Direct any currently available drafts before starting watcher
+            direct_parts(slug, retranslate=False)
+            cmd = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug, "--watch"]
+            res = subprocess.run(cmd)
+
+            if res.returncode == 0:
+                log("Pipeline completed successfully!")
+                return True
+
+            if res.returncode == 2:
+                warn("Pipeline paused: timing window overflow (OVER) or review needed.")
+                if attempt < max_retries:
+                    # Inspect all parts for OVER lines and fix
+                    fixed_any = False
+                    parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "script.json").exists()])
+                    for part in parts:
+                        n = check_and_fix_overflows(part, api_key)
+                        if n > 0:
+                            fixed_any = True
+                    if fixed_any:
+                        log("Auto-corrected timing overflows across parts. Retrying pipeline...")
+                        time.sleep(2)
+                        continue
+                warn("Manual intervention requested or max retries reached.")
+                print("\n" + "=" * 60)
+                print("MANUAL INTERVENTION REQUIRED:")
+                print("  To review and fix a part, run:")
+                print(f"    {PY} scripts/fit.py <part> --only-flags")
+                print("  Edit work/<part>/script.json, then resume:")
+                print(f"    python3 scripts/auto_dub_ctv.py --slug {slug} --step render")
+                print("=" * 60 + "\n")
+                return False
+
+            error(f"Pipeline failed with unexpected exit code {res.returncode}.")
             return False
-
-        error(f"Pipeline failed with unexpected exit code {res.returncode}.")
-        return False
+    finally:
+        stop_event.set()
+        director_thread.join(timeout=2.0)
 
     return False
 

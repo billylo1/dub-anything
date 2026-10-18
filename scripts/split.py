@@ -69,7 +69,7 @@ if args.encoder == "auto":
                                 "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)  # fmt: skip
         args.encoder = "h264_nvenc" if nvenc.returncode == 0 else "libx264"
 if "nvenc" in args.encoder:
-    quality = ["-preset", "p5", "-cq", "20"]
+    quality = ["-preset", "p1", "-cq", "24"]
 elif "videotoolbox" in args.encoder:
     quality = ["-q:v", "65"]
 else:

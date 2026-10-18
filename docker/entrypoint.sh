@@ -22,9 +22,18 @@ export VOICESTUDIO_DIR="${VOICESTUDIO_DIR:-/app/VoiceStudio}"
 
 mkdir -p "$OMNIVOICE_DATA_DIR" "$OMNIVOICE_CACHE_DIR" "$HF_HUB_CACHE" /app/work/logs
 
-# Start VoiceStudio Backend in background
-echo "[*] Starting VoiceStudio backend on port 3900..."
-cd "$VOICESTUDIO_DIR"
+# Fast local caching of heavy PyTorch models from GCSFuse mount
+if [ -d "/models/models--openai--whisper-large-v3-turbo" ] && [ ! -d "/root/.cache/huggingface/hub/models--openai--whisper-large-v3-turbo" ]; then
+    mkdir -p /root/.cache/huggingface/hub
+    echo "[*] Pre-caching Whisper Large-v3 Turbo to local SSD in background..."
+    cp -r /models/models--openai--whisper-large-v3-turbo /root/.cache/huggingface/hub/ 2>/dev/null &
+fi
+
+BACKEND_PID=""
+if [ "${SKIP_BACKEND:-0}" != "1" ]; then
+    # Start VoiceStudio Backend in background
+    echo "[*] Starting VoiceStudio backend on port 3900..."
+    cd "$VOICESTUDIO_DIR"
 
 if [ -f "$VOICESTUDIO_DIR/.venv/bin/python" ]; then
     VS_PY="$VOICESTUDIO_DIR/.venv/bin/python"
@@ -55,6 +64,7 @@ if [ "$READY" -ne 1 ]; then
     cat /app/work/logs/backend.log || true
     kill -9 "$BACKEND_PID" || true
     exit 1
+fi
 fi
 
 # Switch back to app directory
