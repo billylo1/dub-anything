@@ -9,9 +9,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OMNIVOICE_CACHE_DIR=/models \
     HF_HUB_CACHE=/models/hf_cache \
     VOICESTUDIO_DIR=/app/VoiceStudio \
-    PATH="/root/.cargo/bin:${PATH}"
+    PATH="/root/.cargo/bin:/usr/local/bin:${PATH}"
 
-# 1. System libraries, FFmpeg, Python 3.11, and utilities
+# 1. System packages, FFmpeg, Python 3.11, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -25,19 +25,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
     python3.11-dev \
-    python3-pip \
-    nodejs \
-    npm \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set default python3 to 3.11
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
-# 2. Install modern uv package manager, yt-dlp, and firebase-tools
+# 2. Modern Node.js (v20 LTS), yt-dlp binary, and uv package manager
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g firebase-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp
+
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-RUN pip3 install --no-cache-dir --upgrade yt-dlp
-RUN npm install -g firebase-tools
 
 WORKDIR /app
 
@@ -50,13 +53,27 @@ RUN git clone https://github.com/debpalash/VoiceStudio.git /app/VoiceStudio \
 COPY patches/voicestudio-local-fixes.patch /app/VoiceStudio/
 RUN cd /app/VoiceStudio && git apply voicestudio-local-fixes.patch
 
-# Create virtual environment and install PyTorch with CUDA 12.8
+# Create virtual environment with PyTorch CUDA 12.8 and install VoiceStudio deps
 RUN cd /app/VoiceStudio && \
     uv venv .venv --python 3.11 && \
     uv pip install --index-url https://download.pytorch.org/whl/cu128 \
         torch==2.8.0 torchvision torchaudio && \
-    uv pip install -r requirements.txt || true && \
-    uv pip install uvicorn fastapi requests numpy scipy soundfile librosa onnxruntime-gpu rapidocr sherpa-onnx pykakasi huggingface_hub
+    uv sync --no-sync || uv pip install -e . || true && \
+    uv pip install \
+        uvicorn \
+        fastapi \
+        requests \
+        numpy \
+        scipy \
+        soundfile \
+        librosa \
+        pyannote.audio \
+        audio-separator \
+        "onnxruntime-gpu[cuda,cudnn]" \
+        rapidocr \
+        sherpa-onnx \
+        pykakasi \
+        huggingface_hub
 
 # 4. Copy Dub Anything codebase
 COPY . /app/dub-anything

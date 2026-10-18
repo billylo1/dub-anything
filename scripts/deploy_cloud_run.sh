@@ -67,7 +67,7 @@ else
     echo "[*] Secret 'GEMINI_API_KEY' exists."
 fi
 
-# Grant Cloud Run Service Account access to Secret
+# Grant Cloud Run Service Account access to Secret and Cloud Storage
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
 COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 echo "[*] Granting Secret Manager Secret Accessor to $COMPUTE_SA..."
@@ -75,6 +75,16 @@ gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
     --member="serviceAccount:${COMPUTE_SA}" \
     --role="roles/secretmanager.secretAccessor" \
     --project="$PROJECT_ID" >/dev/null 2>&1 || true
+
+echo "[*] Granting Storage Object Admin to $COMPUTE_SA..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
+
+echo "[*] Granting Cloud Run Invoker to $COMPUTE_SA..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/run.invoker" >/dev/null 2>&1 || true
 
 # 5. Cloud Build: Build and push container image
 echo "[*] Step 5: Building container image via Cloud Build..."
