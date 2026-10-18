@@ -94,7 +94,7 @@ def main():
 
 
 def _sync_dub_history(job_dir):
-    db_path = DATA / "omnivoice.db"
+    db_path = default_data_dir() / "omnivoice.db"
     if not db_path.exists():
         return
     import sqlite3

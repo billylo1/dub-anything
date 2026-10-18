@@ -13,7 +13,7 @@ class ChineseSourceTests(unittest.TestCase):
     def test_pair_and_delivery_metadata(self):
         zh = LANGUAGES["zh"]
         self.assertIn(("zh", "en"), PAIRS)
-        self.assertNotIn(("en", "zh"), PAIRS)
+        self.assertIn(("en", "zh"), PAIRS)
         self.assertEqual(pair_of({"source_lang": "zh", "target_lang": "en"}), ("zh", "en"))
         self.assertEqual(pair_of({}), PAIR)
         self.assertEqual(ISO3["zh"], "zho")
