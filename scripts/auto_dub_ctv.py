@@ -265,6 +265,34 @@ def ensure_backend():
         sys.exit(1)
 
 
+def ensure_voices_synced():
+    """Sync voices.json and reference wavs from /models/voices/ if available."""
+    WORK_DIR.mkdir(parents=True, exist_ok=True)
+    voices_json = WORK_DIR / "voices.json"
+    voices_dir = WORK_DIR / "voices"
+    voices_dir.mkdir(parents=True, exist_ok=True)
+
+    src_models = pathlib.Path("/models/voices")
+    if src_models.exists():
+        src_json = src_models / "voices.json"
+        if src_json.exists() and (not voices_json.exists() or voices_json.stat().st_size == 0):
+            log(f"Syncing voices.json from {src_json}...")
+            shutil.copy2(src_json, voices_json)
+
+        wav_files = list(src_models.glob("*.wav")) + list((src_models / "voices").glob("*.wav"))
+        copied = 0
+        for w in wav_files:
+            dest = voices_dir / w.name
+            if not dest.exists() or dest.stat().st_size == 0:
+                try:
+                    shutil.copy2(w, dest)
+                    copied += 1
+                except Exception:
+                    pass
+        if copied > 0:
+            log(f"Synced {copied} voice reference audio files to {voices_dir}.")
+
+
 def find_yt_cookies() -> str | None:
     candidates = []
     env_cookie = os.environ.get("YOUTUBE_COOKIES_FILE")
@@ -550,15 +578,31 @@ def direct_parts(slug: str, retranslate: bool = False):
         if api_key:
             cantonese_texts = translate_with_gemini(lines, api_key)
 
+        voices_spec = {}
+        if (WORK_DIR / "voices.json").exists():
+            try:
+                with open(WORK_DIR / "voices.json", "r", encoding="utf-8") as f:
+                    voices_spec = json.load(f)
+            except Exception:
+                pass
+        default_voice = (
+            "michelle_dube"
+            if "michelle_dube" in voices_spec
+            else (next(iter(voices_spec.keys())) if voices_spec else "actor")
+        )
+
         script_lines = []
         for i, line in enumerate(lines):
             text = cantonese_texts[i] if i < len(cantonese_texts) and cantonese_texts[i] else ""
             if not text:
                 text = translate_fallback(line.get("en", ""))
+            assigned_voice = line.get("voice") or ""
+            if not assigned_voice or assigned_voice not in voices_spec:
+                assigned_voice = default_voice
             sl = {
                 "start": line.get("start", 0.0),
                 "end": line.get("end", 0.0),
-                "voice": line.get("voice", "actor"),
+                "voice": assigned_voice,
                 "text": text,
             }
             if "en" in line:
@@ -792,6 +836,7 @@ def main():
         sys.exit(0)
 
     # Step 3: Ensure Backend & Init Job
+    ensure_voices_synced()
     ensure_backend()
     init_job(video_path, slug)
 
