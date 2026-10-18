@@ -73,7 +73,23 @@ QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = backend.vs_python()
 UV = ["uv", "run", "--no-project"]
-if sys.platform == "darwin":
+
+
+def _can_import(mod_name: str) -> bool:
+    try:
+        res = subprocess.run(
+            [PY, "-c", f"import {mod_name}"],
+            capture_output=True,
+            timeout=5,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+if _can_import("audio_separator"):
+    SEPARATE = [PY, "scripts/separate.py"]
+elif sys.platform == "darwin":
     SEPARATE = UV + [
         "--python",
         "3.11",
@@ -103,23 +119,30 @@ else:
         "python",
         "scripts/separate.py",
     ]
-SECOND = UV + [
-    "--python",
-    "3.12",
-    "--with",
-    "sherpa-onnx",
-    "--with",
-    "soundfile",
-    "--with",
-    "scipy",
-    "--with",
-    "pykakasi",
-    "--with",
-    "huggingface_hub",
-    "python",
-    "scripts/second.py",
-]
-if sys.platform == "darwin":
+
+if _can_import("sherpa_onnx"):
+    SECOND = [PY, "scripts/second.py"]
+else:
+    SECOND = UV + [
+        "--python",
+        "3.12",
+        "--with",
+        "sherpa-onnx",
+        "--with",
+        "soundfile",
+        "--with",
+        "scipy",
+        "--with",
+        "pykakasi",
+        "--with",
+        "huggingface_hub",
+        "python",
+        "scripts/second.py",
+    ]
+
+if _can_import("rapidocr"):
+    SUBS = [PY, "scripts/subs.py"]
+elif sys.platform == "darwin":
     SUBS = UV + [
         "--python",
         "3.12",
@@ -229,12 +252,15 @@ def split(job):
     pdir = VIDEOS / f"{job['slug']}-parts"
     if (pdir / "parts.json").exists():
         return True
-    try:
-        import faster_whisper  # noqa: F401
-
+    if _can_import("faster_whisper"):
         py = [PY]
-    except ImportError:
-        py = UV + ["--python", "3.12", "--with", "faster-whisper", "python"]
+    else:
+        try:
+            import faster_whisper  # noqa: F401
+
+            py = [PY]
+        except ImportError:
+            py = UV + ["--python", "3.12", "--with", "faster-whisper", "python"]
     cmd = py + ["scripts/split.py", job["video"], "--minutes", str(job["split"]["minutes"]), "--out", str(pdir)]
     for w in job["split"]["whole"]:
         cmd += ["--whole", w]

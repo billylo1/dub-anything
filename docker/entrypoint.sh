@@ -19,6 +19,7 @@ export OMNIVOICE_DATA_DIR="${OMNIVOICE_DATA_DIR:-/app/data}"
 export OMNIVOICE_CACHE_DIR="${OMNIVOICE_CACHE_DIR:-/models}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/models/hf_cache}"
 export VOICESTUDIO_DIR="${VOICESTUDIO_DIR:-/app/VoiceStudio}"
+export PATH="/app/VoiceStudio/.venv/bin:/root/.local/bin:/usr/local/bin:${PATH}"
 
 mkdir -p "$OMNIVOICE_DATA_DIR" "$OMNIVOICE_CACHE_DIR" "$HF_HUB_CACHE" /app/work/logs
 

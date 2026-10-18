@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OMNIVOICE_CACHE_DIR=/models \
     HF_HUB_CACHE=/models/hf_cache \
     VOICESTUDIO_DIR=/app/VoiceStudio \
-    PATH="/root/.local/bin:/usr/local/bin:${PATH}"
+    PATH="/app/VoiceStudio/.venv/bin:/root/.local/bin:/usr/local/bin:${PATH}"
 
 # 1. System packages, FFmpeg, Python 3.11, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -76,7 +76,8 @@ RUN cd /app/VoiceStudio && \
         rapidocr \
         sherpa-onnx \
         pykakasi \
-        huggingface_hub
+        huggingface_hub \
+        faster-whisper
 
 # 4. Copy Dub Anything codebase
 COPY . /app/dub-anything
