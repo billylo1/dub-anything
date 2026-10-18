@@ -271,6 +271,18 @@ def ensure_backend():
         sys.exit(1)
 
 
+def find_yt_cookies() -> str | None:
+    for c in [
+        pathlib.Path(os.environ.get("YOUTUBE_COOKIES_FILE", "")),
+        pathlib.Path("/models/youtube_cookies.txt"),
+        ROOT / "youtube_cookies.txt",
+        pathlib.Path("/tmp/yt_cookies.txt"),
+    ]:
+        if c and c.exists() and c.stat().st_size > 0:
+            return str(c)
+    return None
+
+
 def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib.Path:
     """Download video with yt-dlp."""
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -287,10 +299,17 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
         fmt,
         "--merge-output-format",
         "mp4",
+        "--extractor-args",
+        "youtube:player_client=android,ios,web",
         "-o",
         str(VIDEOS_DIR / f"{slug}.%(ext)s"),
-        url,
     ]
+    cookies = find_yt_cookies()
+    if cookies:
+        log(f"Using YouTube cookies from: {cookies}")
+        cmd.extend(["--cookies", cookies])
+    cmd.append(url)
+
     res = subprocess.run(cmd)
     if res.returncode != 0:
         error("yt-dlp download failed.")
