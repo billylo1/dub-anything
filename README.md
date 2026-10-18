@@ -4,20 +4,39 @@ Dub films and shows into another language **in each actor's own voice**, with
 the original music and sound effects intact. It runs on your own PC, and an AI
 coding agent directs the dub line by line, the way a dubbing director would.
 
-You give it a video file. You get the same file back as
+You give it a video file and target language. You get the same file back as
 `my-show (dubbed).mkv`: the dub plays by default, the original audio is one
 track away, and subtitles in both languages are included.
-
-It dubs Japanese, Spanish, Korean and Chinese into English, and English into
-Japanese, Spanish and Cantonese (yue). Need another language? Just ask: your agent adds the new
-pair as part of the job. Once it works, please
-[send it back](#other-languages-and-hardware) so everyone gets it.
 
 ## Demos
 
 | A Japanese anime, dubbed into English | A Japanese film, dubbed into English |
 |---|---|
 | [![A Japanese anime, dubbed into English](https://img.youtube.com/vi/qXosYS-cTXk/maxresdefault.jpg)](https://www.youtube.com/watch?v=qXosYS-cTXk) | [![A Japanese film, dubbed into English](https://img.youtube.com/vi/2DsFAoTbQ8E/maxresdefault.jpg)](https://www.youtube.com/watch?v=2DsFAoTbQ8E) |
+
+## Getting started
+
+1. **Install/Open a desktop AI app**, such as ChatGPT, Claude or OpenCode,
+   with access to your local files and a terminal. Turn on remote control so 
+   you can monitor the dubbing process when you're away from your computer.
+2. **Ask it to dub your movie or show.** Give it this repository, your video's
+   path and the language you want. For example:
+
+   > Use https://github.com/swax/dub-anything to dub D:\movies\my-show.mkv
+   > into English. Download the repository and install the prerequisites for me.
+
+3. **Let the agent handle the rest.** It reads the project instructions,
+   installs the tools, VoiceStudio and models, then directs, renders and checks
+   the dub. It may ask you to sign in or accept a model license;
+   after that, it's mostly hands off. The first run includes large downloads,
+   and a full movie can take hours.
+4. **Watch the result.** You get the dubbed file and a short list of moments to
+   check, with timestamps. If anything needs fixing, just ask the AI: tell it
+   what went wrong and where, and it re-renders the affected parts.
+
+Each actor keeps their native accent by default, using a faster engine with
+more accurate voice cloning. You can specify a different accent in your request,
+such as American English for an English dub.
 
 ## What makes it different
 
@@ -44,69 +63,34 @@ a listener notices:
 - **The rest stays original.** Between lines you hear the original soundtrack,
   so songs, laughs and names stay the actor's own.
 - **Chosen by ear.** The defaults were picked by listening to the alternatives
-  side by side. What was measured is in [docs/research.md](docs/research.md).
+  side by side. What was measured is in [docs/research.md](docs/research.md). Feel free to continue fine tuning, and send back your improvements.
 
 ## What you need
 
-- **macOS (Apple Silicon M1/M2/M3/M4 or Intel)** with Metal (MPS) acceleration,
-  or **a Windows PC with an NVIDIA GPU** with at least 6 GB of memory. A 16 GB
-  card runs everything at once. (Linux should be a short port; see
+- **macOS (Apple Silicon or Intel)**, or **a Windows PC with an NVIDIA GPU**
+  with at least 6 GB of memory. Apple Silicon uses Metal (MPS) acceleration.
+  A 16 GB NVIDIA card runs everything at once. (Linux should be a short port; see
   [below](#other-languages-and-hardware).)
 - **Disk space:** about 40 GB for VoiceStudio, the models and the tools'
   environments, plus room to work: a movie in both voices used about
   85 GB until it was cleaned up.
-- **An AI coding agent** that reads [AGENTS.md](AGENTS.md): Claude Code,
-  Codex, Cursor or similar.
-- **[VoiceStudio](https://github.com/debpalash/VoiceStudio)**, the open-source
-  voice engine Dub Anything drives. The setup guide installs it.
 
-## Getting started
-
-1. **Set up once** with [docs/setup.md](docs/setup.md): VoiceStudio, its
-   models, ffmpeg and uv.
-2. **Open this folder in your agent** and ask, for example:
-
-   > Dub D:\movies\my-show.mkv into English.
-
-3. **Pick a voice** when it asks ([below](#choosing-a-voice)). Into Japanese
-   or Spanish there's nothing to pick.
-4. **Let it work.** The machines separate, transcribe, render and check while
-   the agent directs each part as soon as it's drafted. It tells you if
-   something needs you.
-5. **Listen.** At the end you get the dubbed file and a short list of moments
-   to check, with their times. Tell the agent what to change, and it
-   re-renders just those parts.
-
-The agent can't hear, so you're the ears: you judge the acting, the voices and
-the mix, and you decide what may be cloned or shared.
-
-## Choosing a voice
-
-| | **Actor's voice** (default) | **American** |
-|---|---|---|
-| Sounds like | The actor speaking English, with their own accent | Native American English, converted toward each actor's voice |
-| Best for | Live action | Anime and animation |
-| Trade-offs | Accented English | Less like the actors in live action, a little less of the acting, and a few times slower to render |
-
-Not sure? Ask for both. Each gets its own audio track, and you switch between
-them in your player (the actor's voice plays by default). The American voice
-has so far been used on Japanese sources.
-
-Into Japanese or Spanish, the actor's voice is the only one: each actor speaks
-the new language with their own accent.
+Your agent installs [VoiceStudio](https://github.com/debpalash/VoiceStudio),
+the voice engine, and the other prerequisites as part of the first run.
 
 ## How long it takes
 
-A short clip takes minutes. A movie in both voices takes about seven
-hours of machine time on a laptop RTX 4090, nearly all of it on the GPU; the
-actor's voice alone takes about half that. The agent directs while the renders
-run, and on a long video it can split the directing across helper agents.
+A short clip takes minutes. A movie with the actors' native accents takes about
+three to four hours of machine time on a laptop RTX 4090, nearly all of it on the
+GPU. Adding an optional American English audio track brings the total to about
+seven hours. The agent directs while the renders run, and on a long video it can
+split the directing across helper agents.
 
 ## Privacy
 
-Your video and audio stay on your machine: the models run locally, and the
-internet is only used to download them. Your agent does read the transcripts
-and the video frames it looks at, so those go wherever your agent's model runs.
+Audio and video processing runs locally. Your AI provider may receive
+transcripts and selected video frames as the agent directs and checks the dub. 
+To run completely offline you need to use a local LLM for the director.
 
 ## Responsible use
 
@@ -114,7 +98,9 @@ Only dub media you have the rights to, and only clone voices with the consent
 the use requires. A dub made from someone else's film or voice is for private
 use unless you have permission.
 
-## How it works
+<a id="how-it-works"></a>
+<details>
+<summary><strong>How it works</strong></summary>
 
 1. **Split** the video into ~3-minute parts at pauses in speech.
 2. **Separate** the voices from the music and effects (Mel-Band Roformer).
@@ -146,9 +132,14 @@ Jumpgate's `packages/jumpgate`.
 
 </details>
 
-## Documentation
+</details>
 
-- [docs/setup.md](docs/setup.md): installing everything, step by step
+<a id="documentation"></a>
+<details>
+<summary><strong>Documentation</strong></summary>
+
+- [scripts/README.md](scripts/README.md): script entry points and shared tools
+- [docs/setup.md](docs/setup.md): setup instructions for agents
 - [AGENTS.md](AGENTS.md): the agent's instructions, and a dub from start to
   finish
 - [docs/directing.md](docs/directing.md): the directing workflow, every tool,
@@ -158,7 +149,11 @@ Jumpgate's `packages/jumpgate`.
 - [docs/research.md](docs/research.md): what was measured and tried
 - [docs/roadmap.md](docs/roadmap.md): what's next
 
-## Running it without an agent
+</details>
+
+<a id="running-it-without-an-agent"></a>
+<details>
+<summary><strong>Running it without an agent</strong></summary>
 
 The scripts are plain Python, so you can drive a dub yourself and write the
 directed scripts by hand. With VoiceStudio's Python
@@ -197,7 +192,11 @@ Some steps need their own environments (`separate.py`, `subs.py`,
 The workflow, the script format and every tool are in
 [docs/directing.md](docs/directing.md).
 
-## Other languages and hardware
+</details>
+
+<a id="other-languages-and-hardware"></a>
+<details>
+<summary><strong>Other languages and hardware</strong></summary>
 
 Ask for a language pair that isn't here yet, and your agent adds it as part of
 the job. The voices aren't the limit: VoiceStudio clones voices in hundreds of
@@ -208,9 +207,9 @@ and how QA compares a take with its line. That lives in one module,
 short test dub before adding it, as
 [docs/languages/](docs/languages/README.md#adding-a-language) describes.
 
-**Please send new languages back.** If your agent added a language or a pair,
-open a pull request with its module, its notes (`docs/languages/<code>.md`)
-and the pair's entry in `PAIRS`, so the next person gets it ready-made.
+**Share new languages if you'd like.** Ask your agent to open a pull request
+with its module, its notes (`docs/languages/<code>.md`) and the pair's entry in
+`PAIRS`, so the next person gets it ready-made.
 
 The models run on Metal MPS (on Apple Silicon macOS) or CUDA (on Windows/Linux)
 and fall back to the CPU without it, slower. Video is encoded with
@@ -218,12 +217,16 @@ Apple VideoToolbox on macOS, NVENC on Windows/Linux when NVIDIA is present,
 else x264. Platform differences (paths, desktop app runtime detection, GPU locks,
 audio separation environments) are handled automatically across macOS and Windows.
 
+</details>
+
 ## Contributing
 
 Bug reports, ideas and pull requests are welcome, new languages most of all.
+If your AI fixes a bug, improves the workflow or adds a language, you can ask it
+to send the changes back as a pull request. Sharing is optional.
 [docs/directing.md](docs/directing.md) explains how the pieces fit. Python is
 formatted and linted with ruff (`uvx ruff format`, `uvx ruff check`), and
-[docs/setup.md](docs/setup.md) shows how to turn on the pre-commit check.
+the [agent setup guide](docs/setup.md) shows how to turn on the pre-commit check.
 
 `videos/` and `work/` are git-ignored so that source media, transcripts and
 voice references stay out of the repository. Don't force-add them, and use

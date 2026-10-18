@@ -10,6 +10,12 @@ Run everything from the repo folder with VoiceStudio's Python
 `~/Library/Application Support/VoiceStudio/runtime/project/.venv/bin/python` on macOS),
 with the backend up (see [setup.md](setup.md)).
 
+Whisper tools import `WhisperModel` from `scripts/whisper_safe.py`. Keep that
+wrapper when adding a transcription tool: a trailing window with fewer than two
+mel frames can crash older CTranslate2 builds during word alignment. The wrapper
+omits timings for that unusable window and leaves ordinary word timings alone,
+without changing the machine's CUDA/cuDNN dependencies.
+
 ## Files
 
 | Path | What |
@@ -135,8 +141,23 @@ render nothing and don't make a part render again; they change the delivery
 
 ## Workflow
 
-For a new show, settle one thing with the user before the first part: the
-voice, or both (see "Voice" under Render). Everything else has a default. The
+Use `scripts/dub_anything.py new ... --auto-text` when the picture's text styles
+are uncertain or mixed. It reads both caption appearances and outlined bottom
+subtitles with one OCR inference per changed frame, and looks for signs. The
+appearance labels are not proof that text matches the spoken language: compare
+the words with audio and frames before using them to correct a transcript.
+Foreign-language dialogue translated in the picture may need to stay original
+with translated captions. Auto detection provides evidence; the director still
+decides which text the viewer needs.
+
+To pause a long run at a completed tool step, set `DUB_PAUSE_FILE` to an absolute
+marker-file path before starting `run --watch`, then create that file when a
+pause is needed. The current tool and background second-opinion checks finish
+before the runner exits with code 75. Remove the marker and run the same command
+again to resume from saved progress. Without that variable, runs behave as usual.
+
+For a new show, use the actor's voice with their native accent unless the user
+requests American English or both (see "Voice" under Render). The
 language pair is Japanese → English unless the job says otherwise (`--source
 en --target ja`, `--source en --target es`, `--source es`, `--source ko` or `--source zh`; see "Other
 languages").
@@ -575,8 +596,8 @@ override the script for one run, e.g. for an A/B job. Both change takes, so try 
 approved part rather than on the part itself.
 
 **Voice** (the `render` block's `"voice"`, or `--voice`) is how the English
-sounds, and the one choice to put to the user for a new show. Everything else
-above has a default.
+sounds. Use the actor's native accent by default; use American English or both
+when the user requests it.
 
 - `"actor"` (the default): OmniVoice clones each actor, so the English carries
   the actor's accent. Timing is tightest and the sound cleanest, and per-line
@@ -594,7 +615,7 @@ above has a default.
   some of the intonation, a little lower in pitch. Per-line references don't
   apply.
 
-Recommend one by genre, or both: `scripts/dub_anything.py new --voices both` renders
+When requested, `scripts/dub_anything.py new --voices both` renders
 every part in each voice and delivers both tracks, the actor's playing by
 default. In trials, `"american"` came out closer to the actors than the clones on an
 animated series. On a live-action drama it stayed less like the actors than the
