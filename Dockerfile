@@ -31,11 +31,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set default python3 to 3.11
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
-# 2. Modern Node.js (v20 LTS), yt-dlp binary, and uv package manager
+# 2. Modern Node.js (v20 LTS), Deno, yt-dlp binary, and uv package manager
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get install -y --no-install-recommends nodejs unzip \
     && npm install -g firebase-tools \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deno.land/install.sh | sh \
+    && ln -s /root/.deno/bin/deno /usr/local/bin/deno
 
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp

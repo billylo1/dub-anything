@@ -305,8 +305,6 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
         fmt,
         "--merge-output-format",
         "mp4",
-        "--extractor-args",
-        "youtube:player_client=android,ios,web",
         "-o",
         str(VIDEOS_DIR / f"{slug}.%(ext)s"),
     ]
