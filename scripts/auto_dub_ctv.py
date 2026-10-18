@@ -201,6 +201,8 @@ def discover_latest_episode() -> dict | None:
     for query, limit in search_queries:
         cmd = [
             "yt-dlp",
+            "--remote-components",
+            "ejs:github",
             "--flat-playlist",
             "--playlist-end",
             str(limit),
@@ -308,6 +310,13 @@ def find_yt_cookies() -> str | None:
     )
     for c in candidates:
         if c.is_file() and c.stat().st_size > 0:
+            local_target = pathlib.Path("/tmp/yt_cookies_local.txt")
+            if c != local_target:
+                try:
+                    shutil.copy2(c, local_target)
+                    return str(local_target)
+                except Exception:
+                    return str(c)
             return str(c)
     return None
 
@@ -324,6 +333,8 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
     log(f"Downloading video from {url} -> {target.name}...")
     cmd = [
         "yt-dlp",
+        "--remote-components",
+        "ejs:github",
         "-f",
         fmt,
         "--merge-output-format",
@@ -803,7 +814,7 @@ def main():
     if args.url:
         check_tool("yt-dlp")
         cookies = find_yt_cookies()
-        cmd = ["yt-dlp", "--dump-json", "--no-playlist"]
+        cmd = ["yt-dlp", "--remote-components", "ejs:github", "--dump-json", "--no-playlist"]
         if cookies:
             cmd.extend(["--cookies", cookies])
         cmd.append(args.url)
