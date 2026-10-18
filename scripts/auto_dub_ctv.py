@@ -79,7 +79,6 @@ WEB_VIDEOS_DIR = WEB_DIR / "videos"
 
 # VoiceStudio Python executable
 VS_PYTHON_CANDIDATES = [
-    pathlib.Path(os.environ.get("VOICESTUDIO_PYTHON", "")),
     pathlib.Path("/app/VoiceStudio/.venv/bin/python"),
     pathlib.Path("/opt/VoiceStudio/.venv/bin/python"),
     ROOT.parent / "VoiceStudio/.venv/bin/python",
@@ -87,9 +86,13 @@ VS_PYTHON_CANDIDATES = [
     pathlib.Path.home() / "Library/Application Support/VoiceStudio/runtime/project/.venv/bin/python",
     pathlib.Path("C:/git/VoiceStudio/.venv/Scripts/python.exe"),
 ]
+env_vs_python = os.environ.get("VOICESTUDIO_PYTHON")
+if env_vs_python:
+    VS_PYTHON_CANDIDATES.insert(0, pathlib.Path(env_vs_python))
+
 PY = sys.executable
 for p in VS_PYTHON_CANDIDATES:
-    if p and p.exists():
+    if p and p.is_file():
         PY = str(p)
         break
 
