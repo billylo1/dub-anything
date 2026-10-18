@@ -35,6 +35,9 @@ def find_vs_dir():
         )
         candidates.append(pathlib.Path("/Applications/VoiceStudio.app/Contents/Resources"))
     candidates.append(ROOT.parent / "VoiceStudio")
+    candidates.append(ROOT / "VoiceStudio")
+    candidates.append(pathlib.Path("/app/VoiceStudio"))
+    candidates.append(pathlib.Path("/opt/VoiceStudio"))
     for c in candidates:
         if (c / "backend").is_dir():
             return c
@@ -156,8 +159,18 @@ def listening_pid():
             if len(f) >= 5 and f[3].upper() == "LISTENING" and f[1].endswith(f":{PORT}"):
                 return int(f[4])
         return None
-    out = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout
-    return int(out.split()[0]) if out.split() else None
+    if shutil.which("lsof"):
+        out = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout
+        return int(out.split()[0]) if out.split() else None
+    if shutil.which("fuser"):
+        out = subprocess.run(["fuser", f"{PORT}/tcp"], capture_output=True, text=True).stdout
+        return int(out.split()[0]) if out.split() else None
+    if shutil.which("ss"):
+        out = subprocess.run(["ss", "-tlnp", f"sport = :{PORT}"], capture_output=True, text=True).stdout
+        m = re.search(r"pid=(\d+)", out)
+        if m:
+            return int(m.group(1))
+    return None
 
 
 def stop():

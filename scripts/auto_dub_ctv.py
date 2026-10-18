@@ -60,17 +60,22 @@ WORK_DIR = ROOT / "work"
 JOBS_DIR = WORK_DIR / "jobs"
 SCRIPTS_DIR = ROOT / "scripts"
 HISTORY_FILE = WORK_DIR / "ctv_history.json"
-WEB_DIR = pathlib.Path("/Users/billylo/web/video.billylo.ca")
+WEB_DIR = pathlib.Path(os.environ.get("WEB_DIR", "/Users/billylo/web/video.billylo.ca"))
 WEB_VIDEOS_DIR = WEB_DIR / "videos"
 
 # VoiceStudio Python executable
 VS_PYTHON_CANDIDATES = [
+    pathlib.Path(os.environ.get("VOICESTUDIO_PYTHON", "")),
+    pathlib.Path("/app/VoiceStudio/.venv/bin/python"),
+    pathlib.Path("/opt/VoiceStudio/.venv/bin/python"),
+    ROOT.parent / "VoiceStudio/.venv/bin/python",
+    ROOT / "VoiceStudio/.venv/bin/python",
     pathlib.Path.home() / "Library/Application Support/VoiceStudio/runtime/project/.venv/bin/python",
     pathlib.Path("C:/git/VoiceStudio/.venv/Scripts/python.exe"),
 ]
 PY = sys.executable
 for p in VS_PYTHON_CANDIDATES:
-    if p.exists():
+    if p and p.exists():
         PY = str(p)
         break
 
@@ -597,54 +602,74 @@ def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
     return False
 
 
-def publish_to_web(slug: str, date_tuple: tuple[int, int, int], title: str, video_id: str) -> bool:
-    """Copy delivered video, generate manifest, and deploy to Firebase Hosting."""
+def publish_to_web(
+    slug: str,
+    date_tuple: tuple[int, int, int],
+    title: str,
+    video_id: str,
+    gcs_bucket: str | None = None,
+) -> bool:
+    """Copy delivered video, upload to GCS if specified, and deploy to Firebase Hosting."""
     delivered = VIDEOS_DIR / f"{slug} (dubbed).mp4"
     if not delivered.exists():
         error(f"Delivered file not found at {delivered}.")
         return False
 
-    WEB_VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     year, month, day = date_tuple
     dated_name = f"CTV 多倫多新聞 {year}年{month}月{day}日 (粵語配音).mp4"
     primary_name = "CTV 多倫多新聞 (粵語配音).mp4"
 
-    target_dated = WEB_VIDEOS_DIR / dated_name
-    target_primary = WEB_VIDEOS_DIR / primary_name
+    # Optional GCS Upload
+    target_bucket = gcs_bucket or os.environ.get("GCS_VIDEOS_BUCKET")
+    if target_bucket:
+        log(f"Uploading delivered video to Cloud Storage: {target_bucket}...")
+        bucket_prefix = target_bucket.rstrip("/")
+        cmd_dated = ["gcloud", "storage", "cp", str(delivered), f"{bucket_prefix}/{dated_name}"]
+        cmd_primary = ["gcloud", "storage", "cp", str(delivered), f"{bucket_prefix}/{primary_name}"]
+        subprocess.run(cmd_dated, check=False)
+        subprocess.run(cmd_primary, check=False)
 
-    log(f"Copying delivered video to {target_dated.name}...")
-    shutil.copy2(delivered, target_dated)
+    # Local Web Directory Sync & Firebase Deploy
+    if WEB_DIR.exists():
+        WEB_VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+        target_dated = WEB_VIDEOS_DIR / dated_name
+        target_primary = WEB_VIDEOS_DIR / primary_name
 
-    log(f"Updating primary latest video: {target_primary.name}...")
-    shutil.copy2(delivered, target_primary)
+        log(f"Copying delivered video to {target_dated.name}...")
+        shutil.copy2(delivered, target_dated)
 
-    # Generate web manifest
-    manifest_script = WEB_DIR / "generate-manifest.mjs"
-    if manifest_script.exists():
-        log("Regenerating web video manifest (generate-manifest.mjs)...")
-        res_m = subprocess.run(["node", str(manifest_script)], cwd=str(WEB_DIR))
-        if res_m.returncode != 0:
-            warn("generate-manifest.mjs returned non-zero exit code.")
+        log(f"Updating primary latest video: {target_primary.name}...")
+        shutil.copy2(delivered, target_primary)
 
-    # Deploy to Firebase Hosting (strict rule: always pass --project)
-    log("Deploying to Firebase Hosting (project: videos-billylo)...")
-    deploy_cmd = [
-        "npx",
-        "-y",
-        "firebase-tools@latest",
-        "deploy",
-        "--only",
-        "hosting",
-        "--project",
-        "videos-billylo",
-        "--non-interactive",
-    ]
-    res_d = subprocess.run(deploy_cmd, cwd=str(WEB_DIR))
-    if res_d.returncode != 0:
-        error("Firebase deployment failed.")
-        return False
+        # Generate web manifest
+        manifest_script = WEB_DIR / "generate-manifest.mjs"
+        if manifest_script.exists():
+            log("Regenerating web video manifest (generate-manifest.mjs)...")
+            res_m = subprocess.run(["node", str(manifest_script)], cwd=str(WEB_DIR))
+            if res_m.returncode != 0:
+                warn("generate-manifest.mjs returned non-zero exit code.")
 
-    log("Deployment to https://video.billylo.ca successfully finished!")
+        # Deploy to Firebase Hosting (strict rule: always pass --project)
+        log("Deploying to Firebase Hosting (project: videos-billylo)...")
+        deploy_cmd = [
+            "npx",
+            "-y",
+            "firebase-tools@latest",
+            "deploy",
+            "--only",
+            "hosting",
+            "--project",
+            "videos-billylo",
+            "--non-interactive",
+        ]
+        res_d = subprocess.run(deploy_cmd, cwd=str(WEB_DIR))
+        if res_d.returncode != 0:
+            error("Firebase deployment failed.")
+            return False
+
+        log("Deployment to https://video.billylo.ca successfully finished!")
+    else:
+        log(f"WEB_DIR ({WEB_DIR}) not found; skipped local web dir copy and hosting deploy.")
 
     # Record in history
     history = load_history()
@@ -653,7 +678,7 @@ def publish_to_web(slug: str, date_tuple: tuple[int, int, int], title: str, vide
         "date": f"{year:04d}-{month:02d}-{day:02d}",
         "title": title,
         "completed_at": datetime.datetime.now().isoformat(),
-        "file": str(target_dated),
+        "file": str(delivered),
     }
     save_history(history)
     return True
@@ -663,6 +688,7 @@ def main():
     parser = argparse.ArgumentParser(description="Automate CTV Toronto News at Six daily Cantonese dubbing.")
     parser.add_argument("--url", help="YouTube video URL or ID (manual override)")
     parser.add_argument("--slug", help="Explicit job slug (defaults to ctv_toronto_YYYYMMDD)")
+    parser.add_argument("--gcs-bucket", help="GCS bucket URL (e.g. gs://videos-billylo/videos)")
     parser.add_argument(
         "--step",
         choices=["discover", "download", "prep", "direct", "render", "publish", "all"],
@@ -760,7 +786,7 @@ def main():
 
     # Step 7: Web Publishing & Deployment
     date_tuple = (episode_info["year"], episode_info["month"], episode_info["day"])
-    published = publish_to_web(slug, date_tuple, episode_info["title"], vid_id)
+    published = publish_to_web(slug, date_tuple, episode_info["title"], vid_id, gcs_bucket=args.gcs_bucket)
     if not published:
         error("Web publishing failed.")
         sys.exit(1)

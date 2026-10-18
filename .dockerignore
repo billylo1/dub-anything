@@ -1,0 +1,14 @@
+.git
+.githooks
+videos
+work
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.cursor
+.gemini
+*.log
