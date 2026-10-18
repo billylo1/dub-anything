@@ -1,13 +1,16 @@
 # Google Cloud Build configuration for Dub Anything GPU container
 steps:
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/dub-anything-repo/dub-runner:latest'
-      - '-f'
-      - 'Dockerfile'
-      - '.'
+      - '-c'
+      - |
+        docker pull us-central1-docker.pkg.dev/$PROJECT_ID/dub-anything-repo/dub-runner:latest || true
+        docker build \
+          --cache-from us-central1-docker.pkg.dev/$PROJECT_ID/dub-anything-repo/dub-runner:latest \
+          -t us-central1-docker.pkg.dev/$PROJECT_ID/dub-anything-repo/dub-runner:latest \
+          -f Dockerfile \
+          .
     timeout: '2400s'
 
 images:

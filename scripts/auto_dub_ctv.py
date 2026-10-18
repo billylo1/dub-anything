@@ -185,50 +185,41 @@ def discover_latest_episode() -> dict | None:
     check_tool("yt-dlp")
     log("Searching YouTube for latest 'CTV News Toronto at Six' broadcast...")
 
-    cmd = [
-        "yt-dlp",
-        "--flat-playlist",
-        "--playlist-end",
-        "30",
-        "--print",
-        "%(id)s\t%(duration)s\t%(upload_date)s\t%(title)s",
-        "https://www.youtube.com/@CTVNews/videos",
-    ]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
+    cookies = find_yt_cookies()
     candidates = []
-    if res.returncode == 0 and res.stdout.strip():
-        for line in res.stdout.strip().split("\n"):
-            parts = line.split("\t")
-            if len(parts) >= 4:
-                vid, dur_str, udate, title = parts[0], parts[1], parts[2], parts[3]
-                try:
-                    dur = float(dur_str) if dur_str and dur_str != "NA" else 0
-                except ValueError:
-                    dur = 0
-                candidates.append({"id": vid, "duration": dur, "upload_date": udate, "title": title})
+    seen_ids = set()
 
-    if not candidates:
-        search_cmd = [
+    search_queries = [
+        ("ytsearch25:CTV News Toronto at Six", 25),
+        ("https://www.youtube.com/@CTVNews/videos", 50),
+    ]
+
+    for query, limit in search_queries:
+        cmd = [
             "yt-dlp",
             "--flat-playlist",
             "--playlist-end",
-            "10",
+            str(limit),
             "--print",
             "%(id)s\t%(duration)s\t%(upload_date)s\t%(title)s",
-            "ytsearch10:CTV News Toronto at Six",
         ]
-        res_s = subprocess.run(search_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if res_s.returncode == 0 and res_s.stdout.strip():
-            for line in res_s.stdout.strip().split("\n"):
+        if cookies:
+            cmd.extend(["--cookies", cookies])
+        cmd.append(query)
+
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0 and res.stdout.strip():
+            for line in res.stdout.strip().split("\n"):
                 parts = line.split("\t")
                 if len(parts) >= 4:
                     vid, dur_str, udate, title = parts[0], parts[1], parts[2], parts[3]
-                    try:
-                        dur = float(dur_str) if dur_str and dur_str != "NA" else 0
-                    except ValueError:
-                        dur = 0
-                    candidates.append({"id": vid, "duration": dur, "upload_date": udate, "title": title})
+                    if vid not in seen_ids:
+                        seen_ids.add(vid)
+                        try:
+                            dur = float(dur_str) if dur_str and dur_str != "NA" else 0
+                        except ValueError:
+                            dur = 0
+                        candidates.append({"id": vid, "duration": dur, "upload_date": udate, "title": title})
 
     # Filter for full broadcast: title contains "CTV News Toronto at Six" and duration >= 2000s
     full_episodes = []
@@ -743,8 +734,11 @@ def main():
     episode_info = None
     if args.url:
         check_tool("yt-dlp")
-        log(f"Fetching metadata for explicit URL: {args.url}")
-        cmd = ["yt-dlp", "--dump-json", "--no-playlist", args.url]
+        cookies = find_yt_cookies()
+        cmd = ["yt-dlp", "--dump-json", "--no-playlist"]
+        if cookies:
+            cmd.extend(["--cookies", cookies])
+        cmd.append(args.url)
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if res.returncode != 0:
             error(f"yt-dlp failed to fetch info: {res.stderr.strip()}")
