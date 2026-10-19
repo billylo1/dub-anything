@@ -167,7 +167,7 @@ def save_history(history: dict):
 def parse_broadcast_date(title: str, upload_date: str = "") -> tuple[int, int, int]:
     """Extract (year, month, day) from title or fallback upload_date."""
     m = re.search(
-        r"CTV News Toronto at Six for\s+(?:[A-Za-z]+,\s*)?([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})",
+        r"CTV News Toronto at Six for\s+(?:[A-Za-z]+,\s*)?([A-Za-z]+)\.?\s*(\d{1,2}),?\s*(\d{4})",
         title,
         re.IGNORECASE,
     )
