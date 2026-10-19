@@ -322,6 +322,111 @@ def find_yt_cookies() -> str | None:
     return None
 
 
+def get_checkpoint_dir(slug: str) -> pathlib.Path | None:
+    models_dir = pathlib.Path("/models")
+    if models_dir.is_dir():
+        cp = models_dir / "checkpoints" / slug
+        try:
+            cp.mkdir(parents=True, exist_ok=True)
+            return cp
+        except Exception as e:
+            warn(f"Failed to create checkpoint directory {cp}: {e}")
+    return None
+
+
+def save_part_checkpoint(slug: str, part_name: str):
+    cp = get_checkpoint_dir(slug)
+    if not cp:
+        return
+    src_work = WORK_DIR / part_name
+    if src_work.is_dir():
+        dst_work = cp / "work" / part_name
+        dst_work.mkdir(parents=True, exist_ok=True)
+        for item in src_work.iterdir():
+            if item.is_file():
+                try:
+                    shutil.copy2(item, dst_work / item.name)
+                except Exception:
+                    pass
+            elif item.is_dir() and item.name in ("takes", "refs"):
+                dst_sub = dst_work / item.name
+                dst_sub.mkdir(parents=True, exist_ok=True)
+                for subitem in item.iterdir():
+                    if subitem.is_file():
+                        try:
+                            shutil.copy2(subitem, dst_sub / subitem.name)
+                        except Exception:
+                            pass
+    # Copy dubbed mp4 if generated
+    dubbed_dir = VIDEOS_DIR / f"{slug}-parts" / "dubbed"
+    if dubbed_dir.is_dir():
+        cp_dubbed = cp / "dubbed"
+        cp_dubbed.mkdir(parents=True, exist_ok=True)
+        for f in dubbed_dir.glob(f"{part_name}.*.mp4"):
+            try:
+                shutil.copy2(f, cp_dubbed / f.name)
+            except Exception:
+                pass
+
+
+def sync_all_completed_checkpoints(slug: str):
+    cp = get_checkpoint_dir(slug)
+    if not cp:
+        return
+    parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "state.json").exists()])
+    for part in parts:
+        try:
+            with open(WORK_DIR / part / "state.json", "r", encoding="utf-8") as f:
+                st = json.load(f)
+            if st.get("stage") == "final":
+                save_part_checkpoint(slug, part)
+        except Exception:
+            pass
+
+
+def restore_checkpoints(slug: str):
+    cp = get_checkpoint_dir(slug)
+    if not cp or not cp.is_dir():
+        return
+    # Restore video
+    cp_video = cp / f"{slug}.mp4"
+    local_video = VIDEOS_DIR / f"{slug}.mp4"
+    if cp_video.exists() and not local_video.exists():
+        try:
+            log(f"Restoring video from checkpoint: {cp_video} -> {local_video.name}...")
+            shutil.copy2(cp_video, local_video)
+        except Exception as e:
+            warn(f"Failed to restore video from checkpoint: {e}")
+
+    # Restore parts
+    cp_work = cp / "work"
+    if cp_work.is_dir():
+        for p in cp_work.iterdir():
+            if not p.is_dir():
+                continue
+            dst_p = WORK_DIR / p.name
+            st_file = dst_p / "state.json"
+            if not st_file.exists():
+                try:
+                    log(f"Restoring completed checkpoint for {p.name}...")
+                    shutil.copytree(p, dst_p, dirs_exist_ok=True)
+                except Exception as e:
+                    warn(f"Failed to restore {p.name} from checkpoint: {e}")
+
+    # Restore dubbed mp4s
+    cp_dubbed = cp / "dubbed"
+    if cp_dubbed.is_dir():
+        dst_dubbed = VIDEOS_DIR / f"{slug}-parts" / "dubbed"
+        dst_dubbed.mkdir(parents=True, exist_ok=True)
+        for f in cp_dubbed.glob("*.mp4"):
+            target_f = dst_dubbed / f.name
+            if not target_f.exists():
+                try:
+                    shutil.copy2(f, target_f)
+                except Exception:
+                    pass
+
+
 def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib.Path:
     """Download video with yt-dlp."""
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -329,6 +434,14 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
     if target.exists() and target.stat().st_size > 1024 * 1024:
         log(f"Video already exists at {target.name} ({target.stat().st_size // (1024 * 1024)} MB), skipping download.")
         return target
+
+    cp = get_checkpoint_dir(slug)
+    if cp:
+        cp_video = cp / f"{slug}.mp4"
+        if cp_video.exists() and cp_video.stat().st_size > 1024 * 1024:
+            log(f"Restoring video from checkpoint: {cp_video} -> {target.name}...")
+            shutil.copy2(cp_video, target)
+            return target
 
     fmt = quality or "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
     log(f"Downloading video from {url} -> {target.name}...")
@@ -356,9 +469,20 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
     if not target.exists():
         matches = list(VIDEOS_DIR.glob(f"{slug}.*"))
         if matches:
-            return matches[0]
-        error("Downloaded video file not found.")
-        sys.exit(1)
+            target = matches[0]
+        else:
+            error("Downloaded video file not found.")
+            sys.exit(1)
+
+    if cp and target.exists() and target.stat().st_size > 1024 * 1024:
+        cp_video = cp / f"{slug}.mp4"
+        if not cp_video.exists() or cp_video.stat().st_size != target.stat().st_size:
+            try:
+                log(f"Caching downloaded video to checkpoint: {cp_video}...")
+                shutil.copy2(target, cp_video)
+            except Exception as e:
+                warn(f"Failed to cache video to checkpoint: {e}")
+
     return target
 
 
@@ -714,6 +838,14 @@ def direct_parts(slug: str, retranslate: bool = False):
     """Direct all parts in parallel: translate, apply edge alignments, optimize pacing, mark ready."""
     api_key = os.environ.get("GEMINI_API_KEY")
     parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "draft.json").exists()])
+    parts_filter = os.environ.get("PARTS_FILTER")
+    if parts_filter:
+        allowed = set(p.strip() for p in parts_filter.split(","))
+        parts = [
+            p
+            for p in parts
+            if p in allowed or p.rsplit("-", 1)[-1] in allowed or f"{int(p.rsplit('-', 1)[-1]):02d}" in allowed
+        ]
     if not parts:
         return
 
@@ -771,6 +903,7 @@ def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
         while not stop_event.is_set():
             try:
                 direct_parts(slug, retranslate=False)
+                sync_all_completed_checkpoints(slug)
             except Exception as e:
                 warn(f"Continuous director background pass encountered: {e}")
             stop_event.wait(5.0)
@@ -996,6 +1129,29 @@ def main():
     ensure_backend()
     init_job(video_path, slug, minutes=args.minutes)
 
+    # Restore any completed checkpoints from GCS
+    restore_checkpoints(slug)
+
+    task_index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
+    task_count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
+
+    # If running with multiple tasks, assign this task its slice of parts
+    manifest_file = VIDEOS_DIR / f"{slug}-parts" / "parts.json"
+    if manifest_file.exists() and task_count > 1:
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as f:
+                all_parts = json.load(f).get("parts", [])
+            if all_parts:
+                chunk_size = (len(all_parts) + task_count - 1) // task_count
+                my_parts = all_parts[task_index * chunk_size : (task_index + 1) * chunk_size]
+                my_part_names = [p["name"] for p in my_parts]
+                os.environ["PARTS_FILTER"] = ",".join(p.rsplit("-", 1)[-1] for p in my_part_names)
+                log(
+                    f"Multi-task active: Task {task_index}/{task_count} responsible for {len(my_parts)} parts: {my_part_names}"
+                )
+        except Exception as e:
+            warn(f"Failed to configure multi-task partitioning: {e}")
+
     if args.step == "prep":
         log(f"Running machine prep for '{slug}'...")
         cmd_prep = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug]
@@ -1013,9 +1169,47 @@ def main():
     # director and invokes `dub_anything.py run slug --watch`. This interleaves part preparation
     # and rendering from Part 1, maximizing GPU utilization without stalling for the whole broadcast to prep.
     success = run_pipeline_with_self_healing(slug, max_retries=args.max_retries)
+    sync_all_completed_checkpoints(slug)
+
     if not success:
         error(f"Pipeline did not finish cleanly. Manual intervention available on slug '{slug}'.")
         sys.exit(2)
+
+    # Multi-task worker synchronization
+    if task_count > 1:
+        cp = get_checkpoint_dir(slug)
+        if task_index > 0:
+            if cp:
+                flag = cp / f"task_{task_index}_done.flag"
+                flag.write_text(f"completed at {datetime.datetime.now().isoformat()}\n", encoding="utf-8")
+            log(f"Task {task_index} finished all assigned parts and uploaded checkpoints. Exiting.")
+            sys.exit(0)
+        else:
+            log(f"Task 0 completed its assigned parts. Waiting for tasks 1..{task_count - 1} to finish...")
+            wait_timeout = 2400  # 40 mins
+            start_wait = time.time()
+            for i in range(1, task_count):
+                flag = (cp / f"task_{i}_done.flag") if cp else None
+                while flag and not flag.exists():
+                    if time.time() - start_wait > wait_timeout:
+                        error(f"Timed out waiting for task {i} to finish.")
+                        sys.exit(1)
+                    time.sleep(10)
+                log(f"Task {i} has finished!")
+
+            # Restore completed parts from other tasks
+            restore_checkpoints(slug)
+
+            # Assemble and deliver entire broadcast
+            log("All tasks completed! Running final assembly and delivery across all parts...")
+            if "PARTS_FILTER" in os.environ:
+                del os.environ["PARTS_FILTER"]
+            cmd_assemble = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug]
+            res_a = subprocess.run(cmd_assemble)
+            if res_a.returncode != 0:
+                error("Final assembly and delivery failed.")
+                sys.exit(1)
+
     if args.step == "render":
         log("Render step complete.")
         sys.exit(0)

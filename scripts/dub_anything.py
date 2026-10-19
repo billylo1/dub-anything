@@ -72,7 +72,9 @@ VIDEOS = ROOT / "videos"
 QA_ROUNDS = int(
     os.environ.get("QA_ROUNDS", "0")
 )  # rounds of fresh takes (0 for automated pipelines to avoid 4x re-synthesis loops)
-PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
+PREP_CHUNK = int(
+    os.environ.get("PREP_CHUNK", "1")
+)  # parts prepped, separated and drafted together (default 1 to prevent pipeline starvation)
 PY = backend.vs_python()
 UV = ["uv", "run", "--no-project"]
 
@@ -200,7 +202,18 @@ def job_langs(job):
 
 def parts(job):
     pj = load_json(VIDEOS / f"{job['slug']}-parts" / "parts.json")
-    return pj["parts"] if pj else []
+    all_parts = pj["parts"] if pj else []
+    parts_filter = os.environ.get("PARTS_FILTER")
+    if parts_filter:
+        allowed = set(p.strip() for p in parts_filter.split(","))
+        return [
+            p
+            for p in all_parts
+            if p["name"] in allowed
+            or p["name"].rsplit("-", 1)[-1] in allowed
+            or f"{int(p['name'].rsplit('-', 1)[-1]):02d}" in allowed
+        ]
+    return all_parts
 
 
 def write_json(path, data):
@@ -889,6 +902,9 @@ def cmd_run(args):
             busy = step == "busy"
         final = all(ready(p) and all(finished(p, v) for v in job["voices"]) for p in ps)
         if final:
+            if os.environ.get("PARTS_FILTER"):
+                log(f"all filtered parts ({os.environ.get('PARTS_FILTER')}) finished")
+                return 0
             if SECOND_RUN.get(job["slug"]):
                 SECOND_RUN[job["slug"]][0].wait()
             if not deliver_job(job, ps):
