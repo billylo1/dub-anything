@@ -322,6 +322,9 @@ def find_yt_cookies() -> str | None:
     return None
 
 
+_SYNCED_FINAL_PARTS = set()
+
+
 def get_checkpoint_dir(slug: str) -> pathlib.Path | None:
     models_dir = pathlib.Path("/models")
     if models_dir.is_dir():
@@ -344,29 +347,35 @@ def save_part_checkpoint(slug: str, part_name: str):
         dst_work.mkdir(parents=True, exist_ok=True)
         for item in src_work.iterdir():
             if item.is_file():
+                dst_file = dst_work / item.name
                 try:
-                    shutil.copy2(item, dst_work / item.name)
-                except Exception:
-                    pass
+                    if not dst_file.exists() or dst_file.stat().st_size != item.stat().st_size:
+                        shutil.copy2(item, dst_file)
+                except Exception as e:
+                    warn(f"Checkpoint save error for {item.name}: {e}")
             elif item.is_dir() and item.name in ("takes", "refs"):
                 dst_sub = dst_work / item.name
                 dst_sub.mkdir(parents=True, exist_ok=True)
                 for subitem in item.iterdir():
                     if subitem.is_file():
+                        dst_file = dst_sub / subitem.name
                         try:
-                            shutil.copy2(subitem, dst_sub / subitem.name)
-                        except Exception:
-                            pass
+                            if not dst_file.exists() or dst_file.stat().st_size != subitem.stat().st_size:
+                                shutil.copy2(subitem, dst_file)
+                        except Exception as e:
+                            warn(f"Checkpoint save error for {subitem.name}: {e}")
     # Copy dubbed mp4 if generated
     dubbed_dir = VIDEOS_DIR / f"{slug}-parts" / "dubbed"
     if dubbed_dir.is_dir():
         cp_dubbed = cp / "dubbed"
         cp_dubbed.mkdir(parents=True, exist_ok=True)
         for f in dubbed_dir.glob(f"{part_name}.*.mp4"):
+            dst_file = cp_dubbed / f.name
             try:
-                shutil.copy2(f, cp_dubbed / f.name)
-            except Exception:
-                pass
+                if not dst_file.exists() or dst_file.stat().st_size != f.stat().st_size:
+                    shutil.copy2(f, dst_file)
+            except Exception as e:
+                warn(f"Checkpoint save error for {f.name}: {e}")
 
 
 def sync_all_completed_checkpoints(slug: str):
@@ -374,14 +383,28 @@ def sync_all_completed_checkpoints(slug: str):
     if not cp:
         return
     parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "state.json").exists()])
+    parts_filter = os.environ.get("PARTS_FILTER")
+    if parts_filter:
+        allowed = set(p.strip() for p in parts_filter.split(","))
+        parts = [
+            p
+            for p in parts
+            if p in allowed or p.rsplit("-", 1)[-1] in allowed or f"{int(p.rsplit('-', 1)[-1]):02d}" in allowed
+        ]
+
     for part in parts:
+        if part in _SYNCED_FINAL_PARTS:
+            continue
         try:
             with open(WORK_DIR / part / "state.json", "r", encoding="utf-8") as f:
                 st = json.load(f)
             if st.get("stage") == "final":
+                log(f"Syncing completed checkpoint for {part} to GCS...")
                 save_part_checkpoint(slug, part)
-        except Exception:
-            pass
+                _SYNCED_FINAL_PARTS.add(part)
+                log(f"Successfully synced checkpoint for {part}.")
+        except Exception as e:
+            warn(f"Failed to sync checkpoint for {part}: {e}")
 
 
 def restore_checkpoints(slug: str):
@@ -406,12 +429,35 @@ def restore_checkpoints(slug: str):
                 continue
             dst_p = WORK_DIR / p.name
             st_file = dst_p / "state.json"
-            if not st_file.exists():
+            cp_st_file = p / "state.json"
+            if not cp_st_file.exists():
+                continue
+            try:
+                with open(cp_st_file, "r", encoding="utf-8") as f:
+                    cp_st = json.load(f)
+            except Exception:
+                continue
+
+            if cp_st.get("stage") != "final":
+                continue
+
+            local_is_final = False
+            if st_file.exists():
+                try:
+                    with open(st_file, "r", encoding="utf-8") as f:
+                        loc_st = json.load(f)
+                    local_is_final = loc_st.get("stage") == "final"
+                except Exception:
+                    pass
+
+            if not local_is_final:
                 try:
                     log(f"Restoring completed checkpoint for {p.name}...")
                     shutil.copytree(p, dst_p, dirs_exist_ok=True)
                 except Exception as e:
                     warn(f"Failed to restore {p.name} from checkpoint: {e}")
+
+            _SYNCED_FINAL_PARTS.add(p.name)
 
     # Restore dubbed mp4s
     cp_dubbed = cp / "dubbed"
@@ -420,7 +466,7 @@ def restore_checkpoints(slug: str):
         dst_dubbed.mkdir(parents=True, exist_ok=True)
         for f in cp_dubbed.glob("*.mp4"):
             target_f = dst_dubbed / f.name
-            if not target_f.exists():
+            if not target_f.exists() or target_f.stat().st_size != f.stat().st_size:
                 try:
                     shutil.copy2(f, target_f)
                 except Exception:
@@ -957,10 +1003,14 @@ def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
     stop_event = threading.Event()
 
     def continuous_director():
+        last_sync = 0.0
         while not stop_event.is_set():
             try:
                 direct_parts(slug, retranslate=False)
-                sync_all_completed_checkpoints(slug)
+                now = time.time()
+                if now - last_sync >= 30.0:
+                    sync_all_completed_checkpoints(slug)
+                    last_sync = now
             except Exception as e:
                 warn(f"Continuous director background pass encountered: {e}")
             stop_event.wait(5.0)
@@ -1193,7 +1243,16 @@ def main():
     task_index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     task_count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
 
-    # If running with multiple tasks, assign this task its slice of parts
+    # If running with multiple tasks, clean up any old flags on task 0 and assign this task its slice of parts
+    if task_count > 1 and task_index == 0:
+        cp = get_checkpoint_dir(slug)
+        if cp:
+            for old_flag in cp.glob("task_*_done.flag"):
+                try:
+                    old_flag.unlink()
+                except Exception:
+                    pass
+
     if all_parts and task_count > 1:
         chunk_size = (len(all_parts) + task_count - 1) // task_count
         my_parts = all_parts[task_index * chunk_size : (task_index + 1) * chunk_size]
@@ -1230,7 +1289,13 @@ def main():
         if task_index > 0:
             if cp:
                 flag = cp / f"task_{task_index}_done.flag"
-                flag.write_text(f"completed at {datetime.datetime.now().isoformat()}\n", encoding="utf-8")
+                try:
+                    with open(flag, "w", encoding="utf-8") as f:
+                        f.write(f"completed at {datetime.datetime.now().isoformat()}\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                except Exception as e:
+                    warn(f"Failed to write completion flag {flag}: {e}")
             log(f"Task {task_index} finished all assigned parts and uploaded checkpoints. Exiting.")
             sys.exit(0)
         else:
@@ -1239,7 +1304,14 @@ def main():
             start_wait = time.time()
             for i in range(1, task_count):
                 flag = (cp / f"task_{i}_done.flag") if cp else None
-                while flag and not flag.exists():
+                chunk_size = (len(all_parts) + task_count - 1) // task_count
+                task_parts = all_parts[i * chunk_size : (i + 1) * chunk_size]
+                last_p = task_parts[-1]["name"] if task_parts else None
+                while True:
+                    if flag and flag.exists():
+                        break
+                    if last_p and cp and (cp / "dubbed" / f"{last_p}.yue.mp4").exists():
+                        break
                     if time.time() - start_wait > wait_timeout:
                         error(f"Timed out waiting for task {i} to finish.")
                         sys.exit(1)
