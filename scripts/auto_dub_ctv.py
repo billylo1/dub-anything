@@ -545,21 +545,37 @@ print(json.dumps(over_rows))
 
     lines = script.get("lines", [])
     fixed_count = 0
+    remove_indices = set()
     for item in over_items:
         idx = item["i"]
         if 0 <= idx < len(lines):
             cur = lines[idx]
             room = item.get("room") or cur.get("end", 0.0) - cur.get("start", 0.0)
-            target_chars = max(int(room * 3.6), 4)
+            orig_text = cur.get("text", "")
+            # If room is too small (< 0.65s) or text is already <= 2 chars and still OVER, drop the line
+            if room < 0.65 or len(orig_text.strip()) <= 2:
+                log(
+                    f"  {part} L{idx:02d}: Room {room:.2f}s is below minimum TTS duration threshold (or text already minimal '{orig_text}'). Dropping line to prevent block."
+                )
+                remove_indices.add(idx)
+                fixed_count += 1
+                continue
+
+            target_chars = max(int(room * 3.5), 2)
             orig_text = cur.get("text", "")
             en_text = cur.get("en", "")
             if api_key:
                 new_text = condense_line_gemini(orig_text, en_text, target_chars, api_key)
             else:
                 new_text = orig_text[:target_chars]
+            if len(new_text) >= len(orig_text):
+                new_text = orig_text[: max(1, len(orig_text) - 2)]
             log(f"  L{idx:02d}: '{orig_text}' ({len(orig_text)} chars) -> '{new_text}' ({len(new_text)} chars)")
             cur["text"] = new_text
             fixed_count += 1
+
+    if remove_indices:
+        script["lines"] = [line for i, line in enumerate(lines) if i not in remove_indices]
 
     with open(script_file, "w", encoding="utf-8") as f:
         json.dump(script, f, ensure_ascii=False, indent=1)
@@ -634,7 +650,15 @@ def direct_single_part(
         warn(f"{part}: Failed to read draft.json: {e}")
         return False
 
-    lines = draft.get("lines", [])
+    raw_lines = draft.get("lines", [])
+    lines = []
+    for i, line in enumerate(raw_lines):
+        dur = line.get("end", 0.0) - line.get("start", 0.0)
+        if dur < 0.4:
+            log(f"{part}: Filtering out glitch blip L{i:02d} ({dur:.2f}s): '{line.get('en', '')}'")
+            continue
+        lines.append(line)
+
     if not lines:
         log(f"{part}: empty draft, marking ready with no lines.")
         with open(script_file, "w", encoding="utf-8") as f:
