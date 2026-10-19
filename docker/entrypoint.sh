@@ -24,13 +24,13 @@ export PATH="/app/VoiceStudio/.venv/bin:/root/.local/bin:/usr/local/bin:${PATH}"
 mkdir -p "$OMNIVOICE_DATA_DIR" "$OMNIVOICE_CACHE_DIR" "$HF_HUB_CACHE" /app/work/logs
 
 # Fast local caching of heavy PyTorch models from GCSFuse mount
+rm -rf /models/.locks /models/*/.locks "$HF_HUB_CACHE/.locks" /root/.cache/huggingface/hub/.locks 2>/dev/null || true
 mkdir -p /root/.cache/huggingface/hub "$HF_HUB_CACHE"
-for m in /models/models--*; do
+for m in /models/models--* /models/hf_cache/models--*; do
     if [ -d "$m" ]; then
         b="$(basename "$m")"
-        if [ ! -e "$HF_HUB_CACHE/$b" ]; then
-            ln -s "$m" "$HF_HUB_CACHE/$b" 2>/dev/null || true
-        fi
+        [ ! -e "$HF_HUB_CACHE/$b" ] && ln -s "$m" "$HF_HUB_CACHE/$b" 2>/dev/null || true
+        [ ! -e "/root/.cache/huggingface/hub/$b" ] && ln -s "$m" "/root/.cache/huggingface/hub/$b" 2>/dev/null || true
     fi
 done
 
@@ -51,7 +51,7 @@ else
     VS_PY="python3"
 fi
 
-$VS_PY -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900 > /app/work/logs/backend.log 2>&1 &
+$VS_PY -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900 2>&1 | tee -a /app/work/logs/backend.log &
 BACKEND_PID=$!
 echo "[*] VoiceStudio process launched with PID: $BACKEND_PID"
 

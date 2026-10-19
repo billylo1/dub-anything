@@ -238,14 +238,39 @@ def tool(job, label, cmd, logname):
     t0 = time.time()
     log(f"{label} ...")
     path = logs / f"{logname}.log"
-    with open(path, "w", encoding="utf-8") as f:  # written as it runs, to follow a long render
-        r = subprocess.run(cmd, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT)
-    out = path.read_text(encoding="utf-8", errors="replace")
-    if r.returncode == 0:
+    lines_written = []
+    with open(path, "w", encoding="utf-8") as f:
+        proc = subprocess.Popen(
+            cmd, cwd=ROOT, env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
+        for line in proc.stdout:
+            f.write(line)
+            f.flush()
+            lines_written.append(line)
+            if any(
+                k in line
+                for k in (
+                    "progress",
+                    "generate",
+                    "render",
+                    "ok",
+                    "error",
+                    "lines",
+                    "step",
+                    "synthesize",
+                    "ref skipped",
+                    "done",
+                )
+            ):
+                sys.stdout.write(f"  [{label}] {line}")
+                sys.stdout.flush()
+        proc.wait()
+    out = "".join(lines_written)
+    if proc.returncode == 0:
         log(f"{label} ok ({time.time() - t0:.0f} s)")
     else:
         log(f"{label} FAILED ({time.time() - t0:.0f} s):\n{out}")
-    return r.returncode == 0, out
+    return proc.returncode == 0, out
 
 
 # ---- preparing ----
