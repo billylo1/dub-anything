@@ -415,12 +415,25 @@ def voice_wav(key, rebuild=False):
     spec = load_json(WORK / "voices.json", {})[key]
     ref = WORK / "voices" / f"{key}.wav"
     uploaded = load_json(WORK / "profiles.json", {}).get(key, {})
-    if ref.exists() and not rebuild and uploaded.get("sig") == voice_sig(key):
-        return ref
+    can_rebuild = all((WORK / clip / "segments.json").exists() for clip, _, _ in voice_clips(spec))
+    if ref.exists() and ref.stat().st_size > 0:
+        if not can_rebuild or (not rebuild and uploaded.get("sig") == voice_sig(key)):
+            return ref
+
+    if not can_rebuild:
+        if ref.exists() and ref.stat().st_size > 0:
+            return ref
+        raise RuntimeError(f"Cannot build voice wav for {key}: source clip segments not found and {ref} does not exist")
+
     sources, parts = {}, []
     for clip, a, b in voice_clips(spec):
         if clip not in sources:
-            job = load_json(WORK / clip / "segments.json")["job_id"]
+            seg_doc = load_json(WORK / clip / "segments.json")
+            if not seg_doc or "job_id" not in seg_doc:
+                if ref.exists() and ref.stat().st_size > 0:
+                    return ref
+                raise RuntimeError(f"Missing segments.json for clip {clip}")
+            job = seg_doc["job_id"]
             sources[clip] = sf.read(JOBS / job / "vocals.wav", dtype="float32")
         audio, sr = sources[clip]
         gap = np.zeros((int(0.3 * sr),) + audio.shape[1:], dtype="float32")

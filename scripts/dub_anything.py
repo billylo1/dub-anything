@@ -241,7 +241,10 @@ def tool(job, label, cmd, logname):
     with open(path, "w", encoding="utf-8") as f:  # written as it runs, to follow a long render
         r = subprocess.run(cmd, cwd=ROOT, env=ENV, stdout=f, stderr=subprocess.STDOUT)
     out = path.read_text(encoding="utf-8", errors="replace")
-    log(f"{label} {'ok' if r.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s)")
+    if r.returncode == 0:
+        log(f"{label} ok ({time.time() - t0:.0f} s)")
+    else:
+        log(f"{label} FAILED ({time.time() - t0:.0f} s):\n{out}")
     return r.returncode == 0, out
 
 

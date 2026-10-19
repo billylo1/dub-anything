@@ -392,8 +392,8 @@ def init_job(video_path: pathlib.Path, slug: str, minutes: float = 6.0):
         sys.exit(1)
 
 
-def translate_with_gemini(lines: list, api_key: str) -> list[str]:
-    """Translate lines into broadcast Cantonese using Gemini with strict pacing."""
+def translate_chunk_gemini(chunk_lines: list, start_offset: int, api_key: str) -> dict[int, str]:
+    """Translate a chunk of lines into broadcast Cantonese using Gemini."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     prompt = (
@@ -412,16 +412,17 @@ def translate_with_gemini(lines: list, api_key: str) -> list[str]:
         "   - Oshawa -> 奧沙華\n"
         "3. PACING & LENGTH CONSTRAINT: Cantonese speaking rate is ~3.8 characters per second.\n"
         "   Each line specifies its max character limit [max: N chars]. You MUST NOT exceed this length!\n"
-        "4. Output format: Return pure JSON array of objects with keys 'i' (int index) and 'text' (Cantonese translation).\n\n"
+        "4. Output format: Return pure JSON array of objects with keys 'i' (int index matching input) and 'text' (Cantonese translation).\n\n"
         "Lines to translate:\n"
     )
 
-    for i, line in enumerate(lines):
+    for i, line in enumerate(chunk_lines):
+        global_idx = start_offset + i
         dur = max(line.get("end", 0.0) - line.get("start", 0.0), 1.0)
         max_chars = max(int(dur * 3.8), 4)
         speaker = line.get("voice", "anchor")
         en_text = line.get("en", "")
-        prompt += f"[{i}] [dur: {dur:.1f}s, max: {max_chars} chars, speaker: {speaker}]: {en_text}\n"
+        prompt += f"[{global_idx}] [dur: {dur:.1f}s, max: {max_chars} chars, speaker: {speaker}]: {en_text}\n"
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -432,16 +433,29 @@ def translate_with_gemini(lines: list, api_key: str) -> list[str]:
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            content = data["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(content)
-            trans_map = {item["i"]: item["text"] for item in parsed if "i" in item and "text" in item}
-            return [trans_map.get(i, "") for i in range(len(lines))]
-    except Exception as e:
-        warn(f"Gemini translation failed: {e}. Falling back to standard translation.")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        content = data["candidates"][0]["content"]["parts"][0]["text"]
+        parsed = json.loads(content)
+        return {int(item["i"]): item["text"] for item in parsed if "i" in item and "text" in item}
+
+
+def translate_with_gemini(lines: list, api_key: str) -> list[str]:
+    """Translate lines into broadcast Cantonese using Gemini in parallel batches."""
+    if not lines:
         return []
+    chunk_size = 25
+    chunks = [(lines[i : i + chunk_size], i) for i in range(0, len(lines), chunk_size)]
+    trans_map = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(translate_chunk_gemini, chunk, offset, api_key): offset for chunk, offset in chunks}
+        for fut in concurrent.futures.as_completed(futures):
+            try:
+                res = fut.result()
+                trans_map.update(res)
+            except Exception as e:
+                warn(f"Gemini chunk translation failed: {e}")
+    return [trans_map.get(i, "") for i in range(len(lines))]
 
 
 def translate_fallback(text: str) -> str:

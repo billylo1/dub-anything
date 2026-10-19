@@ -258,7 +258,7 @@ def ensure_voice(key):
     if old and old["sig"] == sig and requests.get(f"{API}/profiles/{old['id']}", timeout=30).ok:
         return old["id"]
 
-    ref = voice_wav(key, rebuild=True)
+    ref = voice_wav(key, rebuild=False)
     with open(ref, "rb") as f:
         r = requests.post(
             f"{API}/profiles",
