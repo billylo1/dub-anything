@@ -51,6 +51,41 @@ else
     VS_PY="python3"
 fi
 
+# Disable filelock deadlocks on network filesystems (GCS FUSE)
+SITE_PACKAGES="$("$VS_PY" -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null || echo "$VOICESTUDIO_DIR/.venv/lib/python3.11/site-packages")"
+if [ -d "$SITE_PACKAGES" ]; then
+    cat << 'EOF' > "$SITE_PACKAGES/disable_filelock.py"
+import contextlib
+
+try:
+    import filelock
+    filelock.FileLock.acquire = lambda self, *a, **kw: self
+    filelock.SoftFileLock.acquire = lambda self, *a, **kw: self
+except Exception:
+    pass
+
+try:
+    import huggingface_hub.utils._fixes
+    @contextlib.contextmanager
+    def _noop_lock(lock_file, *, timeout=None):
+        yield
+    huggingface_hub.utils._fixes.WeakFileLock = _noop_lock
+except Exception:
+    pass
+
+try:
+    import huggingface_hub.file_download
+    @contextlib.contextmanager
+    def _noop_lock(lock_file, *, timeout=None):
+        yield
+    huggingface_hub.file_download.WeakFileLock = _noop_lock
+except Exception:
+    pass
+EOF
+    echo "import disable_filelock" > "$SITE_PACKAGES/disable_filelock.pth"
+    echo "[*] Injected no-op filelock handler into $SITE_PACKAGES"
+fi
+
 $VS_PY -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 3900 2>&1 | tee -a /app/work/logs/backend.log &
 BACKEND_PID=$!
 echo "[*] VoiceStudio process launched with PID: $BACKEND_PID"

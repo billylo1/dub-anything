@@ -264,26 +264,13 @@ diff --git a/backend/services/model_manager.py b/backend/services/model_manager.
 index bbcbd7de..4a86a6f5 100644
 --- a/backend/services/model_manager.py
 +++ b/backend/services/model_manager.py
-@@ -2444,9 +2444,27 @@ def _load_model_sync():
+@@ -2444,9 +2444,13 @@ def _load_model_sync():
              logger.info("Preloading PyTorch Whisper after TTS model load.")
          else:
              logger.info("Skipping PyTorch Whisper preload; ASR will load on demand.")
 +        # float16 has no fast CPU kernels (~7x slower than float32 on x86), so
 +        # keep half precision for accelerators only.
 +        tts_dtype = torch.float32 if str(device).startswith("cpu") else torch.float16
-+
-+        # Disable file locks on network filesystems (GCS FUSE) so huggingface_hub never hangs on locks
-+        try:
-+            import contextlib
-+            import huggingface_hub.utils._fixes
-+            import huggingface_hub.file_download
-+            @contextlib.contextmanager
-+            def _noop_file_lock(lock_file, *, timeout=None):
-+                yield
-+            huggingface_hub.utils._fixes.WeakFileLock = _noop_file_lock
-+            huggingface_hub.file_download.WeakFileLock = _noop_file_lock
-+        except Exception:
-+            pass
 +
          def _load():
              return VoiceStudio.from_pretrained(
