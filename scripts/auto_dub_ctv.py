@@ -1089,6 +1089,15 @@ def publish_to_web(
     dated_name = f"CTV 多倫多新聞 {year}年{month}月{day}日 (粵語配音).mp4"
     primary_name = "CTV 多倫多新聞 (粵語配音).mp4"
 
+    # Cache delivered video to checkpoint
+    cp = get_checkpoint_dir(slug)
+    if cp:
+        try:
+            log(f"Caching delivered video to checkpoint: {cp / delivered.name}...")
+            shutil.copy2(delivered, cp / delivered.name)
+        except Exception as e:
+            warn(f"Failed to cache delivered video to checkpoint: {e}")
+
     # Optional GCS Upload
     target_bucket = gcs_bucket or os.environ.get("GCS_VIDEOS_BUCKET")
     if target_bucket:
