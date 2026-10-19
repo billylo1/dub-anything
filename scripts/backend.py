@@ -274,7 +274,15 @@ def start(wait=600):
     else:
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "ab") as f:
-            subprocess.Popen(cmd, cwd=VS_DIR, env=env, stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
+            subprocess.Popen(
+                cmd,
+                cwd=VS_DIR,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
     print(f"backend: starting (log {log})", flush=True)
     t0 = time.time()
     while time.time() - t0 < wait:
