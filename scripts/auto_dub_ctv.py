@@ -516,6 +516,63 @@ def init_job(video_path: pathlib.Path, slug: str, minutes: float = 6.0):
         sys.exit(1)
 
 
+def ensure_split(slug: str, video_path: pathlib.Path, minutes: float = 6.0) -> list[dict]:
+    """Ensure the video is split into parts and return parts list."""
+    parts_dir = VIDEOS_DIR / f"{slug}-parts"
+    manifest = parts_dir / "parts.json"
+
+    # Check if parts are cached in GCS checkpoint
+    cp = get_checkpoint_dir(slug)
+    if cp:
+        cp_parts_dir = cp / "parts"
+        if (cp_parts_dir / "parts.json").exists() and not manifest.exists():
+            try:
+                log(f"Restoring split parts from checkpoint: {cp_parts_dir} -> {parts_dir}...")
+                shutil.copytree(cp_parts_dir, parts_dir, dirs_exist_ok=True)
+                if manifest.exists():
+                    with open(manifest, "r", encoding="utf-8") as f:
+                        return json.load(f).get("parts", [])
+            except Exception as e:
+                warn(f"Failed to restore split parts from checkpoint: {e}")
+
+    if manifest.exists():
+        with open(manifest, "r", encoding="utf-8") as f:
+            return json.load(f).get("parts", [])
+
+    log(f"Splitting '{video_path.name}' into {minutes}m parts...")
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        PY,
+        str(SCRIPTS_DIR / "split.py"),
+        str(video_path),
+        "--minutes",
+        str(minutes),
+        "--out",
+        str(parts_dir),
+    ]
+    res = subprocess.run(cmd)
+    if res.returncode != 0:
+        error("split.py failed.")
+        sys.exit(1)
+
+    # Cache split parts to checkpoint
+    if cp and manifest.exists():
+        try:
+            cp_parts_dir = cp / "parts"
+            cp_parts_dir.mkdir(parents=True, exist_ok=True)
+            for item in parts_dir.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, cp_parts_dir / item.name)
+            log(f"Cached split parts to checkpoint: {cp_parts_dir}")
+        except Exception as e:
+            warn(f"Failed to cache split parts to checkpoint: {e}")
+
+    if manifest.exists():
+        with open(manifest, "r", encoding="utf-8") as f:
+            return json.load(f).get("parts", [])
+    return []
+
+
 def translate_chunk_gemini(chunk_lines: list, start_offset: int, api_key: str) -> dict[int, str]:
     """Translate a chunk of lines into broadcast Cantonese using Gemini."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
@@ -1128,6 +1185,7 @@ def main():
     ensure_voices_synced()
     ensure_backend()
     init_job(video_path, slug, minutes=args.minutes)
+    all_parts = ensure_split(slug, video_path, minutes=args.minutes)
 
     # Restore any completed checkpoints from GCS
     restore_checkpoints(slug)
@@ -1136,21 +1194,12 @@ def main():
     task_count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
 
     # If running with multiple tasks, assign this task its slice of parts
-    manifest_file = VIDEOS_DIR / f"{slug}-parts" / "parts.json"
-    if manifest_file.exists() and task_count > 1:
-        try:
-            with open(manifest_file, "r", encoding="utf-8") as f:
-                all_parts = json.load(f).get("parts", [])
-            if all_parts:
-                chunk_size = (len(all_parts) + task_count - 1) // task_count
-                my_parts = all_parts[task_index * chunk_size : (task_index + 1) * chunk_size]
-                my_part_names = [p["name"] for p in my_parts]
-                os.environ["PARTS_FILTER"] = ",".join(p.rsplit("-", 1)[-1] for p in my_part_names)
-                log(
-                    f"Multi-task active: Task {task_index}/{task_count} responsible for {len(my_parts)} parts: {my_part_names}"
-                )
-        except Exception as e:
-            warn(f"Failed to configure multi-task partitioning: {e}")
+    if all_parts and task_count > 1:
+        chunk_size = (len(all_parts) + task_count - 1) // task_count
+        my_parts = all_parts[task_index * chunk_size : (task_index + 1) * chunk_size]
+        my_part_names = [p["name"] for p in my_parts]
+        os.environ["PARTS_FILTER"] = ",".join(p.rsplit("-", 1)[-1] for p in my_part_names)
+        log(f"Multi-task active: Task {task_index}/{task_count} responsible for {len(my_parts)} parts: {my_part_names}")
 
     if args.step == "prep":
         log(f"Running machine prep for '{slug}'...")
