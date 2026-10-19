@@ -42,6 +42,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
 import datetime
 import json
 import os
@@ -361,14 +362,14 @@ def download_episode(url: str, slug: str, quality: str | None = None) -> pathlib
     return target
 
 
-def init_job(video_path: pathlib.Path, slug: str):
+def init_job(video_path: pathlib.Path, slug: str, minutes: float = 6.0):
     """Initialize job in dub_anything.py if not already initialized."""
     job_file = JOBS_DIR / slug / "job.json"
     if job_file.exists():
         log(f"Job '{slug}' already initialized.")
         return
 
-    log(f"Initializing job '{slug}' (source: en -> target: yue, voices: actor)...")
+    log(f"Initializing job '{slug}' (source: en -> target: yue, voices: actor, split: {minutes}m)...")
     cmd = [
         PY,
         str(SCRIPTS_DIR / "dub_anything.py"),
@@ -382,6 +383,8 @@ def init_job(video_path: pathlib.Path, slug: str):
         "yue",
         "--voices",
         "actor",
+        "--minutes",
+        str(minutes),
     ]
     res = subprocess.run(cmd)
     if res.returncode != 0:
@@ -550,100 +553,142 @@ print(json.dumps(over_rows))
     return fixed_count
 
 
+def direct_single_part(
+    part: str,
+    api_key: str | None,
+    voices_spec: dict,
+    default_voice: str,
+    retranslate: bool = False,
+) -> bool:
+    part_dir = WORK_DIR / part
+    script_file = part_dir / "script.json"
+    draft_file = part_dir / "draft.json"
+
+    if not draft_file.exists():
+        return False
+
+    # Check if already directed and marked ready (preserve manual edits)
+    if script_file.exists() and not retranslate:
+        try:
+            with open(script_file, "r", encoding="utf-8") as f:
+                sc = json.load(f)
+            if sc.get("ready") is True:
+                return False
+        except Exception:
+            pass
+
+    try:
+        with open(draft_file, "r", encoding="utf-8") as f:
+            draft = json.load(f)
+    except Exception as e:
+        warn(f"{part}: Failed to read draft.json: {e}")
+        return False
+
+    lines = draft.get("lines", [])
+    if not lines:
+        log(f"{part}: empty draft, marking ready with no lines.")
+        with open(script_file, "w", encoding="utf-8") as f:
+            json.dump({"ready": True, "lines": []}, f, ensure_ascii=False, indent=1)
+        return True
+
+    log(f"{part}: Translating {len(lines)} lines into Cantonese...")
+    cantonese_texts = []
+    if api_key:
+        cantonese_texts = translate_with_gemini(lines, api_key)
+
+    script_lines = []
+    for i, line in enumerate(lines):
+        text = cantonese_texts[i] if i < len(cantonese_texts) and cantonese_texts[i] else ""
+        if not text:
+            text = translate_fallback(line.get("en", ""))
+        assigned_voice = line.get("voice") or ""
+        if not assigned_voice or assigned_voice not in voices_spec:
+            assigned_voice = default_voice
+        sl = {
+            "start": line.get("start", 0.0),
+            "end": line.get("end", 0.0),
+            "voice": assigned_voice,
+            "text": text,
+        }
+        if "en" in line:
+            sl["en"] = line["en"]
+        script_lines.append(sl)
+
+    script_data = {"lines": script_lines, "ready": False}
+    with open(script_file, "w", encoding="utf-8") as f:
+        json.dump(script_data, f, ensure_ascii=False, indent=1)
+
+    # Apply audio edge adjustments
+    log(f"{part}: Applying audio edge adjustments (edges.py)...")
+    edge_cmd = [PY, str(SCRIPTS_DIR / "edges.py"), part, "--apply"]
+    subprocess.run(edge_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Automated pacing & fit verification loop
+    for pass_num in range(3):
+        over_count = check_and_fix_overflows(part, api_key)
+        if over_count == 0:
+            break
+        log(f"{part}: Pacing adjustment pass {pass_num + 1} completed.")
+
+    # Mark ready
+    with open(script_file, "r", encoding="utf-8") as f:
+        script_data = json.load(f)
+    script_data["ready"] = True
+    with open(script_file, "w", encoding="utf-8") as f:
+        json.dump(script_data, f, ensure_ascii=False, indent=1)
+    log(f"{part}: Marked ready.")
+    return True
+
+
 def direct_parts(slug: str, retranslate: bool = False):
-    """Direct all parts: translate, apply edge alignments, optimize pacing, mark ready."""
+    """Direct all parts in parallel: translate, apply edge alignments, optimize pacing, mark ready."""
     api_key = os.environ.get("GEMINI_API_KEY")
     parts = sorted([p.name for p in WORK_DIR.glob(f"{slug}-*") if (p / "draft.json").exists()])
     if not parts:
-        warn(f"No parts found with draft.json for '{slug}'.")
         return
 
-    log(f"Directing {len(parts)} parts for '{slug}'...")
+    # Filter parts that need directing
+    pending_parts = []
     for part in parts:
-        part_dir = WORK_DIR / part
-        script_file = part_dir / "script.json"
-        draft_file = part_dir / "draft.json"
-
-        # Check if already directed and marked ready (preserve manual edits)
+        script_file = WORK_DIR / part / "script.json"
         if script_file.exists() and not retranslate:
             try:
                 with open(script_file, "r", encoding="utf-8") as f:
                     sc = json.load(f)
                 if sc.get("ready") is True:
-                    log(f"{part}: already directed and ready (preserving).")
                     continue
             except Exception:
                 pass
+        pending_parts.append(part)
 
-        with open(draft_file, "r", encoding="utf-8") as f:
-            draft = json.load(f)
+    if not pending_parts:
+        return
 
-        lines = draft.get("lines", [])
-        if not lines:
-            log(f"{part}: empty draft, marking ready with no lines.")
-            with open(script_file, "w", encoding="utf-8") as f:
-                json.dump({"ready": True, "lines": []}, f, ensure_ascii=False, indent=1)
-            continue
+    log(f"Directing {len(pending_parts)} pending parts for '{slug}' in parallel...")
+    voices_spec = {}
+    if (WORK_DIR / "voices.json").exists():
+        try:
+            with open(WORK_DIR / "voices.json", "r", encoding="utf-8") as f:
+                voices_spec = json.load(f)
+        except Exception:
+            pass
+    default_voice = (
+        "michelle_dube"
+        if "michelle_dube" in voices_spec
+        else (next(iter(voices_spec.keys())) if voices_spec else "actor")
+    )
 
-        log(f"{part}: Translating {len(lines)} lines into Cantonese...")
-        cantonese_texts = []
-        if api_key:
-            cantonese_texts = translate_with_gemini(lines, api_key)
-
-        voices_spec = {}
-        if (WORK_DIR / "voices.json").exists():
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(direct_single_part, part, api_key, voices_spec, default_voice, retranslate): part
+            for part in pending_parts
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            p = futures[fut]
             try:
-                with open(WORK_DIR / "voices.json", "r", encoding="utf-8") as f:
-                    voices_spec = json.load(f)
-            except Exception:
-                pass
-        default_voice = (
-            "michelle_dube"
-            if "michelle_dube" in voices_spec
-            else (next(iter(voices_spec.keys())) if voices_spec else "actor")
-        )
-
-        script_lines = []
-        for i, line in enumerate(lines):
-            text = cantonese_texts[i] if i < len(cantonese_texts) and cantonese_texts[i] else ""
-            if not text:
-                text = translate_fallback(line.get("en", ""))
-            assigned_voice = line.get("voice") or ""
-            if not assigned_voice or assigned_voice not in voices_spec:
-                assigned_voice = default_voice
-            sl = {
-                "start": line.get("start", 0.0),
-                "end": line.get("end", 0.0),
-                "voice": assigned_voice,
-                "text": text,
-            }
-            if "en" in line:
-                sl["en"] = line["en"]
-            script_lines.append(sl)
-
-        script_data = {"lines": script_lines, "ready": False}
-        with open(script_file, "w", encoding="utf-8") as f:
-            json.dump(script_data, f, ensure_ascii=False, indent=1)
-
-        # Apply audio edge adjustments
-        log(f"{part}: Applying audio edge adjustments (edges.py)...")
-        edge_cmd = [PY, str(SCRIPTS_DIR / "edges.py"), part, "--apply"]
-        subprocess.run(edge_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # Automated pacing & fit verification loop
-        for pass_num in range(3):
-            over_count = check_and_fix_overflows(part, api_key)
-            if over_count == 0:
-                break
-            log(f"{part}: Pacing adjustment pass {pass_num + 1} completed.")
-
-        # Mark ready
-        with open(script_file, "r", encoding="utf-8") as f:
-            script_data = json.load(f)
-        script_data["ready"] = True
-        with open(script_file, "w", encoding="utf-8") as f:
-            json.dump(script_data, f, ensure_ascii=False, indent=1)
-        log(f"{part}: Marked ready.")
+                fut.result()
+            except Exception as e:
+                warn(f"Directing failed for {p}: {e}")
 
 
 def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
@@ -806,6 +851,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Check status and print actions without executing")
     parser.add_argument("--retranslate", action="store_true", help="Overwrite existing script.json translations")
     parser.add_argument("--quality", help="yt-dlp format selector")
+    parser.add_argument("--minutes", type=float, default=6.0, help="Part split length in minutes (default: 6.0)")
     parser.add_argument("--max-retries", type=int, default=3, help="Max self-healing retries for OVER lines")
     args = parser.parse_args()
 
@@ -870,23 +916,24 @@ def main():
     # Step 3: Ensure Backend & Init Job
     ensure_voices_synced()
     ensure_backend()
-    init_job(video_path, slug)
+    init_job(video_path, slug, minutes=args.minutes)
 
-    # Step 4: Machine Prep
-    log(f"Running machine prep for '{slug}'...")
-    cmd_prep = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug]
-    subprocess.run(cmd_prep)
     if args.step == "prep":
+        log(f"Running machine prep for '{slug}'...")
+        cmd_prep = [PY, str(SCRIPTS_DIR / "dub_anything.py"), "run", slug]
+        subprocess.run(cmd_prep)
         log("Prep step complete.")
         sys.exit(0)
 
-    # Step 5: Direct & Optimize Pacing
-    direct_parts(slug, retranslate=args.retranslate)
     if args.step == "direct":
+        direct_parts(slug, retranslate=args.retranslate)
         log("Directing step complete.")
         sys.exit(0)
 
-    # Step 6: Render with Self-Healing
+    # Step 4: Render / Process Pipeline with Self-Healing
+    # In 'all' or 'render' mode, run_pipeline_with_self_healing starts the background continuous
+    # director and invokes `dub_anything.py run slug --watch`. This interleaves part preparation
+    # and rendering from Part 1, maximizing GPU utilization without stalling for the whole broadcast to prep.
     success = run_pipeline_with_self_healing(slug, max_retries=args.max_retries)
     if not success:
         error(f"Pipeline did not finish cleanly. Manual intervention available on slug '{slug}'.")
