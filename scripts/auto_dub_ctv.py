@@ -760,6 +760,21 @@ print(json.dumps(over_rows))
         return 0
 
     over_items = [item for item in flagged if item.get("flag") == "OVER"]
+
+    # Also check part state.json for any actual render OVER errors
+    state_file = WORK_DIR / part / "state.json"
+    if state_file.exists():
+        try:
+            with open(state_file, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            prob = st.get("problem", "")
+            for m in re.finditer(r"L(\d+)\s+[\d\.]+\s+[\d\.]+s\s*/", prob):
+                idx = int(m.group(1))
+                if not any(item["i"] == idx for item in over_items):
+                    over_items.append({"i": idx, "flag": "OVER"})
+        except Exception:
+            pass
+
     if not over_items:
         return 0
 
@@ -1179,7 +1194,7 @@ def main():
     parser.add_argument("--retranslate", action="store_true", help="Overwrite existing script.json translations")
     parser.add_argument("--quality", help="yt-dlp format selector")
     parser.add_argument("--minutes", type=float, default=6.0, help="Part split length in minutes (default: 6.0)")
-    parser.add_argument("--max-retries", type=int, default=3, help="Max self-healing retries for OVER lines")
+    parser.add_argument("--max-retries", type=int, default=20, help="Max self-healing retries for OVER lines")
     args = parser.parse_args()
 
     # Step 1: Discover / Identify Target Episode
