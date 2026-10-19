@@ -643,7 +643,7 @@ def cmd_generate(args):
                 seg["gain"] = gain
 
     def run(body):
-        r = requests.post(f"{API}/dub/generate/{job_id}", json=body, timeout=120)
+        r = requests.post(f"{API}/dub/generate/{job_id}", json=body, timeout=(15, 600))
         if r.status_code >= 400:
             raise RuntimeError(f"generate {r.status_code}: {r.text}")
         return wait_task(r.json()["task_id"], {"done"})

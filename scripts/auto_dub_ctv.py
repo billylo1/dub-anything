@@ -567,6 +567,42 @@ print(json.dumps(over_rows))
     return fixed_count
 
 
+def check_and_fix_pacing_cpu(part: str, api_key: str | None) -> int:
+    """Fast, pure-CPU character pacing check without acquiring the GPU lock."""
+    script_file = WORK_DIR / part / "script.json"
+    if not script_file.exists():
+        return 0
+    try:
+        with open(script_file, "r", encoding="utf-8") as f:
+            script = json.load(f)
+    except Exception:
+        return 0
+
+    lines = script.get("lines", [])
+    fixed_count = 0
+    for idx, cur in enumerate(lines):
+        dur = cur.get("end", 0.0) - cur.get("start", 0.0)
+        target_chars = max(int(dur * 3.8), 3)
+        orig_text = cur.get("text", "")
+        c_count = len([c for c in orig_text if not c.isspace()])
+        if c_count > target_chars + 2:
+            en_text = cur.get("en", "")
+            if api_key:
+                new_text = condense_line_gemini(orig_text, en_text, target_chars, api_key)
+            else:
+                new_text = orig_text[:target_chars]
+            log(
+                f"  {part} L{idx:02d} CPU pacing: '{orig_text}' ({c_count} chars) -> '{new_text}' ({len(new_text)} chars) for {dur:.1f}s"
+            )
+            cur["text"] = new_text
+            fixed_count += 1
+
+    if fixed_count > 0:
+        with open(script_file, "w", encoding="utf-8") as f:
+            json.dump(script, f, ensure_ascii=False, indent=1)
+    return fixed_count
+
+
 def direct_single_part(
     part: str,
     api_key: str | None,
@@ -637,12 +673,8 @@ def direct_single_part(
     edge_cmd = [PY, str(SCRIPTS_DIR / "edges.py"), part, "--apply"]
     subprocess.run(edge_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # Automated pacing & fit verification loop
-    for pass_num in range(3):
-        over_count = check_and_fix_overflows(part, api_key)
-        if over_count == 0:
-            break
-        log(f"{part}: Pacing adjustment pass {pass_num + 1} completed.")
+    # Fast CPU character pacing check (marks ready in milliseconds without contending for GPU lock)
+    check_and_fix_pacing_cpu(part, api_key)
 
     # Mark ready
     with open(script_file, "r", encoding="utf-8") as f:
@@ -748,6 +780,14 @@ def run_pipeline_with_self_healing(slug: str, max_retries: int = 3) -> bool:
                     if fixed_any:
                         log("Auto-corrected timing overflows across parts. Retrying pipeline...")
                         time.sleep(2)
+                        continue
+                    else:
+                        log(
+                            "Pipeline paused with exit code 2 but no timing overflows found. Restarting VoiceStudio backend and retrying..."
+                        )
+                        cmd_restart = [PY, str(SCRIPTS_DIR / "backend.py"), "restart"]
+                        subprocess.run(cmd_restart)
+                        time.sleep(5)
                         continue
                 warn("Manual intervention requested or max retries reached.")
                 print("\n" + "=" * 60)
