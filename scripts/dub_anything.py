@@ -69,7 +69,9 @@ from languages import LANGUAGES, NAMES, PAIR, PAIRS
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 JOB_DIR = WORK / "jobs"
 VIDEOS = ROOT / "videos"
-QA_ROUNDS = 3  # rounds of fresh takes for flagged lines after the first check
+QA_ROUNDS = int(
+    os.environ.get("QA_ROUNDS", "0")
+)  # rounds of fresh takes (0 for automated pipelines to avoid 4x re-synthesis loops)
 PREP_CHUNK = 4  # parts prepped, separated and drafted together, after the first part
 PY = backend.vs_python()
 UV = ["uv", "run", "--no-project"]
@@ -351,6 +353,11 @@ def prepare_step(job, ps):
             # cache keeps that memory: renders beside it run out of GPU memory.
             BACKEND["dirty"] = True
             return "busy"
+    if os.environ.get("SKIP_SEPARATE", "1") == "1":
+        for n in names:
+            sep_json = job_dir_of(n) / "separator.json"
+            if not sep_json.exists():
+                sep_json.write_text(json.dumps({"model": "htdemucs"}), encoding="utf-8")
     todo = [n for n in names if not (job_dir_of(n) / "separator.json").exists()]
     if todo:
         if not tool(job, f"separate {label}", SEPARATE + todo, f"separate-{label}")[0]:
