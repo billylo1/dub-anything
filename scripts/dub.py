@@ -766,8 +766,8 @@ def main():
     b.add_argument(
         "--steps",
         type=int,
-        default=32,
-        help="OmniVoice diffusion steps (32 = its quality preset; VoiceStudio's default is 16)",
+        default=int(os.environ.get("OMNIVOICE_STEPS", "16")),
+        help="OmniVoice diffusion steps (16 = VoiceStudio default, 32 = heavy quality preset)",
     )
     b.add_argument(
         "--effect",
